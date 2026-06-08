@@ -77,10 +77,9 @@ export default function AdminDashboard() {
             {paths.map((p) => (
               <div
                 key={p.id}
-                className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 transition hover:bg-white hover:shadow-sm"
+                className="rounded-xl bg-slate-50 px-4 py-3 transition hover:bg-white hover:shadow-sm"
               >
                 <span className="text-base font-medium">{p.label}</span>
-                <span className="badge-info">{p.key}</span>
               </div>
             ))}
           </div>
