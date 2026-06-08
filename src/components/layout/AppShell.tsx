@@ -1,4 +1,3 @@
-import { AuthGuard } from "@/components/AuthGuard";
 import { ShellLayout } from "./ShellLayout";
 import type { Role } from "@/lib/types";
 
@@ -11,9 +10,5 @@ export function AppShell({
   title?: string;
   subtitle?: string;
 }) {
-  return (
-    <AuthGuard role={role}>
-      <ShellLayout role={role}>{children}</ShellLayout>
-    </AuthGuard>
-  );
+  return <ShellLayout role={role}>{children}</ShellLayout>;
 }

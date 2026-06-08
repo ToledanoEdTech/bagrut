@@ -6,6 +6,12 @@ import { isAdminEmail } from "@/lib/roles";
 
 const SESSION_COOKIE = "fb_session";
 const SESSION_MAX_AGE_MS = 60 * 60 * 24 * 5 * 1000; // 5 days
+const AUTH_CACHE_TTL_MS = 30_000;
+
+const authSessionCache = new Map<
+  string,
+  { session: AuthSession | null; ts: number }
+>();
 
 export { SESSION_COOKIE, SESSION_MAX_AGE_MS };
 
@@ -20,17 +26,28 @@ export async function getAuthSession(): Promise<AuthSession | null> {
   const sessionCookie = cookieStore.get(SESSION_COOKIE)?.value;
   if (!sessionCookie) return null;
 
+  const cached = authSessionCache.get(sessionCookie);
+  if (cached && Date.now() - cached.ts < AUTH_CACHE_TTL_MS) {
+    return cached.session;
+  }
+
   try {
     const decoded = await adminAuth.verifySessionCookie(sessionCookie, true);
     const email = (decoded.email ?? "").toLowerCase();
     const profile = await getUserProfile(decoded.uid);
 
-    if (!profile?.role) return null;
+    if (!profile?.role) {
+      authSessionCache.set(sessionCookie, { session: null, ts: Date.now() });
+      return null;
+    }
 
     const role = isAdminEmail(email) ? "ADMIN" : profile.role;
-    if (role === "STUDENT" && !profile.studentId) return null;
+    if (role === "STUDENT" && !profile.studentId) {
+      authSessionCache.set(sessionCookie, { session: null, ts: Date.now() });
+      return null;
+    }
 
-    return {
+    const session: AuthSession = {
       uid: decoded.uid,
       email,
       name: profile.name ?? decoded.name ?? email,
@@ -38,7 +55,10 @@ export async function getAuthSession(): Promise<AuthSession | null> {
       studentId: profile.studentId,
       photoURL: profile.photoURL ?? decoded.picture ?? null,
     };
+    authSessionCache.set(sessionCookie, { session, ts: Date.now() });
+    return session;
   } catch {
+    authSessionCache.set(sessionCookie, { session: null, ts: Date.now() });
     return null;
   }
 }

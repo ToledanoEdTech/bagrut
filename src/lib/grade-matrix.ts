@@ -1,15 +1,18 @@
 import {
   findObligation,
   getClassById,
+  getExamPathById,
   getGradesByStudentsAndObligation,
   listStudents,
 } from "@/lib/firestore";
 import {
   buildStudentWithRelations,
-  getRelevantSubjects,
+  loadSubjectContext,
+  resolveRelevantSubjects,
   type StudentWithRelations,
+  type SubjectContext,
 } from "@/lib/student-subjects";
-import type { Class, Student } from "@/lib/types";
+import type { Class, ExamPath, Student } from "@/lib/types";
 
 function withClass(student: Student, cls: Class): StudentWithRelations {
   return {
@@ -22,19 +25,44 @@ function withClass(student: Student, cls: Class): StudentWithRelations {
   };
 }
 
-async function studentHasObligation(
+function studentHasObligation(
   student: StudentWithRelations,
-  obligationId: string
-): Promise<boolean> {
-  const subjects = await getRelevantSubjects(student);
+  obligationId: string,
+  examPath: ExamPath | null,
+  ctx: SubjectContext
+): boolean {
+  const subjects = resolveRelevantSubjects(
+    student,
+    ctx.allSubjects,
+    examPath,
+    ctx.tracksById
+  );
   return subjects.some((s) => s.obligations.some((o) => o.id === obligationId));
 }
 
-export async function getMatrixOptions(classId: string) {
+async function loadClassContext(classId: string) {
   const cls = await getClassById(classId);
-  if (!cls) throw new Error("כיתה לא נמצאה");
+  if (!cls) return null;
 
-  const students = (await listStudents()).filter((s) => s.classId === classId);
+  const [examPath, ctx, students] = await Promise.all([
+    getExamPathById(cls.examPathId),
+    loadSubjectContext(),
+    listStudents(),
+  ]);
+
+  return {
+    cls,
+    examPath,
+    ctx,
+    students: students.filter((student) => student.classId === classId),
+  };
+}
+
+export async function getMatrixOptions(classId: string) {
+  const classContext = await loadClassContext(classId);
+  if (!classContext) throw new Error("כיתה לא נמצאה");
+
+  const { cls, examPath, ctx, students } = classContext;
   const subjectsMap = new Map<
     string,
     {
@@ -55,7 +83,12 @@ export async function getMatrixOptions(classId: string) {
 
   for (const student of students) {
     const withRelations = withClass(student, cls);
-    const subjects = await getRelevantSubjects(withRelations);
+    const subjects = resolveRelevantSubjects(
+      withRelations,
+      ctx.allSubjects,
+      examPath,
+      ctx.tracksById
+    );
 
     for (const subject of subjects) {
       if (!subjectsMap.has(subject.id)) {
@@ -97,16 +130,16 @@ export async function getMatrixData(classId: string, obligationId: string) {
   const found = await findObligation(obligationId);
   if (!found) throw new Error("מטלה לא נמצאה");
 
-  const cls = await getClassById(classId);
-  if (!cls) throw new Error("כיתה לא נמצאה");
+  const classContext = await loadClassContext(classId);
+  if (!classContext) throw new Error("כיתה לא נמצאה");
 
-  const allStudents = (await listStudents()).filter((s) => s.classId === classId);
+  const { cls, examPath, ctx, students } = classContext;
   const relevantStudents: Student[] = [];
   let notRelevantCount = 0;
 
-  for (const student of allStudents) {
+  for (const student of students) {
     const withRelations = withClass(student, cls);
-    if (await studentHasObligation(withRelations, obligationId)) {
+    if (studentHasObligation(withRelations, obligationId, examPath, ctx)) {
       relevantStudents.push(student);
     } else {
       notRelevantCount++;
@@ -157,5 +190,9 @@ export async function isObligationRelevantForStudent(
   obligationId: string
 ): Promise<boolean> {
   const withRelations = await buildStudentWithRelations(student);
-  return studentHasObligation(withRelations, obligationId);
+  const [examPath, ctx] = await Promise.all([
+    getExamPathById(withRelations.class.examPathId),
+    loadSubjectContext(),
+  ]);
+  return studentHasObligation(withRelations, obligationId, examPath, ctx);
 }

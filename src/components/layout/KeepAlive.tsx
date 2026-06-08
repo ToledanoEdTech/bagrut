@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useRef } from "react";
 
-const MAX_CACHED = 12;
+const MAX_CACHED = 5;
 
 export function KeepAlive({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

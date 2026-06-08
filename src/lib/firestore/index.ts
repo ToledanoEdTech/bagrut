@@ -1,4 +1,5 @@
 import { adminDb } from "@/lib/firebase/admin";
+import { cached, invalidateServerCache } from "@/lib/server-cache";
 import type {
   Class,
   ExamPath,
@@ -183,8 +184,10 @@ export async function getStudentById(id: string): Promise<Student | null> {
 }
 
 export async function listStudents(): Promise<Student[]> {
-  const snap = await adminDb.collection("students").orderBy("name").get();
-  return docsData<Student>(snap).map(normalizeStudent);
+  return cached("students", 30_000, async () => {
+    const snap = await adminDb.collection("students").orderBy("name").get();
+    return docsData<Student>(snap).map(normalizeStudent);
+  });
 }
 
 export async function createStudent(data: Omit<Student, "id" | "uid">) {
@@ -205,6 +208,7 @@ export async function createStudent(data: Omit<Student, "id" | "uid">) {
     ...student,
     createdAt: FieldValue.serverTimestamp(),
   });
+  invalidateServerCache("students");
   return student;
 }
 
@@ -222,6 +226,7 @@ export async function updateStudent(
     updates.trackId = FieldValue.delete();
   }
   await adminDb.collection("students").doc(id).update(updates);
+  invalidateServerCache("students");
   return getStudentById(id);
 }
 
@@ -231,6 +236,7 @@ export async function deleteStudent(id: string) {
   grades.docs.forEach((d) => batch.delete(d.ref));
   batch.delete(adminDb.collection("students").doc(id));
   await batch.commit();
+  invalidateServerCache("students");
 }
 
 type EnrichLookup = {
@@ -287,20 +293,22 @@ export async function enrichStudent(student: Student) {
 }
 
 export async function listStudentsEnriched() {
-  const [students, classesSnap, tracksSnap, pathsSnap] = await Promise.all([
-    listStudents(),
-    adminDb.collection("classes").get(),
-    adminDb.collection("tracks").get(),
-    adminDb.collection("examPaths").get(),
-  ]);
+  return cached("students:enriched", 30_000, async () => {
+    const [students, classesSnap, tracksSnap, pathsSnap] = await Promise.all([
+      listStudents(),
+      adminDb.collection("classes").get(),
+      adminDb.collection("tracks").get(),
+      adminDb.collection("examPaths").get(),
+    ]);
 
-  const lookup: EnrichLookup = {
-    classes: docsMap<Class>(classesSnap),
-    tracks: docsMap<Track>(tracksSnap),
-    examPaths: docsMap<ExamPath>(pathsSnap),
-  };
+    const lookup: EnrichLookup = {
+      classes: docsMap<Class>(classesSnap),
+      tracks: docsMap<Track>(tracksSnap),
+      examPaths: docsMap<ExamPath>(pathsSnap),
+    };
 
-  return students.map((student) => enrichStudentFromLookup(student, lookup));
+    return students.map((student) => enrichStudentFromLookup(student, lookup));
+  });
 }
 
 // ─── classes ───────────────────────────────────────────────────────────────
@@ -334,12 +342,16 @@ export async function listClasses() {
 export async function createClass(data: Omit<Class, "id">) {
   const id = newId();
   await adminDb.collection("classes").doc(id).set({ id, ...data, createdAt: FieldValue.serverTimestamp() });
+  invalidateServerCache("examPaths");
+  invalidateServerCache("classes");
   const examPath = await getExamPathById(data.examPathId);
   return { id, ...data, examPath, _count: { students: 0 } };
 }
 
 export async function updateClass(id: string, data: Partial<Omit<Class, "id">>) {
   await adminDb.collection("classes").doc(id).update({ ...data, updatedAt: FieldValue.serverTimestamp() });
+  invalidateServerCache("examPaths");
+  invalidateServerCache("classes");
   const cls = await getClassById(id);
   const examPath = cls ? await getExamPathById(cls.examPathId) : null;
   const students = await listStudents();
@@ -356,6 +368,8 @@ export async function deleteClass(id: string) {
     throw new Error("לא ניתן למחוק כיתה עם תלמידים");
   }
   await adminDb.collection("classes").doc(id).delete();
+  invalidateServerCache("examPaths");
+  invalidateServerCache("classes");
 }
 
 // ─── exam paths ────────────────────────────────────────────────────────────
@@ -365,22 +379,24 @@ export async function getExamPathById(id: string): Promise<ExamPath | null> {
 }
 
 export async function listExamPaths() {
-  const [pathsSnap, classesSnap] = await Promise.all([
-    adminDb.collection("examPaths").orderBy("label").get(),
-    adminDb.collection("classes").get(),
-  ]);
+  return cached("examPaths", 60_000, async () => {
+    const [pathsSnap, classesSnap] = await Promise.all([
+      adminDb.collection("examPaths").orderBy("label").get(),
+      adminDb.collection("classes").get(),
+    ]);
 
-  const paths = docsData<ExamPath>(pathsSnap).filter((p) => p.key !== "flexible");
-  const classCounts = new Map<string, number>();
-  for (const doc of classesSnap.docs) {
-    const examPathId = (doc.data() as Class).examPathId;
-    classCounts.set(examPathId, (classCounts.get(examPathId) ?? 0) + 1);
-  }
+    const paths = docsData<ExamPath>(pathsSnap).filter((p) => p.key !== "flexible");
+    const classCounts = new Map<string, number>();
+    for (const doc of classesSnap.docs) {
+      const examPathId = (doc.data() as Class).examPathId;
+      classCounts.set(examPathId, (classCounts.get(examPathId) ?? 0) + 1);
+    }
 
-  return paths.map((p) => ({
-    ...p,
-    _count: { classes: classCounts.get(p.id) ?? 0 },
-  }));
+    return paths.map((p) => ({
+      ...p,
+      _count: { classes: classCounts.get(p.id) ?? 0 },
+    }));
+  });
 }
 
 // ─── tracks ───────────────────────────────────────────────────────────────
@@ -390,7 +406,9 @@ export async function getTrackById(id: string): Promise<Track | null> {
 }
 
 export async function listTracks(): Promise<Track[]> {
-  return docsData<Track>(await adminDb.collection("tracks").orderBy("name").get());
+  return cached("tracks", 60_000, async () =>
+    docsData<Track>(await adminDb.collection("tracks").orderBy("name").get())
+  );
 }
 
 // ─── subjects ──────────────────────────────────────────────────────────────
@@ -401,7 +419,9 @@ export async function getSubjectById(id: string): Promise<Subject | null> {
 }
 
 export async function listSubjects(): Promise<Subject[]> {
-  return docsData<Subject>(await adminDb.collection("subjects").get()).map(normalizeSubject);
+  return cached("subjects", 60_000, async () =>
+    docsData<Subject>(await adminDb.collection("subjects").get()).map(normalizeSubject)
+  );
 }
 
 export async function listSubjectsByPath(pathId: string): Promise<Subject[]> {
@@ -415,16 +435,19 @@ export async function createSubject(data: Omit<Subject, "id">) {
   const id = newId();
   const subject = { id, ...data };
   await adminDb.collection("subjects").doc(id).set({ ...subject, createdAt: FieldValue.serverTimestamp() });
+  invalidateServerCache("subjects");
   return subject;
 }
 
 export async function updateSubject(id: string, data: Partial<Omit<Subject, "id">>) {
   await adminDb.collection("subjects").doc(id).update({ ...data, updatedAt: FieldValue.serverTimestamp() });
+  invalidateServerCache("subjects");
   return getSubjectById(id);
 }
 
 export async function deleteSubject(id: string) {
   await adminDb.collection("subjects").doc(id).delete();
+  invalidateServerCache("subjects");
   const paths = await listExamPaths();
   for (const p of paths) {
     if (p.subjectIds.includes(id)) {
@@ -462,6 +485,7 @@ export async function addObligation(subjectId: string, obligation: Omit<Obligati
   };
   const { obligations } = deduplicateObligations([...subject.obligations, ob]);
   await adminDb.collection("subjects").doc(subjectId).update({ obligations });
+  invalidateServerCache("subjects");
   return ob;
 }
 
@@ -472,6 +496,7 @@ export async function updateObligation(subjectId: string, obligation: Obligation
     o.id === obligation.id ? obligation : o
   );
   await adminDb.collection("subjects").doc(subjectId).update({ obligations: subject.obligations });
+  invalidateServerCache("subjects");
   return obligation;
 }
 
@@ -480,6 +505,7 @@ export async function deleteObligation(subjectId: string, obligationId: string) 
   if (!subject) throw new Error("מקצוע לא נמצא");
   subject.obligations = subject.obligations.filter((o) => o.id !== obligationId);
   await adminDb.collection("subjects").doc(subjectId).update({ obligations: subject.obligations });
+  invalidateServerCache("subjects");
 }
 
 export async function findObligation(obligationId: string) {
@@ -657,12 +683,14 @@ export async function upsertGradesBulk(
 }
 
 export async function listClassesSimple() {
-  const snap = await adminDb.collection("classes").orderBy("name").get();
-  return docsData<Class>(snap).map((cls) => ({
-    id: cls.id,
-    name: cls.name,
-    gradeYear: cls.gradeYear,
-  }));
+  return cached("classes:simple", 30_000, async () => {
+    const snap = await adminDb.collection("classes").orderBy("name").get();
+    return docsData<Class>(snap).map((cls) => ({
+      id: cls.id,
+      name: cls.name,
+      gradeYear: cls.gradeYear,
+    }));
+  });
 }
 
 // ─── counts ────────────────────────────────────────────────────────────────

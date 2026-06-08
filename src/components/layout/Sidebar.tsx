@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { motion } from "framer-motion";
-import { prefetchAllRoutes, prefetchRoute } from "@/lib/api-cache";
+import { prefetchRoute } from "@/lib/api-cache";
 import clsx from "clsx";
 import {
   LayoutDashboard,
@@ -68,9 +68,8 @@ export function Sidebar({
         });
 
   useEffect(() => {
-    const timer = setTimeout(() => prefetchAllRoutes(links.map((l) => l.href)), 0);
-    return () => clearTimeout(timer);
-  }, [links]);
+    prefetchRoute(pathname);
+  }, [pathname]);
 
   useEffect(() => {
     onMobileClose?.();

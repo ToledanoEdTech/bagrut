@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut as fbSignOut } from "firebase/auth";
@@ -29,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
+  const initialAuthEventRef = useRef(true);
 
   const refreshSession = useCallback(async () => {
     try {
@@ -56,14 +58,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     let unsub: (() => void) | undefined;
     try {
-      refreshSession();
+      void refreshSession();
       unsub = onAuthStateChanged(getFirebaseAuth(), async (user) => {
-        setLoading(true);
+        if (initialAuthEventRef.current) {
+          initialAuthEventRef.current = false;
+          if (user) return;
+        }
+
         if (!user) {
           setSession(null);
           setLoading(false);
           return;
         }
+
         await refreshSession();
       });
     } catch (error) {

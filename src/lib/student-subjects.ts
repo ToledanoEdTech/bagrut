@@ -2,10 +2,10 @@ import {
   getClassById,
   getExamPathById,
   getStudentTrackIds,
-  getTrackById,
   listSubjects,
+  listTracks,
 } from "@/lib/firestore";
-import type { Student, Subject } from "@/lib/types";
+import type { ExamPath, Student, Subject, Track } from "@/lib/types";
 
 export type SubjectWithObligations = Subject;
 
@@ -13,15 +13,27 @@ export type StudentWithRelations = Student & {
   class: { examPathId: string; name: string; gradeYear: string | null };
 };
 
+export type SubjectContext = {
+  allSubjects: Subject[];
+  tracksById: Map<string, Track>;
+};
+
 export { calcSubjectProgress } from "@/lib/progress";
 
-export async function getRelevantSubjects(
-  student: StudentWithRelations
-): Promise<SubjectWithObligations[]> {
-  const [examPath, allSubjects] = await Promise.all([
-    getExamPathById(student.class.examPathId),
-    listSubjects(),
-  ]);
+export async function loadSubjectContext(): Promise<SubjectContext> {
+  const [allSubjects, tracks] = await Promise.all([listSubjects(), listTracks()]);
+  return {
+    allSubjects,
+    tracksById: new Map(tracks.map((track) => [track.id, track])),
+  };
+}
+
+export function resolveRelevantSubjects(
+  student: StudentWithRelations,
+  allSubjects: Subject[],
+  examPath: ExamPath | null,
+  tracksById: Map<string, Track>
+): SubjectWithObligations[] {
   if (!examPath) return [];
 
   const subjectById = new Map(allSubjects.map((s) => [s.id, s]));
@@ -47,7 +59,7 @@ export async function getRelevantSubjects(
       ) ?? null;
 
     if (!trackSubject) {
-      const track = await getTrackById(trackId);
+      const track = tracksById.get(trackId);
       if (track) {
         trackSubject =
           allSubjects.find(
@@ -74,6 +86,21 @@ export async function getRelevantSubjects(
     seen.add(s.id);
     return true;
   });
+}
+
+export async function getRelevantSubjects(
+  student: StudentWithRelations
+): Promise<SubjectWithObligations[]> {
+  const [examPath, ctx] = await Promise.all([
+    getExamPathById(student.class.examPathId),
+    loadSubjectContext(),
+  ]);
+  return resolveRelevantSubjects(
+    student,
+    ctx.allSubjects,
+    examPath,
+    ctx.tracksById
+  );
 }
 
 export async function buildStudentWithRelations(

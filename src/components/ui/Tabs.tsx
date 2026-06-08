@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import type { LucideIcon } from "lucide-react";
+import { prefetchRoute } from "@/lib/api-cache";
 
 export type TabItem = {
   href: string;
@@ -28,6 +29,9 @@ export function Tabs({ tabs }: { tabs: TabItem[] }) {
           <Link
             key={tab.href}
             href={tab.href}
+            prefetch
+            onMouseEnter={() => prefetchRoute(tab.href)}
+            onFocus={() => prefetchRoute(tab.href)}
             className={clsx(
               "relative z-10 flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-base font-medium transition-colors",
               active ? "text-primary-700" : "text-slate-600 hover:text-slate-900"

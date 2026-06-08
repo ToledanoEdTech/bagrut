@@ -5,7 +5,7 @@ import { Providers } from "@/components/Providers";
 
 const heebo = Heebo({
   subsets: ["hebrew", "latin"],
-  weight: ["300", "500", "600", "700", "800"],
+  weight: ["400", "600", "700"],
   variable: "--font-heebo",
 });
 
