@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Pencil, Trash2, Save, X } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
 
 type Student = {
   id: string;
@@ -212,7 +215,14 @@ export default function StudentsPage() {
   function renderStudentRow(s: Student) {
     if (editing === s.id && form) {
       return (
-        <tr key={s.id} className="bg-primary-50/40">
+        <motion.tr
+          key={s.id}
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.25, ease: "easeInOut" }}
+          className="bg-primary-50/40"
+        >
           <td colSpan={6} className="px-4 py-4">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div>
@@ -303,22 +313,22 @@ export default function StudentsPage() {
               </div>
             </div>
             <div className="mt-4 flex gap-2">
-              <button onClick={save} className="btn-primary text-sm">
+              <Button onClick={save} size="sm">
                 <Save className="h-4 w-4" />
                 שמירה
-              </button>
-              <button onClick={cancelEdit} className="btn-secondary text-sm">
+              </Button>
+              <Button onClick={cancelEdit} variant="secondary" size="sm">
                 <X className="h-4 w-4" />
                 ביטול
-              </button>
+              </Button>
             </div>
           </td>
-        </tr>
+        </motion.tr>
       );
     }
 
     return (
-      <tr key={s.id} className="hover:bg-slate-50/50">
+      <tr key={s.id} className="even:bg-slate-50/30 hover:bg-primary-50/20">
         <td className="px-4 py-3 font-medium">{s.user.name}</td>
         <td className="px-4 py-3 text-slate-500" dir="ltr">
           {s.user.email}
@@ -349,30 +359,35 @@ export default function StudentsPage() {
   }
 
   if (studentsLoading && students.length === 0) {
-    return <PageLoader />;
+    return (
+      <>
+        <PageHeader
+          title="ניהול תלמידים"
+          subtitle="הוספה ידנית, עריכת שיוכים, מגמות, רמות יחידות (מתמטיקה/אנגלית) וכיתות"
+        />
+        <div className="mt-8">
+          <PageLoader variant="table" />
+        </div>
+      </>
+    );
   }
 
   return (
     <>
-      <header className="-mx-8 -mt-8 border-b border-slate-200 bg-white px-8 py-6">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">ניהול תלמידים</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              הוספה ידנית, עריכת שיוכים, מגמות, רמות יחידות (מתמטיקה/אנגלית) וכיתות
-            </p>
-          </div>
-          <button
-            onClick={openNewForm}
-            disabled={classes.length === 0}
-            className="btn-primary shrink-0"
-            title={classes.length === 0 ? "יש ליצור כיתה לפני הוספת תלמיד" : undefined}
-          >
-            <Plus className="h-4 w-4" />
-            תלמיד חדש
-          </button>
-        </div>
-      </header>
+      <PageHeader
+        title="ניהול תלמידים"
+        subtitle="הוספה ידנית, עריכת שיוכים, מגמות, רמות יחידות (מתמטיקה/אנגלית) וכיתות"
+      >
+        <Button
+          onClick={openNewForm}
+          disabled={classes.length === 0}
+          className="shrink-0"
+          title={classes.length === 0 ? "יש ליצור כיתה לפני הוספת תלמיד" : undefined}
+        >
+          <Plus className="h-4 w-4" />
+          תלמיד חדש
+        </Button>
+      </PageHeader>
 
       {saveError && (
         <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
@@ -504,32 +519,48 @@ export default function StudentsPage() {
             <section key={group.id} className="card overflow-hidden">
               <div className="border-b border-slate-100 bg-slate-50 px-5 py-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 className="text-lg font-semibold text-slate-900">{group.name}</h2>
-                  <span className="text-sm text-slate-500">
+                  <h2 className="text-h2 text-slate-900">{group.name}</h2>
+                  <span className="text-base text-slate-500">
                     {group.students.length} תלמידים
                   </span>
                 </div>
                 {(group.gradeYear || group.examPathLabel) && (
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-base text-slate-500">
                     {[group.gradeYear, group.examPathLabel].filter(Boolean).join(" · ")}
                   </p>
                 )}
               </div>
-              <table className="w-full text-sm">
-                <thead className="bg-white text-slate-600">
-                  <tr>
-                    <th className="px-4 py-3 text-right font-medium">שם</th>
-                    <th className="px-4 py-3 text-right font-medium">אימייל</th>
-                    <th className="px-4 py-3 text-right font-medium">מגמות</th>
-                    <th className="px-4 py-3 text-right font-medium">מתמטיקה</th>
-                    <th className="px-4 py-3 text-right font-medium">אנגלית</th>
-                    <th className="px-4 py-3 text-right font-medium">פעולות</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {group.students.map((s) => renderStudentRow(s))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-base">
+                  <thead className="sticky top-0 z-10 bg-white">
+                    <tr className="border-b border-slate-200 text-slate-600">
+                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wide">
+                        שם
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wide">
+                        אימייל
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wide">
+                        מגמות
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wide">
+                        מתמטיקה
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wide">
+                        אנגלית
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wide">
+                        פעולות
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    <AnimatePresence initial={false}>
+                      {group.students.map((s) => renderStudentRow(s))}
+                    </AnimatePresence>
+                  </tbody>
+                </table>
+              </div>
             </section>
           ))
         )}

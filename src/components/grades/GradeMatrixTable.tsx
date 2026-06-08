@@ -35,23 +35,34 @@ export function GradeMatrixTable({ rows, onChange }: Props) {
 
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200">
-      <table className="w-full text-sm">
-        <thead>
+      <table className="w-full text-base">
+        <thead className="sticky top-0 z-10">
           <tr className="border-b border-slate-200 bg-slate-50 text-right">
-            <th className="px-4 py-3 font-medium text-slate-600">#</th>
-            <th className="px-4 py-3 font-medium text-slate-600">שם תלמיד</th>
-            <th className="px-4 py-3 font-medium text-slate-600">סטטוס</th>
-            <th className="px-4 py-3 font-medium text-slate-600">ציון</th>
+            <th className="px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
+              #
+            </th>
+            <th className="px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
+              שם תלמיד
+            </th>
+            <th className="px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
+              סטטוס
+            </th>
+            <th className="px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
+              ציון
+            </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, index) => (
-            <tr key={row.studentId} className="border-b border-slate-100 hover:bg-slate-50/50">
-              <td className="px-4 py-2 text-slate-400">{index + 1}</td>
-              <td className="px-4 py-2 font-medium text-slate-900">{row.studentName}</td>
-              <td className="px-4 py-2">
+            <tr
+              key={row.studentId}
+              className="border-b border-slate-100 transition hover:bg-primary-50/30"
+            >
+              <td className="px-4 py-2.5 text-slate-400">{index + 1}</td>
+              <td className="px-4 py-2.5 font-medium text-slate-900">{row.studentName}</td>
+              <td className="px-4 py-2.5">
                 <select
-                  className="input w-32 py-1.5 text-xs"
+                  className="input w-36 py-1.5 text-sm"
                   value={row.status}
                   onChange={(e) =>
                     onChange(row.studentId, "status", e.target.value as SubmissionStatus)
@@ -64,7 +75,7 @@ export function GradeMatrixTable({ rows, onChange }: Props) {
                   ))}
                 </select>
               </td>
-              <td className="px-4 py-2">
+              <td className="px-4 py-2.5">
                 <input
                   ref={(el) => {
                     scoreRefs.current[index] = el;
@@ -72,7 +83,7 @@ export function GradeMatrixTable({ rows, onChange }: Props) {
                   type="number"
                   min={0}
                   max={100}
-                  className="input w-20 py-1.5 text-xs"
+                  className="input w-24 py-1.5 text-sm"
                   placeholder="—"
                   value={row.score ?? ""}
                   onChange={(e) => {

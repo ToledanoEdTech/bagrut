@@ -2,11 +2,13 @@
 
 import { SubjectCard } from "@/components/subjects/SubjectCard";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { StatCard } from "@/components/ui/StatCard";
+import { StatCardGrid } from "@/components/ui/StatCardGrid";
 import { PageLoader } from "@/components/ui/PageLoader";
+import { StaggerChildren, StaggerItem } from "@/components/motion/StaggerChildren";
 import { useAuth } from "@/components/AuthProvider";
 import { useApi } from "@/hooks/useApi";
-import { BookOpen, Target, Award, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 type DashboardData = {
   student: {
@@ -44,11 +46,11 @@ export default function StudentDashboard() {
   const { data, loading } = useApi<DashboardData>("/api/student/dashboard");
 
   if (loading && !data) {
-    return <PageLoader />;
+    return <PageLoader variant="dashboard" />;
   }
 
   if (!data) {
-    return <div className="text-center text-slate-500">שגיאה בטעינת הנתונים</div>;
+    return <div className="text-center text-base text-slate-500">שגיאה בטעינת הנתונים</div>;
   }
 
   const completedObligations = data.subjects.reduce((sum, s) => {
@@ -76,25 +78,25 @@ export default function StudentDashboard() {
 
   return (
     <>
-      <header className="-mx-8 -mt-8 border-b border-slate-200 bg-gradient-to-l from-primary-600 to-primary-700 px-8 py-8 text-white">
+      <header className="-mx-4 -mt-4 border-b border-primary-700/20 bg-gradient-to-l from-primary-600 to-primary-700 px-4 py-8 text-white lg:-mx-8 lg:-mt-8 lg:px-8">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm text-primary-100">שלום,</p>
-            <h1 className="text-3xl font-bold">{data.student.user.name}</h1>
+            <p className="text-base text-primary-100">שלום,</p>
+            <h1 className="text-display text-white">{data.student.user.name}</h1>
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => signOut()}
-            className="flex shrink-0 items-center gap-2 rounded-xl bg-white/15 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/25"
+            className="shrink-0 bg-white/15 text-white hover:bg-white/25 hover:text-white"
           >
             <LogOut className="h-4 w-4" />
             התנתק
-          </button>
+          </Button>
         </div>
-        <div className="mt-3 flex flex-wrap gap-4 text-sm text-primary-100">
+        <div className="mt-3 flex flex-wrap gap-4 text-base text-primary-100">
           <span>כיתה {data.student.class.name}</span>
-          {data.student.class.gradeYear && (
-            <span>{data.student.class.gradeYear}</span>
-          )}
+          {data.student.class.gradeYear && <span>{data.student.class.gradeYear}</span>}
           {(data.student.tracks?.length
             ? data.student.tracks.map((t) => t.name).join(", ")
             : data.student.track?.name) && (
@@ -110,7 +112,7 @@ export default function StudentDashboard() {
         </div>
 
         <div className="mt-6 max-w-lg">
-          <div className="flex justify-between text-sm">
+          <div className="flex justify-between text-base">
             <span>התקדמות כללית</span>
             <span className="font-bold">{data.overallProgress.toFixed(0)}%</span>
           </div>
@@ -122,43 +124,44 @@ export default function StudentDashboard() {
         </div>
       </header>
 
-      <div className="mt-8 grid gap-5 sm:grid-cols-3">
-        <StatCard
-          title="מקצועות"
-          value={data.subjects.length}
-          icon={BookOpen}
-          color="primary"
-        />
-        <StatCard
-          title="חובות שהושלמו"
-          value={`${completedObligations}/${totalObligations}`}
-          icon={Target}
-          color="info"
-        />
-        <StatCard
-          title="ממוצע משוער"
-          value={avgGrade != null ? avgGrade.toFixed(0) : "—"}
-          subtitle="ממקצועות עם ציונים"
-          icon={Award}
-          color="success"
+      <div className="mt-8">
+        <StatCardGrid
+          columns="sm:grid-cols-3"
+          items={[
+            { title: "מקצועות", value: data.subjects.length, icon: "book-open", color: "primary" },
+            {
+              title: "חובות שהושלמו",
+              value: `${completedObligations}/${totalObligations}`,
+              icon: "target",
+              color: "info",
+            },
+            {
+              title: "ממוצע משוער",
+              value: avgGrade != null ? avgGrade.toFixed(0) : "—",
+              subtitle: "ממקצועות עם ציונים",
+              icon: "award",
+              color: "success",
+            },
+          ]}
         />
       </div>
 
       <div className="mt-8">
-        <h2 className="mb-4 text-lg font-semibold text-slate-900">המקצועות שלי</h2>
-        <div className="space-y-4">
+        <h2 className="text-h2 mb-4 text-slate-900">המקצועות שלי</h2>
+        <StaggerChildren className="space-y-4">
           {data.subjects.map((subject) => (
-            <SubjectCard
-              key={subject.id}
-              name={subject.name}
-              units={subject.units}
-              obligations={subject.obligations}
-              grades={subject.grades}
-              progress={subject.progress}
-              readOnly
-            />
+            <StaggerItem key={subject.id}>
+              <SubjectCard
+                name={subject.name}
+                units={subject.units}
+                obligations={subject.obligations}
+                grades={subject.grades}
+                progress={subject.progress}
+                readOnly
+              />
+            </StaggerItem>
           ))}
-        </div>
+        </StaggerChildren>
       </div>
     </>
   );

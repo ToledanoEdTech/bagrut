@@ -196,7 +196,7 @@ export default function GradesMatrixPage() {
   }
 
   if (classesLoading && classes.length === 0) {
-    return <PageLoader />;
+    return <PageLoader variant="table" />;
   }
 
   return (
@@ -258,8 +258,8 @@ export default function GradesMatrixPage() {
       </div>
 
       {matrixLoading && obligationId && (
-        <div className="mt-8 flex justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        <div className="mt-8">
+          <PageLoader variant="table" />
         </div>
       )}
 

@@ -28,11 +28,18 @@ export function KeepAlive({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {Array.from(cacheRef.current.entries()).map(([path, node]) => (
-        <div key={path} className={path === pathname ? undefined : "hidden"} aria-hidden={path !== pathname}>
-          {node}
-        </div>
-      ))}
+      {Array.from(cacheRef.current.entries()).map(([path, node]) => {
+        const isActive = path === pathname;
+        return (
+          <div
+            key={path}
+            className={isActive ? undefined : "hidden"}
+            aria-hidden={!isActive}
+          >
+            {node}
+          </div>
+        );
+      })}
     </>
   );
 }

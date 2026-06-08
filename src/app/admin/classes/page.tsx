@@ -1,9 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Pencil, Trash2, Save, X, ChevronLeft, Users } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { StudentCardView } from "@/components/students/StudentCardView";
 
 type ExamPath = { id: string; label: string; key: string };
@@ -28,16 +33,18 @@ type Student = {
 type View = "classes" | "students" | "detail";
 
 export default function ClassesPage() {
-  const { data: classes = [], loading, mutate: refreshClasses } = useApi<ClassItem[]>("/api/classes");
-  const { data: paths = [], mutate: refreshPaths } = useApi<ExamPath[]>("/api/paths");
-  const { data: students = [], loading: studentsLoading } = useApi<Student[]>("/api/students");
-
   const [view, setView] = useState<View>("classes");
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ name: "", gradeYear: "", examPathId: "" });
+
+  const { data: classes = [], loading, mutate: refreshClasses } = useApi<ClassItem[]>("/api/classes");
+  const { data: paths = [], mutate: refreshPaths } = useApi<ExamPath[]>("/api/paths");
+  const { data: students = [], loading: studentsLoading } = useApi<Student[]>(
+    view !== "classes" ? "/api/students" : null
+  );
 
   const selectedClass = classes.find((c) => c.id === selectedClassId);
   const selectedStudent = students.find((s) => s.id === selectedStudentId);
@@ -110,104 +117,130 @@ export default function ClassesPage() {
     return <PageLoader />;
   }
 
-  if (view === "detail" && selectedStudentId) {
-    return (
-      <>
-        <header className="-mx-8 -mt-8 border-b border-slate-200 bg-white px-8 py-6">
-          <button onClick={backToStudents} className="btn-secondary mb-4">
-            <ChevronLeft className="h-4 w-4" />
-            חזרה לרשימת התלמידים
-          </button>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {selectedStudent?.user.name ?? "כרטיס תלמיד"}
-          </h1>
-          {selectedClass && (
-            <p className="mt-1 text-sm text-slate-500">
-              {selectedClass.name}
-              {selectedClass.gradeYear ? ` · ${selectedClass.gradeYear}` : ""}
-            </p>
-          )}
-        </header>
-        <div className="mt-8">
-          <StudentCardView studentId={selectedStudentId} />
-        </div>
-      </>
-    );
-  }
-
-  if (view === "students" && selectedClass) {
-    return (
-      <>
-        <header className="-mx-8 -mt-8 border-b border-slate-200 bg-white px-8 py-6">
-          <button onClick={backToClasses} className="btn-secondary mb-4">
-            <ChevronLeft className="h-4 w-4" />
-            חזרה לכיתות
-          </button>
-          <h1 className="text-2xl font-bold text-slate-900">{selectedClass.name}</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {selectedClass.gradeYear && <span>{selectedClass.gradeYear} · </span>}
-            {selectedClass.examPath.label} · {classStudents.length} תלמידים
-          </p>
-        </header>
-
-        <div className="mt-8">
-          {studentsLoading && classStudents.length === 0 ? (
-            <PageLoader />
-          ) : classStudents.length === 0 ? (
-            <div className="card p-8 text-center text-slate-500">
-              <Users className="mx-auto h-10 w-10 text-slate-300" />
-              <p className="mt-3">אין תלמידים בכיתה זו</p>
-            </div>
-          ) : (
-            <div className="card divide-y divide-slate-100 overflow-hidden">
-              {classStudents.map((student) => {
-                const trackLabel =
-                  student.tracks?.length > 0
-                    ? student.tracks.map((t) => t.name).join(", ")
-                    : student.track?.name;
-
-                return (
-                  <button
-                    key={student.id}
-                    type="button"
-                    onClick={() => openStudent(student.id)}
-                    className="flex w-full items-center justify-between gap-4 px-5 py-4 text-right transition hover:bg-slate-50"
-                  >
-                    <ChevronLeft className="h-4 w-4 shrink-0 text-slate-400" />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-slate-900">{student.user.name}</p>
-                      <p className="mt-0.5 text-sm text-slate-500">
-                        מתמטיקה {student.mathUnits} יח&quot;ל · אנגלית {student.englishUnits}{" "}
-                        יח&quot;ל
-                        {trackLabel ? ` · ${trackLabel}` : ""}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </>
-    );
-  }
-
   return (
     <>
-      <header className="-mx-8 -mt-8 border-b border-slate-200 bg-white px-8 py-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">כיתות ותוכניות חובה</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              הגדרת כיתות ושיוך לתוכנית חובה (רגילה, בית מדרש, מב&quot;ר/חנ&quot;מ)
-            </p>
-          </div>
-          <button onClick={() => setShowNew(true)} className="btn-primary">
+      <PageHeader
+        title={
+          view === "detail"
+            ? (selectedStudent?.user.name ?? "כרטיס תלמיד")
+            : view === "students" && selectedClass
+              ? selectedClass.name
+              : "כיתות ותוכניות חובה"
+        }
+        subtitle={
+          view === "detail" && selectedClass
+            ? `${selectedClass.name}${selectedClass.gradeYear ? ` · ${selectedClass.gradeYear}` : ""}`
+            : view === "students" && selectedClass
+              ? `${selectedClass.gradeYear ? `${selectedClass.gradeYear} · ` : ""}${selectedClass.examPath.label} · ${classStudents.length} תלמידים`
+              : 'הגדרת כיתות ושיוך לתוכנית חובה (רגילה, בית מדרש, מב"ר/חנ"מ)'
+        }
+      >
+        {view === "classes" && (
+          <Button onClick={() => setShowNew(true)}>
             <Plus className="h-4 w-4" />
             כיתה חדשה
-          </button>
-        </div>
-      </header>
+          </Button>
+        )}
+      </PageHeader>
+
+      <Breadcrumb
+        items={[
+          {
+            label: "כיתות",
+            active: view === "classes",
+            onClick: view !== "classes" ? backToClasses : undefined,
+          },
+          ...(view !== "classes" && selectedClass
+            ? [
+                {
+                  label: selectedClass.name,
+                  active: view === "students",
+                  onClick: view === "detail" ? backToStudents : undefined,
+                },
+              ]
+            : []),
+          ...(view === "detail" && selectedStudent
+            ? [{ label: selectedStudent.user.name, active: true }]
+            : []),
+        ]}
+      />
+
+      <AnimatePresence mode="wait">
+        {view === "detail" && selectedStudentId ? (
+          <motion.div
+            key="detail"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.2 }}
+            className="mt-4"
+          >
+            <Button variant="secondary" onClick={backToStudents} className="mb-4">
+              <ChevronLeft className="h-4 w-4" />
+              חזרה לרשימת התלמידים
+            </Button>
+            <StudentCardView studentId={selectedStudentId} />
+          </motion.div>
+        ) : view === "students" && selectedClass ? (
+          <motion.div
+            key="students"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.2 }}
+            className="mt-4"
+          >
+            <Button variant="secondary" onClick={backToClasses} className="mb-4">
+              <ChevronLeft className="h-4 w-4" />
+              חזרה לכיתות
+            </Button>
+            {studentsLoading && classStudents.length === 0 ? (
+              <PageLoader variant="table" />
+            ) : classStudents.length === 0 ? (
+              <Card className="p-8 text-center text-base text-slate-500">
+                <Users className="mx-auto h-10 w-10 text-slate-300" />
+                <p className="mt-3">אין תלמידים בכיתה זו</p>
+              </Card>
+            ) : (
+              <Card variant="flat" className="divide-y divide-slate-100 overflow-hidden">
+                {classStudents.map((student) => {
+                  const trackLabel =
+                    student.tracks?.length > 0
+                      ? student.tracks.map((t) => t.name).join(", ")
+                      : student.track?.name;
+
+                  return (
+                    <button
+                      key={student.id}
+                      type="button"
+                      onClick={() => openStudent(student.id)}
+                      className="flex w-full items-center justify-between gap-4 px-5 py-4 text-right transition hover:bg-slate-50"
+                    >
+                      <ChevronLeft className="h-4 w-4 shrink-0 text-slate-400" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-base font-medium text-slate-900">
+                          {student.user.name}
+                        </p>
+                        <p className="mt-0.5 text-base text-slate-500">
+                          מתמטיקה {student.mathUnits} יח&quot;ל · אנגלית {student.englishUnits}{" "}
+                          יח&quot;ל
+                          {trackLabel ? ` · ${trackLabel}` : ""}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </Card>
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="classes"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.2 }}
+          >
 
       {showNew && (
         <div className="mt-6 card p-6">
@@ -264,7 +297,7 @@ export default function ClassesPage() {
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {classes.map((c) => (
-          <div key={c.id} className="card p-5">
+          <Card key={c.id} variant="interactive" className="p-5">
             {editing === c.id ? (
               <div className="space-y-3">
                 <input
@@ -310,8 +343,8 @@ export default function ClassesPage() {
                     onClick={() => openClass(c.id)}
                     className="min-w-0 flex-1 text-right transition hover:opacity-80"
                   >
-                    <h3 className="text-lg font-semibold text-slate-900">{c.name}</h3>
-                    <p className="mt-1 text-sm text-slate-500">{c.gradeYear}</p>
+                    <h3 className="text-h3 text-slate-900">{c.name}</h3>
+                    <p className="mt-1 text-base text-slate-500">{c.gradeYear}</p>
                   </button>
                   <div className="flex gap-1">
                     <button
@@ -341,21 +374,24 @@ export default function ClassesPage() {
                   className="mt-4 w-full rounded-xl bg-primary-50 px-3 py-2 text-right transition hover:bg-primary-100"
                 >
                   <p className="text-xs text-primary-600">תוכנית חובה</p>
-                  <p className="text-sm font-medium text-primary-800">{c.examPath.label}</p>
+                  <p className="text-base font-medium text-primary-800">{c.examPath.label}</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => openClass(c.id)}
-                  className="mt-3 flex w-full items-center gap-2 text-sm text-slate-500 transition hover:text-primary-600"
+                  className="mt-3 flex w-full items-center gap-2 text-base text-slate-500 transition hover:text-primary-600"
                 >
                   <Users className="h-4 w-4" />
                   {c._count.students} תלמידים
                 </button>
               </>
             )}
-          </div>
+          </Card>
         ))}
       </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

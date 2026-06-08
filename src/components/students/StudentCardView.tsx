@@ -2,10 +2,10 @@
 
 import { SubjectCard } from "@/components/subjects/SubjectCard";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { StatCard } from "@/components/ui/StatCard";
+import { StatCardGrid } from "@/components/ui/StatCardGrid";
 import { PageLoader } from "@/components/ui/PageLoader";
+import { StaggerChildren, StaggerItem } from "@/components/motion/StaggerChildren";
 import { useApi } from "@/hooks/useApi";
-import { BookOpen, Target, Award } from "lucide-react";
 
 type DashboardData = {
   student: {
@@ -48,11 +48,11 @@ export function StudentCardView({ studentId, apiPath }: Props) {
   const { data, loading } = useApi<DashboardData>(endpoint);
 
   if (loading && !data) {
-    return <PageLoader />;
+    return <PageLoader variant="dashboard" />;
   }
 
   if (!data) {
-    return <div className="text-center text-slate-500">שגיאה בטעינת הנתונים</div>;
+    return <div className="text-center text-base text-slate-500">שגיאה בטעינת הנתונים</div>;
   }
 
   const completedObligations = data.subjects.reduce((sum, s) => {
@@ -87,8 +87,8 @@ export function StudentCardView({ studentId, apiPath }: Props) {
     <>
       <div className="card overflow-hidden">
         <div className="bg-gradient-to-l from-primary-600 to-primary-700 px-6 py-6 text-white">
-          <h2 className="text-2xl font-bold">{data.student.user.name}</h2>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-primary-100">
+          <h2 className="text-display text-white">{data.student.user.name}</h2>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-base text-primary-100">
             <span>כיתה {data.student.class.name}</span>
             {data.student.class.gradeYear && <span>{data.student.class.gradeYear}</span>}
             {trackLabel && <span>מגמות: {trackLabel}</span>}
@@ -96,7 +96,7 @@ export function StudentCardView({ studentId, apiPath }: Props) {
             <span>אנגלית {data.student.englishUnits} יח&quot;ל</span>
           </div>
           <div className="mt-5 max-w-lg">
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between text-base">
               <span>התקדמות כללית</span>
               <span className="font-bold">{data.overallProgress.toFixed(0)}%</span>
             </div>
@@ -109,47 +109,48 @@ export function StudentCardView({ studentId, apiPath }: Props) {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-5 sm:grid-cols-3">
-        <StatCard
-          title="מקצועות"
-          value={data.subjects.length}
-          icon={BookOpen}
-          color="primary"
-        />
-        <StatCard
-          title="חובות שהושלמו"
-          value={`${completedObligations}/${totalObligations}`}
-          icon={Target}
-          color="info"
-        />
-        <StatCard
-          title="ממוצע משוער"
-          value={avgGrade != null ? avgGrade.toFixed(0) : "—"}
-          subtitle="ממקצועות עם ציונים"
-          icon={Award}
-          color="success"
+      <div className="mt-6">
+        <StatCardGrid
+          columns="sm:grid-cols-3"
+          items={[
+            { title: "מקצועות", value: data.subjects.length, icon: "book-open", color: "primary" },
+            {
+              title: "חובות שהושלמו",
+              value: `${completedObligations}/${totalObligations}`,
+              icon: "target",
+              color: "info",
+            },
+            {
+              title: "ממוצע משוער",
+              value: avgGrade != null ? avgGrade.toFixed(0) : "—",
+              subtitle: "ממקצועות עם ציונים",
+              icon: "award",
+              color: "success",
+            },
+          ]}
         />
       </div>
 
       <div className="mt-8">
-        <h3 className="mb-4 text-lg font-semibold text-slate-900">מקצועות</h3>
-        <div className="space-y-4">
+        <h3 className="text-h2 mb-4 text-slate-900">מקצועות</h3>
+        <StaggerChildren className="space-y-4">
           {data.subjects.length === 0 ? (
-            <p className="text-sm text-slate-500">אין מקצועות רלוונטיים לתלמיד זה</p>
+            <p className="text-base text-slate-500">אין מקצועות רלוונטיים לתלמיד זה</p>
           ) : (
             data.subjects.map((subject) => (
-              <SubjectCard
-                key={subject.id}
-                name={subject.name}
-                units={subject.units}
-                obligations={subject.obligations}
-                grades={subject.grades}
-                progress={subject.progress}
-                readOnly
-              />
+              <StaggerItem key={subject.id}>
+                <SubjectCard
+                  name={subject.name}
+                  units={subject.units}
+                  obligations={subject.obligations}
+                  grades={subject.grades}
+                  progress={subject.progress}
+                  readOnly
+                />
+              </StaggerItem>
             ))
           )}
-        </div>
+        </StaggerChildren>
       </div>
     </>
   );

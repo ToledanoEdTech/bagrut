@@ -183,7 +183,7 @@ export default function GradesPage() {
   const selectedStudent = students.find((s) => s.id === selectedId);
 
   if (studentsLoading && students.length === 0) {
-    return <PageLoader />;
+    return <PageLoader variant="skeleton" />;
   }
 
   return (

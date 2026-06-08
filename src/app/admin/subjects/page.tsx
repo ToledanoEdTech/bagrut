@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp, Pencil } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
 import {
   ObligationEditor,
   EMPTY_OBLIGATION,
@@ -236,20 +238,15 @@ export default function SubjectsPage() {
 
   return (
     <>
-      <header className="-mx-8 -mt-8 border-b border-slate-200 bg-white px-8 py-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">מקצועות ומטלות</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              לכל מטלה: אחוז מהציון הסופי, סוג היבחנות, ושקלול פנימי / עבודות
-            </p>
-          </div>
-          <button type="button" onClick={() => setShowNew(true)} className="btn-primary">
-            <Plus className="h-4 w-4" />
-            מקצוע חדש
-          </button>
-        </div>
-      </header>
+      <PageHeader
+        title="מקצועות ומטלות"
+        subtitle="לכל מטלה: אחוז מהציון הסופי, סוג היבחנות, ושקלול פנימי / עבודות"
+      >
+        <Button type="button" onClick={() => setShowNew(true)}>
+          <Plus className="h-4 w-4" />
+          מקצוע חדש
+        </Button>
+      </PageHeader>
 
       {error && (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -264,7 +261,7 @@ export default function SubjectsPage() {
         </div>
       )}
 
-      <div className="mt-6 flex flex-wrap gap-2">
+      <div className="mt-6 flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
         {[
           { key: "all", label: "הכל" },
           ...Object.entries(categories).map(([k, v]) => ({ key: k, label: v })),
@@ -273,10 +270,10 @@ export default function SubjectsPage() {
             key={f.key}
             type="button"
             onClick={() => setFilter(f.key)}
-            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+            className={`rounded-lg px-4 py-2.5 text-base font-medium transition ${
               filter === f.key
-                ? "bg-primary-600 text-white"
-                : "bg-white text-slate-600 hover:bg-slate-100"
+                ? "bg-white text-primary-700 shadow-sm"
+                : "text-slate-600 hover:text-slate-900"
             }`}
           >
             {f.label}
@@ -556,74 +553,91 @@ export default function SubjectsPage() {
                             saving={saving}
                           />
                         ) : (
-                          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
-                            <div className="min-w-0 flex-1 text-right">
-                              <div className="flex flex-wrap items-center justify-start gap-2">
-                                <span className="font-medium">
-                                  {o.name || o.examEvent || "מטלה"}
-                                </span>
-                                {o.questionnaireNumber && (
-                                  <span className="badge-muted" dir="ltr">
-                                    {o.questionnaireNumber}
+                          <div className="rounded-xl border border-slate-200 bg-white p-5">
+                            <div className="flex flex-wrap items-start justify-between gap-4">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-lg font-bold text-slate-900">
+                                    {o.name || o.examEvent || "מטלה"}
                                   </span>
+                                  {o.questionnaireNumber && (
+                                    <span className="badge-muted text-sm font-semibold" dir="ltr">
+                                      שאלון {o.questionnaireNumber}
+                                    </span>
+                                  )}
+                                  <span className="badge-warning text-sm font-semibold">
+                                    {o.weightPercent}% מהסופי
+                                  </span>
+                                  <span
+                                    className={`badge-muted text-sm font-semibold ${o.examType === "חיצוני" ? "bg-orange-50 text-orange-700" : ""}`}
+                                  >
+                                    {o.examType}
+                                  </span>
+                                  {o.gradeYear && (
+                                    <span className="text-base font-medium text-slate-600">
+                                      {o.gradeYear}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {o.studyMaterial && (
+                                  <p className="mt-3 text-base text-slate-700">
+                                    <span className="font-semibold text-slate-900">חומר: </span>
+                                    {o.studyMaterial}
+                                  </p>
                                 )}
-                                <span className="badge-warning">{o.weightPercent}% מהסופי</span>
-                                <span
-                                  className={`badge-muted ${o.examType === "חיצוני" ? "bg-orange-50 text-orange-700" : ""}`}
-                                >
-                                  {o.examType}
-                                </span>
-                                {o.gradeYear && (
-                                  <span className="text-xs text-slate-400">{o.gradeYear}</span>
+
+                                {o.components.length > 0 && (
+                                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                                    <span className="text-base font-semibold text-slate-800">
+                                      שקלול במטלה:
+                                    </span>
+                                    {o.components.map((c, i) => (
+                                      <span key={i} className="badge-muted text-sm font-medium">
+                                        {c.name}: <strong>{c.weightPercent}%</strong>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {o.subItems.length > 0 && (
+                                  <div className="mt-4 grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                    {o.subItems.map((si, i) => (
+                                      <div
+                                        key={i}
+                                        className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-2.5 text-base"
+                                      >
+                                        <span className="font-medium text-slate-800">{si.name}</span>
+                                        <span className="font-semibold text-primary-600">
+                                          {si.weightPercent}%
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
                                 )}
                               </div>
-                              {o.studyMaterial && (
-                                <p className="mt-1 text-xs text-slate-400">{o.studyMaterial}</p>
-                              )}
-                              {o.components.length > 0 && (
-                                <div className="mt-1 flex flex-wrap justify-start gap-1">
-                                  <span className="text-xs text-slate-500">שקלול במטלה:</span>
-                                  {o.components.map((c, i) => (
-                                    <span key={i} className="text-xs text-slate-400">
-                                      {c.name} {c.weightPercent}%
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                              {o.subItems.length > 0 && (
-                                <div className="mt-2 grid gap-1 sm:grid-cols-2">
-                                  {o.subItems.map((si, i) => (
-                                    <div
-                                      key={i}
-                                      className="flex justify-between rounded bg-slate-50 px-2 py-1 text-xs"
-                                    >
-                                      <span className="text-slate-400">{si.weightPercent}%</span>
-                                      <span>{si.name}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex shrink-0 gap-1">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingObligation(o.id);
-                                  setAddingObligation(null);
-                                  setObligationDraft(obligationToDraft(o));
-                                  setError(null);
-                                }}
-                                className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => deleteObligation(subject.id, o.id)}
-                                className="rounded p-1 text-red-400 hover:bg-red-50 hover:text-red-600"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+
+                              <div className="flex shrink-0 gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingObligation(o.id);
+                                    setAddingObligation(null);
+                                    setObligationDraft(obligationToDraft(o));
+                                    setError(null);
+                                  }}
+                                  className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteObligation(subject.id, o.id)}
+                                  className="rounded-lg p-2 text-red-400 hover:bg-red-50 hover:text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         )}

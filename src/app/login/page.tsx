@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
+import { FadeIn } from "@/components/motion/FadeIn";
+import { Button } from "@/components/ui/Button";
+import { SiteLogos } from "@/components/ui/SiteLogos";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,24 +33,22 @@ export default function LoginPage() {
 
   if (authLoading || session) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100/80">
         <Loader2 className="h-10 w-10 animate-spin text-primary-600" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 to-slate-100/80">
       <div className="hidden w-1/2 bg-gradient-to-bl from-primary-700 via-primary-600 to-primary-800 lg:flex lg:flex-col lg:justify-center lg:px-16">
         <div className="max-w-md text-white">
-          <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20">
-            <GraduationCap className="h-8 w-8" />
-          </div>
-          <h1 className="text-4xl font-bold leading-tight">מערכת מעקב בגרות</h1>
+          <SiteLogos size="hero" className="mb-8 items-start" />
+          <h1 className="text-display text-white leading-tight">מערכת מעקב בגרות</h1>
           <p className="mt-4 text-lg text-primary-100">
             ניהול פדגוגי ומעקב אחרי בחינות בגרות וחובות תלמידים בישיבה תיכונית
           </p>
-          <div className="mt-8 space-y-3 text-sm text-primary-100">
+          <div className="mt-8 space-y-3 text-base text-primary-100">
             <p>• מנהלים — הרשאות מלאות</p>
             <p>• מורים — צפייה והזנת ציונים</p>
             <p>• תלמידים — דשבורד אישי</p>
@@ -56,34 +57,38 @@ export default function LoginPage() {
       </div>
 
       <div className="flex flex-1 items-center justify-center px-6">
-        <div className="w-full max-w-md">
+        <FadeIn className="w-full max-w-md">
           <div className="mb-8 text-center lg:text-right">
-            <h2 className="text-2xl font-bold text-slate-900">התחברות</h2>
-            <p className="mt-2 text-sm text-slate-500">
+            <div className="mb-6 flex justify-center lg:hidden">
+              <SiteLogos size="hero" className="items-center" />
+            </div>
+            <h2 className="text-h1 text-slate-900">התחברות</h2>
+            <p className="mt-2 text-base text-slate-500">
               התחברו עם חשבון Google הארגוני שלכם
             </p>
           </div>
 
-          <div className="card space-y-5 p-8">
+          <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-8 shadow-lg backdrop-blur-sm">
             {configError && (
-              <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <div className="mb-5 rounded-xl bg-amber-50 px-4 py-3 text-base text-amber-800">
                 {configError}
               </div>
             )}
             {error && (
-              <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
+              <div className="mb-5 rounded-xl bg-red-50 px-4 py-3 text-base text-red-600">
                 {error}
               </div>
             )}
 
-            <button
+            <Button
               type="button"
               onClick={handleGoogleSignIn}
               disabled={loading || Boolean(configError)}
-              className="btn-primary w-full"
+              size="lg"
+              className="w-full"
             >
               {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
                 <svg className="h-5 w-5" viewBox="0 0 24 24">
                   <path
@@ -105,13 +110,13 @@ export default function LoginPage() {
                 </svg>
               )}
               התחברות עם Google
-            </button>
+            </Button>
           </div>
 
-          <p className="mt-6 text-center text-xs text-slate-400">
+          <p className="mt-6 text-center text-caption">
             גישה למערכת מותנית בהרשאות מוגדרות מראש
           </p>
-        </div>
+        </FadeIn>
       </div>
     </div>
   );
