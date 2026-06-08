@@ -1,7 +1,6 @@
 import {
   getClassById,
   getExamPathById,
-  getSubjectById,
   getTrackById,
   listSubjects,
 } from "@/lib/firestore";
@@ -18,15 +17,18 @@ export { calcSubjectProgress } from "@/lib/progress";
 export async function getRelevantSubjects(
   student: StudentWithRelations
 ): Promise<SubjectWithObligations[]> {
-  const examPath = await getExamPathById(student.class.examPathId);
+  const [examPath, allSubjects] = await Promise.all([
+    getExamPathById(student.class.examPathId),
+    listSubjects(),
+  ]);
   if (!examPath) return [];
 
-  const pathSubjects = (
-    await Promise.all(examPath.subjectIds.map(getSubjectById))
-  ).filter(Boolean) as Subject[];
+  const subjectById = new Map(allSubjects.map((s) => [s.id, s]));
+  const pathSubjects = examPath.subjectIds
+    .map((id) => subjectById.get(id))
+    .filter(Boolean) as Subject[];
 
   const mandatory = pathSubjects.filter((s) => s.category === "MANDATORY");
-  const allSubjects = await listSubjects();
 
   const math = allSubjects.find(
     (s) => s.category === "MATH" && s.units === student.mathUnits

@@ -16,10 +16,12 @@ export async function GET() {
     return NextResponse.json({ error: "לא נמצא תלמיד" }, { status: 404 });
   }
 
-  const studentWithRelations = await buildStudentWithRelations(student);
+  const [studentWithRelations, grades, track] = await Promise.all([
+    buildStudentWithRelations(student),
+    getGradesByStudent(student.id),
+    student.trackId ? getTrackById(student.trackId) : Promise.resolve(null),
+  ]);
   const subjects = await getRelevantSubjects(studentWithRelations);
-  const grades = await getGradesByStudent(student.id);
-  const track = student.trackId ? await getTrackById(student.trackId) : null;
 
   const subjectsWithProgress = subjects.map((subject) => {
     const subjectGrades = grades.filter((g) =>

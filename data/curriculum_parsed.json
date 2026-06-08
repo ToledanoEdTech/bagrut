@@ -221,10 +221,6 @@
               "gradeYear": "שכבת י",
               "components": [
                 {
-                  "name": "המסעות לפולין",
-                  "weightPercent": 15.0
-                },
-                {
                   "name": "שוויון בגיוס לצה\"ל",
                   "weightPercent": 40.0
                 },
@@ -324,11 +320,40 @@
               "examEvent": "שאלה מסכמת",
               "gradeYear": "שכבת י",
               "components": [],
-              "subItems": []
+              "subItems": [
+                {
+                  "name": "כינורו של רוטשילד",
+                  "weightPercent": 16.0
+                },
+                {
+                  "name": "ישנה בחיק יחדות",
+                  "weightPercent": 7.0
+                },
+                {
+                  "name": "ראה שמש",
+                  "weightPercent": 7.0
+                },
+                {
+                  "name": "ניצול",
+                  "weightPercent": 7.0
+                },
+                {
+                  "name": "תהילה",
+                  "weightPercent": 22.0
+                },
+                {
+                  "name": "בואי הרוח",
+                  "weightPercent": 22.0
+                },
+                {
+                  "name": "רק על עצמי",
+                  "weightPercent": 7.0
+                }
+              ]
             },
             {
               "questionnaireNumber": "38183",
-              "weightPercent": 100.0,
+              "weightPercent": 15.0,
               "eventName": null,
               "examType": "פנימי",
               "studyMaterial": null,
@@ -344,7 +369,7 @@
             },
             {
               "questionnaireNumber": "38181",
-              "weightPercent": 100.0,
+              "weightPercent": 35.0,
               "eventName": "בגרות חיצונית",
               "examType": "חיצוני",
               "studyMaterial": null,
@@ -366,23 +391,91 @@
         },
         {
           "name": "חינוך גופני",
-          "units": null,
-          "obligations": []
+          "units": 0,
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": null,
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": "מבחן סוף שנה",
+              "gradeYear": "שכבת ט",
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "מבוא למדעים",
-          "units": null,
-          "obligations": []
+          "units": 0,
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": null,
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": "מבחן סוף שנה",
+              "gradeYear": "שכבת ט",
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "השכלה כללית א",
-          "units": null,
-          "obligations": []
+          "units": 0,
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": null,
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": "מבחן סוף שנה",
+              "gradeYear": "שכבת ט",
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "השכלה כללית ב",
-          "units": null,
-          "obligations": []
+          "units": 0,
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": null,
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": "מבחן סוף שנה",
+              "gradeYear": "שכבת ט",
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         }
       ]
     },
@@ -548,11 +641,6 @@
         {
           "name": "אנגלית",
           "units": 3,
-          "obligations": []
-        },
-        {
-          "name": "אנגלית",
-          "units": 4,
           "obligations": [
             {
               "questionnaireNumber": null,
@@ -561,7 +649,23 @@
               "examType": "פנימי",
               "studyMaterial": null,
               "examEvent": null,
-              "gradeYear": null,
+              "gradeYear": "שכבת י",
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 27.0,
+              "eventName": "A",
+              "examType": "חיצוני",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
               "components": [
                 {
                   "name": "ציון בחינה",
@@ -570,11 +674,136 @@
                 {
                   "name": "ציון הגשה",
                   "weightPercent": 30.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 27.0,
+              "eventName": "C",
+              "examType": "חיצוני",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
+              "components": [
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
                 },
                 {
-                  "name": "Count That Day Lost",
-                  "weightPercent": 6.67
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 26.0,
+              "eventName": "B",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": null,
+              "components": [],
+              "subItems": [
+                {
+                  "name": "סיפור",
+                  "weightPercent": 16.67
                 },
+                {
+                  "name": "שיר",
+                  "weightPercent": 16.67
+                },
+                {
+                  "name": "שיר",
+                  "weightPercent": 16.67
+                },
+                {
+                  "name": "מבחן",
+                  "weightPercent": 15.0
+                },
+                {
+                  "name": "מבחן",
+                  "weightPercent": 15.0
+                },
+                {
+                  "name": "דוח",
+                  "weightPercent": 10.0
+                },
+                {
+                  "name": "דוח",
+                  "weightPercent": 10.0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "אנגלית",
+          "units": 4,
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 27.0,
+              "eventName": "C",
+              "examType": "חיצוני",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
+              "components": [
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                },
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 20.0,
+              "eventName": "COBE",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": null,
+              "components": [],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 27.0,
+              "eventName": "E",
+              "examType": "חיצוני",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יב",
+              "components": [
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                },
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 26.0,
+              "eventName": "D",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": null,
+              "components": [
                 {
                   "name": "The Road Not Taken",
                   "weightPercent": 6.67
@@ -594,7 +823,9 @@
                 {
                   "name": "Thank You Mam",
                   "weightPercent": 6.66
-                },
+                }
+              ],
+              "subItems": [
                 {
                   "name": "מבחן",
                   "weightPercent": 20.0
@@ -619,8 +850,7 @@
                   "name": "דוח",
                   "weightPercent": 5.0
                 }
-              ],
-              "subItems": []
+              ]
             }
           ]
         },
@@ -630,12 +860,12 @@
           "obligations": [
             {
               "questionnaireNumber": null,
-              "weightPercent": 20.0,
-              "eventName": "COBE",
-              "examType": "פנימי",
+              "weightPercent": 27.0,
+              "eventName": "E",
+              "examType": "חיצוני",
               "studyMaterial": null,
               "examEvent": null,
-              "gradeYear": null,
+              "gradeYear": "שכבת יא",
               "components": [
                 {
                   "name": "ציון בחינה",
@@ -644,11 +874,50 @@
                 {
                   "name": "ציון הגשה",
                   "weightPercent": 30.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 20.0,
+              "eventName": "COBE",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": null,
+              "components": [],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 27.0,
+              "eventName": "G",
+              "examType": "חיצוני",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יב",
+              "components": [
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
                 },
                 {
-                  "name": "Count That Day Lost",
-                  "weightPercent": 6.67
-                },
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 26.0,
+              "eventName": "F",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": null,
+              "components": [
                 {
                   "name": "The Road Not Taken",
                   "weightPercent": 6.67
@@ -668,7 +937,9 @@
                 {
                   "name": "The Wave",
                   "weightPercent": 6.66
-                },
+                }
+              ],
+              "subItems": [
                 {
                   "name": "מבחן",
                   "weightPercent": 20.0
@@ -693,30 +964,225 @@
                   "name": "דוח",
                   "weightPercent": 5.0
                 }
-              ],
-              "subItems": []
+              ]
             }
           ]
         },
         {
           "name": "ביולוגיה",
           "units": 5,
-          "obligations": []
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 15.0,
+              "eventName": "מעבדה",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                },
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 55.0,
+              "eventName": "בגרות חיצונית",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יב",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                },
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 30.0,
+              "eventName": "ביוחקר",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                },
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "פיסיקה",
           "units": 5,
-          "obligations": []
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 15.0,
+              "eventName": "מעבדה",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                },
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 25.0,
+              "eventName": "בגרות חיצונית",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יב",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                },
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 30.0,
+              "eventName": "בגרות חיצונית",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                },
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 30.0,
+              "eventName": "הערכה חלופית",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "תקשוב",
           "units": 5,
-          "obligations": []
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 30.0,
+              "eventName": "הערכה חלופית",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת י",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 70.0,
+              "eventName": "בגרות חיצונית",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                },
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "תקשוב הגבר",
           "units": 5,
-          "obligations": []
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": "בגרות חיצונית פרוייקט",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                },
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "מדעי המחשב",
@@ -758,7 +1224,19 @@
                 {
                   "name": "ציון בחינה",
                   "weightPercent": 70.0
-                },
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 24.0,
+              "eventName": "פרויקט",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
+              "components": [
                 {
                   "name": "ציון הגשה",
                   "weightPercent": 30.0
@@ -775,12 +1253,74 @@
         {
           "name": "מדעי המחשב הגבר",
           "units": 5,
-          "obligations": []
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": "בגרות חיצונית פרוייקט",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                },
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "תקשורת",
           "units": 5,
-          "obligations": []
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 50.0,
+              "eventName": "בגרות חיצונית עיונית",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                },
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 50.0,
+              "eventName": "בגרות חיצונית מעשית",
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יב",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                },
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "מוסיקה",
@@ -821,7 +1361,27 @@
           "units": 5,
           "obligations": [
             {
-              "questionnaireNumber": "0.25",
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": null,
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": null,
+              "gradeYear": "שכבת יא",
+              "components": [
+                {
+                  "name": "ציון הגשה",
+                  "weightPercent": 30.0
+                },
+                {
+                  "name": "ציון בחינה",
+                  "weightPercent": 70.0
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
               "weightPercent": 30.0,
               "eventName": "0.3",
               "examType": "פנימי",
@@ -856,7 +1416,19 @@
                 {
                   "name": "יחידות מבוקרות",
                   "weightPercent": 100.0
-                },
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 9.0,
+              "eventName": "פנימי",
+              "examType": "מבחן אוקטובר יא",
+              "studyMaterial": "במדבר",
+              "examEvent": null,
+              "gradeYear": null,
+              "components": [
                 {
                   "name": "ציון פנימי",
                   "weightPercent": 100.0
@@ -936,7 +1508,19 @@
                 {
                   "name": "ציון פנימי",
                   "weightPercent": 100.0
-                },
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 8.0,
+              "eventName": "פנימי",
+              "examType": "מבחן פנימי שכבת י",
+              "studyMaterial": "דמויות מופת",
+              "examEvent": "מורה לתנך שכבת י",
+              "gradeYear": "שכבת י",
+              "components": [
                 {
                   "name": "ציון פנימי",
                   "weightPercent": 100.0
@@ -1100,10 +1684,6 @@
               "gradeYear": "שכבת י",
               "components": [
                 {
-                  "name": "המסעות לפולין",
-                  "weightPercent": 15.0
-                },
-                {
                   "name": "שוויון בגיוס לצה\"ל",
                   "weightPercent": 40.0
                 },
@@ -1203,11 +1783,40 @@
               "examEvent": "שאלה מסכמת",
               "gradeYear": "שכבת י",
               "components": [],
-              "subItems": []
+              "subItems": [
+                {
+                  "name": "כינורו של רוטשילד",
+                  "weightPercent": 16.0
+                },
+                {
+                  "name": "ישנה בחיק יחדות",
+                  "weightPercent": 7.0
+                },
+                {
+                  "name": "ראה שמש",
+                  "weightPercent": 7.0
+                },
+                {
+                  "name": "ניצול",
+                  "weightPercent": 7.0
+                },
+                {
+                  "name": "תהילה",
+                  "weightPercent": 22.0
+                },
+                {
+                  "name": "בואי הרוח",
+                  "weightPercent": 22.0
+                },
+                {
+                  "name": "רק על עצמי",
+                  "weightPercent": 7.0
+                }
+              ]
             },
             {
               "questionnaireNumber": "38183",
-              "weightPercent": 100.0,
+              "weightPercent": 6.0,
               "eventName": "מחשבת פנימי",
               "examType": "פנימי",
               "studyMaterial": "אמונה בשעת משבר",
@@ -1281,23 +1890,91 @@
         },
         {
           "name": "חינוך גופני",
-          "units": null,
-          "obligations": []
+          "units": 0,
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": null,
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": "מבחן סוף שנה",
+              "gradeYear": "שכבת ט",
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "מבוא למדעים",
-          "units": null,
-          "obligations": []
+          "units": 0,
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": null,
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": "מבחן סוף שנה",
+              "gradeYear": "שכבת ט",
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "השכלה כללית א",
-          "units": null,
-          "obligations": []
+          "units": 0,
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": null,
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": "מבחן סוף שנה",
+              "gradeYear": "שכבת ט",
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "השכלה כללית ב",
-          "units": null,
-          "obligations": []
+          "units": 0,
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": null,
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": "מבחן סוף שנה",
+              "gradeYear": "שכבת ט",
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         }
       ]
     },
@@ -1322,7 +1999,19 @@
                 {
                   "name": "יחידות מבוקרות",
                   "weightPercent": 100.0
-                },
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 9.0,
+              "eventName": "פנימי",
+              "examType": "מבחן אוקטובר יא",
+              "studyMaterial": "במדבר",
+              "examEvent": null,
+              "gradeYear": null,
+              "components": [
                 {
                   "name": "ציון פנימי",
                   "weightPercent": 100.0
@@ -1402,7 +2091,19 @@
                 {
                   "name": "ציון פנימי",
                   "weightPercent": 100.0
-                },
+                }
+              ],
+              "subItems": []
+            },
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 8.0,
+              "eventName": "פנימי",
+              "examType": "מבחן פנימי שכבת י",
+              "studyMaterial": "דמויות מופת",
+              "examEvent": "מורה לתנך שכבת י",
+              "gradeYear": "שכבת י",
+              "components": [
                 {
                   "name": "ציון פנימי",
                   "weightPercent": 100.0
@@ -1546,10 +2247,6 @@
               "gradeYear": "שכבת י",
               "components": [
                 {
-                  "name": "המסעות לפולין",
-                  "weightPercent": 15.0
-                },
-                {
                   "name": "שוויון בגיוס לצה\"ל",
                   "weightPercent": 40.0
                 },
@@ -1649,11 +2346,40 @@
               "examEvent": "שאלה מסכמת",
               "gradeYear": "שכבת י",
               "components": [],
-              "subItems": []
+              "subItems": [
+                {
+                  "name": "כינורו של רוטשילד",
+                  "weightPercent": 16.0
+                },
+                {
+                  "name": "ישנה בחיק יחדות",
+                  "weightPercent": 7.0
+                },
+                {
+                  "name": "ראה שמש",
+                  "weightPercent": 7.0
+                },
+                {
+                  "name": "ניצול",
+                  "weightPercent": 7.0
+                },
+                {
+                  "name": "תהילה",
+                  "weightPercent": 22.0
+                },
+                {
+                  "name": "בואי הרוח",
+                  "weightPercent": 22.0
+                },
+                {
+                  "name": "רק על עצמי",
+                  "weightPercent": 7.0
+                }
+              ]
             },
             {
               "questionnaireNumber": "38183",
-              "weightPercent": 100.0,
+              "weightPercent": 6.0,
               "eventName": "מחשבת פנימי",
               "examType": "פנימי",
               "studyMaterial": "אמונה וגאולה",
@@ -1727,23 +2453,91 @@
         },
         {
           "name": "חינוך גופני",
-          "units": null,
-          "obligations": []
+          "units": 0,
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": null,
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": "מבחן סוף שנה",
+              "gradeYear": "שכבת ט",
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "מבוא למדעים",
-          "units": null,
-          "obligations": []
+          "units": 0,
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": null,
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": "מבחן סוף שנה",
+              "gradeYear": "שכבת ט",
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "השכלה כללית א",
-          "units": null,
-          "obligations": []
+          "units": 0,
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": null,
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": "מבחן סוף שנה",
+              "gradeYear": "שכבת ט",
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         },
         {
           "name": "השכלה כללית ב",
-          "units": null,
-          "obligations": []
+          "units": 0,
+          "obligations": [
+            {
+              "questionnaireNumber": null,
+              "weightPercent": 100.0,
+              "eventName": null,
+              "examType": "פנימי",
+              "studyMaterial": null,
+              "examEvent": "מבחן סוף שנה",
+              "gradeYear": "שכבת ט",
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
+              "subItems": []
+            }
+          ]
         }
       ]
     }

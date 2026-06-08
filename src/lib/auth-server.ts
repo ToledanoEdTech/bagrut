@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { adminAuth } from "@/lib/firebase/admin";
-import { getOrCreateUserProfile, resolveUserRole } from "@/lib/firestore";
+import { getUserProfile } from "@/lib/firestore";
 import type { AuthSession } from "@/lib/types";
 import { isAdminEmail } from "@/lib/roles";
 
@@ -23,26 +23,20 @@ export async function getAuthSession(): Promise<AuthSession | null> {
   try {
     const decoded = await adminAuth.verifySessionCookie(sessionCookie, true);
     const email = (decoded.email ?? "").toLowerCase();
-    const profile = await getOrCreateUserProfile({
-      uid: decoded.uid,
-      email,
-      name: decoded.name ?? email,
-      photoURL: decoded.picture ?? null,
-    });
+    const profile = await getUserProfile(decoded.uid);
 
-    const resolved = await resolveUserRole(email);
-    if (!resolved.role) return null;
+    if (!profile?.role) return null;
 
-    const role = isAdminEmail(email) ? "ADMIN" : resolved.role;
-    const studentId = resolved.studentId;
+    const role = isAdminEmail(email) ? "ADMIN" : profile.role;
+    if (role === "STUDENT" && !profile.studentId) return null;
 
     return {
       uid: decoded.uid,
       email,
-      name: profile.name,
+      name: profile.name ?? decoded.name ?? email,
       role,
-      studentId,
-      photoURL: profile.photoURL,
+      studentId: profile.studentId,
+      photoURL: profile.photoURL ?? decoded.picture ?? null,
     };
   } catch {
     return null;

@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   addObligation,
   deleteObligation,
-  getSubjectById,
-  updateSubject,
+  updateObligation,
 } from "@/lib/firestore";
 import { requireAdmin } from "@/lib/api-auth";
 
@@ -21,8 +20,18 @@ export async function POST(req: NextRequest) {
     examEvent: body.examEvent ?? null,
     gradeYear: body.gradeYear ?? null,
     sortOrder: body.sortOrder ?? 0,
-    components: body.components ?? [],
-    subItems: body.subItems ?? [],
+    components: (body.components ?? []).map(
+      (c: { name: string; weightPercent: number }, i: number) => ({
+        ...c,
+        sortOrder: i,
+      })
+    ),
+    subItems: (body.subItems ?? []).map(
+      (si: { name: string; weightPercent: number }, i: number) => ({
+        ...si,
+        sortOrder: i,
+      })
+    ),
   });
 
   return NextResponse.json(obligation);
@@ -34,10 +43,20 @@ export async function PATCH(req: NextRequest) {
 
   const body = await req.json();
   const { subjectId, ...obligation } = body;
-  const result = await updateSubject(subjectId, {
-    obligations: (
-      await getSubjectById(subjectId)
-    )?.obligations.map((o) => (o.id === obligation.id ? obligation : o)),
+  const result = await updateObligation(subjectId, {
+    ...obligation,
+    components: (obligation.components ?? []).map(
+      (c: { name: string; weightPercent: number }, i: number) => ({
+        ...c,
+        sortOrder: i,
+      })
+    ),
+    subItems: (obligation.subItems ?? []).map(
+      (si: { name: string; weightPercent: number }, i: number) => ({
+        ...si,
+        sortOrder: i,
+      })
+    ),
   });
   return NextResponse.json(result);
 }

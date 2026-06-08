@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Parse curriculum Excel into structured JSON for seeding."""
+"""Parse curriculum raw JSON into structured JSON for seeding."""
 import json
+import re
 from pathlib import Path
-
-import openpyxl
 
 SHEET_TO_PATH = {
     'תוכנית היבחנות חובה מב"ר, חנ"מ': "meubar_hinuch",
+    "תוכנית היבחנות גמיש מתמטיקה אנג": "flexible",
     "תוכנית היבחנות גמיש מתמטיקה אנגלית ומגמות": "flexible",
     "תוכנית היבחנות חובה רגילה": "regular",
     "תוכנית היבחנות חובה בית מדרש": "beit_midrash",
@@ -14,10 +14,12 @@ SHEET_TO_PATH = {
 
 PATH_LABELS = {
     "meubar_hinuch": 'מב"ר / חנ"מ',
-    "flexible": "בחירת תלמיד (מתמטיקה, אנגלית, מגמות)",
+    "flexible": "גמיש (מתמטיקה, אנגלית, מגמות)",
     "regular": "רגילה",
     "beit_midrash": "בית מדרש",
 }
+
+GRADE_COMPONENTS = {"ציון פנימי", "ציון בחינה", "ציון הגשה", "יחידות מבוקרות"}
 
 
 def clean(val):
@@ -33,6 +35,18 @@ def parse_percent(val):
     if val is None:
         return None
     s = str(val).strip().replace("%", "")
+    if not s:
+        return None
+    if s.startswith("="):
+        expr = s[1:]
+        if re.match(r"^[\d.\s*/()+-]+$", expr):
+            try:
+                f = float(eval(expr))  # noqa: S307 — trusted curriculum formulas only
+                if f <= 1:
+                    return round(f * 100, 2)
+                return round(f, 2)
+            except (SyntaxError, TypeError, ZeroDivisionError):
+                return None
     try:
         f = float(s)
         if f <= 1:
@@ -46,7 +60,7 @@ def is_units_number(val):
     if not val:
         return False
     s = str(val).strip().replace(".0", "")
-    return s.isdigit() and 0 < int(s) <= 10
+    return s.isdigit() and 0 <= int(s) <= 10
 
 
 def is_header_row(row):
@@ -67,8 +81,41 @@ def is_subject_header(row):
     return False
 
 
+def is_questionnaire(val):
+    if not val:
+        return False
+    s = str(val).strip().replace(".0", "")
+    return s.isdigit() and len(s) >= 3
+
+
+def is_grade_component(name):
+    return name in GRADE_COMPONENTS
+
+
+def is_literature_unit_row(exam_type, study_material, score_weight):
+    return exam_type == "יחידה מבוקרת" and study_material and score_weight is not None
+
+
+def is_sub_item_component(name):
+    return name in {"סיפור", "שיר", "מבחן", "דוח"}
+
+
 def start_subject(name, units=None):
     return {"name": name, "units": units, "obligations": []}
+
+
+def new_obligation(questionnaire, weight, event_name, exam_type, study_material, exam_event, grade_year):
+    return {
+        "questionnaireNumber": questionnaire,
+        "weightPercent": weight or 0,
+        "eventName": event_name,
+        "examType": exam_type or "פנימי",
+        "studyMaterial": study_material,
+        "examEvent": exam_event,
+        "gradeYear": grade_year,
+        "components": [],
+        "subItems": [],
+    }
 
 
 def parse_sheet(rows):
@@ -97,7 +144,6 @@ def parse_sheet(rows):
             i += 1
             continue
 
-        # Unit-level sub-section (מתמטיקה/אנגלית with 3,4,5 יח"ל)
         if not first and second and is_units_number(second):
             new_units = int(float(second))
             if current_subject["units"] is None:
@@ -117,43 +163,57 @@ def parse_sheet(rows):
         exam_event = clean(row[9]) if len(row) > 9 else None
         grade_year = clean(row[10]) if len(row) > 10 else None
 
-        has_questionnaire = questionnaire and questionnaire.replace(".", "").isdigit()
+        has_q = is_questionnaire(questionnaire)
 
-        if has_questionnaire or (weight is not None and not score_component and score_weight is None):
-            if weight is None and has_questionnaire:
-                weight = 100.0
+        starts_obligation = (
+            has_q
+            or (weight is not None and event_name)
+            or (weight is not None and score_component and score_weight and not event_name)
+        )
 
-            current_obligation = {
-                "questionnaireNumber": questionnaire if has_questionnaire else None,
-                "weightPercent": weight or 0,
-                "eventName": event_name,
-                "examType": exam_type or "פנימי",
-                "studyMaterial": study_material,
-                "examEvent": exam_event,
-                "gradeYear": grade_year,
-                "components": [],
-                "subItems": [],
-            }
-            if score_component and score_weight is not None:
-                current_obligation["components"].append({
-                    "name": score_component,
-                    "weightPercent": score_weight,
-                })
+        if starts_obligation:
+            q_num = questionnaire if has_q else None
+            current_obligation = new_obligation(
+                q_num, weight, event_name, exam_type, study_material, exam_event, grade_year
+            )
             current_subject["obligations"].append(current_obligation)
-        elif current_obligation:
+
             if score_component and score_weight is not None:
-                current_obligation["components"].append({
-                    "name": score_component,
-                    "weightPercent": score_weight,
-                })
-            elif event_name and weight is not None and not has_questionnaire:
-                current_obligation["subItems"].append({
-                    "name": event_name,
-                    "weightPercent": weight,
-                })
-            elif study_material and weight is not None and score_component:
+                if is_literature_unit_row(exam_type, study_material, score_weight):
+                    current_obligation["subItems"].append({
+                        "name": study_material,
+                        "weightPercent": score_weight,
+                    })
+                elif is_sub_item_component(score_component):
+                    current_obligation["subItems"].append({
+                        "name": score_component,
+                        "weightPercent": score_weight,
+                    })
+                elif is_grade_component(score_component):
+                    current_obligation["components"].append({
+                        "name": score_component,
+                        "weightPercent": score_weight,
+                    })
+        elif current_obligation:
+            if is_literature_unit_row(exam_type, study_material, score_weight):
                 current_obligation["subItems"].append({
                     "name": study_material,
+                    "weightPercent": score_weight,
+                })
+            elif score_component and score_weight is not None:
+                if is_sub_item_component(score_component):
+                    current_obligation["subItems"].append({
+                        "name": score_component,
+                        "weightPercent": score_weight,
+                    })
+                else:
+                    current_obligation["components"].append({
+                        "name": score_component,
+                        "weightPercent": score_weight,
+                    })
+            elif event_name and weight is not None and not has_q:
+                current_obligation["subItems"].append({
+                    "name": event_name,
                     "weightPercent": weight,
                 })
 
@@ -163,15 +223,19 @@ def parse_sheet(rows):
 
 
 def main():
-    xlsx = Path(__file__).parent.parent / "data" / "curriculum.xlsx"
-    wb = openpyxl.load_workbook(xlsx)
-    output = {"paths": []}
+    raw_path = Path(__file__).parent.parent / "data" / "curriculum_raw.json"
+    with open(raw_path, encoding="utf-8") as f:
+        raw_data = json.load(f)
 
-    path_keys = list(SHEET_TO_PATH.values())
-    for idx, path_key in enumerate(path_keys):
-        ws = wb.worksheets[idx]
-        sheet_name = ws.title
-        rows = [list(r) for r in ws.iter_rows(values_only=True)]
+    output = {"paths": []}
+    path_order = ["meubar_hinuch", "flexible", "regular", "beit_midrash"]
+    seen_keys = set()
+
+    for sheet_name, rows in raw_data.items():
+        path_key = SHEET_TO_PATH.get(sheet_name)
+        if not path_key or path_key in seen_keys:
+            continue
+        seen_keys.add(path_key)
         subjects = parse_sheet(rows)
         output["paths"].append({
             "key": path_key,
@@ -179,6 +243,8 @@ def main():
             "sheetName": sheet_name,
             "subjects": subjects,
         })
+
+    output["paths"].sort(key=lambda p: path_order.index(p["key"]) if p["key"] in path_order else 99)
 
     out_path = Path(__file__).parent.parent / "data" / "curriculum_parsed.json"
     with open(out_path, "w", encoding="utf-8") as f:
@@ -188,7 +254,17 @@ def main():
     total_obligations = sum(
         len(s["obligations"]) for p in output["paths"] for s in p["subjects"]
     )
+    empty = [
+        f'{p["key"]}/{s["name"]} ({s["units"]} יח"ל)'
+        for p in output["paths"]
+        for s in p["subjects"]
+        if not s["obligations"]
+    ]
     print(f"Parsed {len(output['paths'])} paths, {total_subjects} subjects, {total_obligations} obligations")
+    if empty:
+        print("Subjects still without obligations:")
+        for e in empty:
+            print(f"  - {e}")
     print(f"Written to {out_path}")
 
 

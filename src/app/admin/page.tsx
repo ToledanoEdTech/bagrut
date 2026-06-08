@@ -1,14 +1,15 @@
 import { StatCard } from "@/components/ui/StatCard";
 import { Users, School, BookOpen, ClipboardCheck } from "lucide-react";
 import Link from "next/link";
-import { getDashboardCounts, listExamPaths } from "@/lib/firestore";
+import { getAdminDashboardData } from "@/lib/firestore";
 import { getAuthSession } from "@/lib/auth-server";
 import { canImportStudents, canManageStructure } from "@/lib/roles";
 
 export default async function AdminDashboard() {
-  const session = await getAuthSession();
-  const counts = await getDashboardCounts();
-  const paths = await listExamPaths();
+  const [session, { counts, paths }] = await Promise.all([
+    getAuthSession(),
+    getAdminDashboardData(),
+  ]);
   const isAdmin = session?.role === "ADMIN";
 
   return (

@@ -25,6 +25,17 @@ function docsData<T>(snaps: FirebaseFirestore.QuerySnapshot): T[] {
   return snaps.docs.map((d) => ({ id: d.id, ...d.data() }) as T);
 }
 
+function docsMap<T extends { id: string }>(
+  snaps: FirebaseFirestore.QuerySnapshot
+): Map<string, T> {
+  return new Map(
+    snaps.docs.map((d) => {
+      const item = { id: d.id, ...d.data() } as T;
+      return [item.id, item] as const;
+    })
+  );
+}
+
 function newId() {
   return adminDb.collection("_").doc().id;
 }
@@ -53,6 +64,10 @@ export async function resolveUserRole(email: string): Promise<{
   if (await isStaffEmail(normalized)) return { role: "TEACHER", studentId: null };
 
   return { role: null, studentId: null };
+}
+
+export async function getUserProfile(uid: string): Promise<UserProfile | null> {
+  return docData<UserProfile>(await adminDb.collection("users").doc(uid).get());
 }
 
 export async function getOrCreateUserProfile(input: {
@@ -166,14 +181,16 @@ export async function deleteStudent(id: string) {
   await batch.commit();
 }
 
-export async function enrichStudent(student: Student) {
-  const [cls, track, examPath] = await Promise.all([
-    getClassById(student.classId),
-    student.trackId ? getTrackById(student.trackId) : null,
-    getClassById(student.classId).then(async (c) =>
-      c ? getExamPathById(c.examPathId) : null
-    ),
-  ]);
+type EnrichLookup = {
+  classes: Map<string, Class>;
+  tracks: Map<string, Track>;
+  examPaths: Map<string, ExamPath>;
+};
+
+function enrichStudentFromLookup(student: Student, lookup: EnrichLookup) {
+  const cls = lookup.classes.get(student.classId) ?? null;
+  const track = student.trackId ? lookup.tracks.get(student.trackId) ?? null : null;
+  const examPath = cls ? lookup.examPaths.get(cls.examPathId) ?? null : null;
 
   return {
     id: student.id,
@@ -188,9 +205,45 @@ export async function enrichStudent(student: Student) {
   };
 }
 
+export async function enrichStudent(student: Student) {
+  const [classesSnap, tracksSnap, pathsSnap] = await Promise.all([
+    adminDb.collection("classes").doc(student.classId).get(),
+    student.trackId
+      ? adminDb.collection("tracks").doc(student.trackId).get()
+      : Promise.resolve(null),
+    adminDb.collection("classes").doc(student.classId).get().then(async (clsSnap) => {
+      if (!clsSnap.exists) return null;
+      const examPathId = (clsSnap.data() as Class).examPathId;
+      return adminDb.collection("examPaths").doc(examPathId).get();
+    }),
+  ]);
+
+  const cls = classesSnap.exists ? docData<Class>(classesSnap) : null;
+  const track = tracksSnap?.exists ? docData<Track>(tracksSnap) : null;
+  const examPath = pathsSnap?.exists ? docData<ExamPath>(pathsSnap) : null;
+
+  return enrichStudentFromLookup(student, {
+    classes: cls ? new Map([[cls.id, cls]]) : new Map(),
+    tracks: track ? new Map([[track.id, track]]) : new Map(),
+    examPaths: examPath ? new Map([[examPath.id, examPath]]) : new Map(),
+  });
+}
+
 export async function listStudentsEnriched() {
-  const students = await listStudents();
-  return Promise.all(students.map(enrichStudent));
+  const [students, classesSnap, tracksSnap, pathsSnap] = await Promise.all([
+    listStudents(),
+    adminDb.collection("classes").get(),
+    adminDb.collection("tracks").get(),
+    adminDb.collection("examPaths").get(),
+  ]);
+
+  const lookup: EnrichLookup = {
+    classes: docsMap<Class>(classesSnap),
+    tracks: docsMap<Track>(tracksSnap),
+    examPaths: docsMap<ExamPath>(pathsSnap),
+  };
+
+  return students.map((student) => enrichStudentFromLookup(student, lookup));
 }
 
 // ─── classes ───────────────────────────────────────────────────────────────
@@ -200,21 +253,25 @@ export async function getClassById(id: string): Promise<Class | null> {
 }
 
 export async function listClasses() {
-  const snap = await adminDb.collection("classes").orderBy("name").get();
-  const classes = docsData<Class>(snap);
-  const students = await listStudents();
+  const [classesSnap, studentsSnap, pathsSnap] = await Promise.all([
+    adminDb.collection("classes").orderBy("name").get(),
+    adminDb.collection("students").get(),
+    adminDb.collection("examPaths").get(),
+  ]);
 
-  return Promise.all(
-    classes.map(async (cls) => {
-      const examPath = await getExamPathById(cls.examPathId);
-      const count = students.filter((s) => s.classId === cls.id).length;
-      return {
-        ...cls,
-        examPath,
-        _count: { students: count },
-      };
-    })
-  );
+  const classes = docsData<Class>(classesSnap);
+  const examPaths = docsMap<ExamPath>(pathsSnap);
+  const studentCounts = new Map<string, number>();
+  for (const doc of studentsSnap.docs) {
+    const classId = (doc.data() as Student).classId;
+    studentCounts.set(classId, (studentCounts.get(classId) ?? 0) + 1);
+  }
+
+  return classes.map((cls) => ({
+    ...cls,
+    examPath: examPaths.get(cls.examPathId) ?? null,
+    _count: { students: studentCounts.get(cls.id) ?? 0 },
+  }));
 }
 
 export async function createClass(data: Omit<Class, "id">) {
@@ -251,15 +308,21 @@ export async function getExamPathById(id: string): Promise<ExamPath | null> {
 }
 
 export async function listExamPaths() {
-  const snap = await adminDb.collection("examPaths").orderBy("label").get();
-  const paths = docsData<ExamPath>(snap).filter((p) => p.key !== "flexible");
-  const classes = await adminDb.collection("classes").get();
+  const [pathsSnap, classesSnap] = await Promise.all([
+    adminDb.collection("examPaths").orderBy("label").get(),
+    adminDb.collection("classes").get(),
+  ]);
+
+  const paths = docsData<ExamPath>(pathsSnap).filter((p) => p.key !== "flexible");
+  const classCounts = new Map<string, number>();
+  for (const doc of classesSnap.docs) {
+    const examPathId = (doc.data() as Class).examPathId;
+    classCounts.set(examPathId, (classCounts.get(examPathId) ?? 0) + 1);
+  }
 
   return paths.map((p) => ({
     ...p,
-    _count: {
-      classes: classes.docs.filter((d) => d.data().examPathId === p.id).length,
-    },
+    _count: { classes: classCounts.get(p.id) ?? 0 },
   }));
 }
 
@@ -315,12 +378,16 @@ export async function deleteSubject(id: string) {
 }
 
 export async function listSubjectsEnriched() {
-  const subjects = await listSubjects();
-  const paths = await listExamPaths();
+  const [subjects, pathsSnap] = await Promise.all([
+    listSubjects(),
+    adminDb.collection("examPaths").orderBy("label").get(),
+  ]);
+
+  const paths = docsData<ExamPath>(pathsSnap).filter((p) => p.key !== "flexible");
   return subjects.map((s) => ({
     ...s,
     pathLinks: paths
-      .filter((p) => p.key !== "flexible" && p.subjectIds.includes(s.id))
+      .filter((p) => p.subjectIds.includes(s.id))
       .map((p) => ({ path: { label: p.label, key: p.key, id: p.id } })),
   }));
 }
@@ -425,23 +492,36 @@ export async function upsertGrades(
 
 // ─── counts ────────────────────────────────────────────────────────────────
 
-export async function getDashboardCounts() {
-  const [students, classes, subjects, grades] = await Promise.all([
-    adminDb.collection("students").count().get(),
-    adminDb.collection("classes").count().get(),
-    adminDb.collection("subjects").count().get(),
-    adminDb.collection("grades").where("status", "==", "GRADED").count().get(),
+export async function getAdminDashboardData() {
+  const [counts, paths, allSubjects] = await Promise.all([
+    Promise.all([
+      adminDb.collection("students").count().get(),
+      adminDb.collection("classes").count().get(),
+      adminDb.collection("subjects").count().get(),
+      adminDb.collection("grades").where("status", "==", "GRADED").count().get(),
+      adminDb.collection("examPaths").count().get(),
+    ]),
+    listExamPaths(),
+    listSubjects(),
   ]);
 
-  const allSubjects = await listSubjects();
+  const [students, classes, subjects, grades, pathsCount] = counts;
   const obligations = allSubjects.reduce((s, sub) => s + sub.obligations.length, 0);
 
   return {
-    students: students.data().count,
-    classes: classes.data().count,
-    subjects: subjects.data().count,
-    paths: (await listExamPaths()).length,
-    obligations,
-    gradedCount: grades.data().count,
+    counts: {
+      students: students.data().count,
+      classes: classes.data().count,
+      subjects: subjects.data().count,
+      paths: pathsCount.data().count,
+      obligations,
+      gradedCount: grades.data().count,
+    },
+    paths,
   };
+}
+
+export async function getDashboardCounts() {
+  const { counts } = await getAdminDashboardData();
+  return counts;
 }
