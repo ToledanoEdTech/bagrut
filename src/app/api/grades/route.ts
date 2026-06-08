@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGradesByStudent, upsertGrades } from "@/lib/firestore";
 import { checkPermission, requireAuth, requireStaff } from "@/lib/api-auth";
+import { isValidSubmissionStatus, validateScore } from "@/lib/grade-status";
 import type { SubmissionStatus } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
@@ -46,6 +47,15 @@ export async function PUT(req: NextRequest) {
       notes?: string;
     }>;
   };
+
+  for (const g of grades) {
+    if (!isValidSubmissionStatus(g.status)) {
+      return NextResponse.json({ error: "סטטוס לא חוקי" }, { status: 400 });
+    }
+    if (!validateScore(g.score)) {
+      return NextResponse.json({ error: "ציון לא חוקי (0–100)" }, { status: 400 });
+    }
+  }
 
   const results = await upsertGrades(
     studentId,

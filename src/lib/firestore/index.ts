@@ -552,6 +552,119 @@ export async function upsertGrades(
   return results;
 }
 
+export async function getGradesByStudentsAndObligation(
+  studentIds: string[],
+  obligationId: string
+): Promise<Map<string, Grade>> {
+  const result = new Map<string, Grade>();
+  if (studentIds.length === 0) return result;
+
+  for (let i = 0; i < studentIds.length; i += 30) {
+    const chunk = studentIds.slice(i, i + 30);
+    const snap = await adminDb
+      .collection("grades")
+      .where("studentId", "in", chunk)
+      .where("obligationId", "==", obligationId)
+      .get();
+    for (const doc of snap.docs) {
+      const grade = { id: doc.id, ...doc.data() } as Grade;
+      result.set(grade.studentId, grade);
+    }
+  }
+  return result;
+}
+
+export async function upsertGradesBulk(
+  entries: Array<{
+    studentId: string;
+    obligationId: string;
+    score?: number | null;
+    status: SubmissionStatus;
+    notes?: string | null;
+  }>
+): Promise<Grade[]> {
+  if (entries.length === 0) return [];
+
+  const byObligation = new Map<string, typeof entries>();
+  for (const entry of entries) {
+    const list = byObligation.get(entry.obligationId) ?? [];
+    list.push(entry);
+    byObligation.set(entry.obligationId, list);
+  }
+
+  const existingMap = new Map<string, Grade>();
+  for (const [obligationId, group] of byObligation) {
+    const grades = await getGradesByStudentsAndObligation(
+      group.map((e) => e.studentId),
+      obligationId
+    );
+    for (const [studentId, grade] of grades) {
+      existingMap.set(`${studentId}:${obligationId}`, grade);
+    }
+  }
+
+  const results: Grade[] = [];
+  const batches: FirebaseFirestore.WriteBatch[] = [];
+  let batch = adminDb.batch();
+  let opCount = 0;
+
+  function commitBatch() {
+    if (opCount > 0) {
+      batches.push(batch);
+      batch = adminDb.batch();
+      opCount = 0;
+    }
+  }
+
+  for (const entry of entries) {
+    const key = `${entry.studentId}:${entry.obligationId}`;
+    const existing = existingMap.get(key);
+
+    if (existing) {
+      batch.update(adminDb.collection("grades").doc(existing.id), {
+        score: entry.score ?? null,
+        status: entry.status,
+        notes: entry.notes ?? null,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      results.push({
+        ...existing,
+        score: entry.score ?? null,
+        status: entry.status,
+        notes: entry.notes ?? null,
+      });
+    } else {
+      const id = newId();
+      const grade: Grade = {
+        id,
+        studentId: entry.studentId,
+        obligationId: entry.obligationId,
+        score: entry.score ?? null,
+        status: entry.status,
+        notes: entry.notes ?? null,
+      };
+      batch.set(adminDb.collection("grades").doc(id), grade);
+      results.push(grade);
+    }
+
+    opCount++;
+    if (opCount >= 500) commitBatch();
+  }
+  commitBatch();
+
+  await Promise.all(batches.map((b) => b.commit()));
+  return results;
+}
+
+export async function listClassesSimple() {
+  const snap = await adminDb.collection("classes").orderBy("name").get();
+  return docsData<Class>(snap).map((cls) => ({
+    id: cls.id,
+    name: cls.name,
+    gradeYear: cls.gradeYear,
+  }));
+}
+
 // ─── counts ────────────────────────────────────────────────────────────────
 
 export async function getAdminDashboardData() {
