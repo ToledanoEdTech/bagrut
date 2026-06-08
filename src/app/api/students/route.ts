@@ -24,21 +24,35 @@ export async function PATCH(req: NextRequest) {
   if (error || !session) return error;
 
   const body = await req.json();
-  const { id, classId, trackId, mathUnits, englishUnits, extensions, name, email } = body;
+  const { id, classId, trackId, trackIds, mathUnits, englishUnits, extensions, name, email } =
+    body;
 
   if (!id) {
     return NextResponse.json({ error: "חסר מזהה תלמיד" }, { status: 400 });
   }
 
-  await updateStudent(id, {
-    classId,
-    trackId: trackId || null,
-    mathUnits,
-    englishUnits,
-    extensions,
-    name,
-    email,
-  });
+  const resolvedTrackIds = Array.isArray(trackIds)
+    ? trackIds.filter(Boolean)
+    : trackId
+      ? [trackId]
+      : [];
+
+  try {
+    await updateStudent(id, {
+      ...(classId !== undefined && { classId }),
+      trackIds: resolvedTrackIds,
+      ...(mathUnits !== undefined && { mathUnits }),
+      ...(englishUnits !== undefined && { englishUnits }),
+      ...(extensions !== undefined && { extensions }),
+      ...(name !== undefined && { name }),
+      ...(email !== undefined && { email }),
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "שגיאה בעדכון תלמיד" },
+      { status: 500 }
+    );
+  }
 
   const student = await listStudents().then((s) => s.find((x) => x.id === id));
   if (!student) return NextResponse.json({ error: "לא נמצא" }, { status: 404 });

@@ -40,6 +40,16 @@ function newId() {
   return adminDb.collection("_").doc().id;
 }
 
+export function getStudentTrackIds(student: Pick<Student, "trackIds" | "trackId">): string[] {
+  if (student.trackIds?.length) return student.trackIds;
+  if (student.trackId) return [student.trackId];
+  return [];
+}
+
+function normalizeStudent(student: Student): Student {
+  return { ...student, trackIds: getStudentTrackIds(student) };
+}
+
 // ─── users ─────────────────────────────────────────────────────────────────
 
 export async function isStaffEmail(email: string): Promise<boolean> {
@@ -83,7 +93,7 @@ export async function getOrCreateUserProfile(input: {
   if (snap.exists) {
     const data = snap.data() as UserProfile;
     const role = isAdminEmail(input.email) ? "ADMIN" : (resolved.role ?? data.role);
-    const studentId = resolved.studentId ?? data.studentId;
+    const studentId = role === "STUDENT" ? resolved.studentId : null;
 
     await ref.update({
       name: input.name,
@@ -131,27 +141,29 @@ export async function getStudentByEmail(email: string): Promise<Student | null> 
     .where("email", "==", email.toLowerCase().trim())
     .limit(1)
     .get();
-  return snap.empty ? null : docData<Student>(snap.docs[0]!);
+  return snap.empty ? null : normalizeStudent(docData<Student>(snap.docs[0]!)!);
 }
 
 export async function getStudentById(id: string): Promise<Student | null> {
-  return docData<Student>(await adminDb.collection("students").doc(id).get());
+  const student = docData<Student>(await adminDb.collection("students").doc(id).get());
+  return student ? normalizeStudent(student) : null;
 }
 
 export async function listStudents(): Promise<Student[]> {
   const snap = await adminDb.collection("students").orderBy("name").get();
-  return docsData<Student>(snap);
+  return docsData<Student>(snap).map(normalizeStudent);
 }
 
 export async function createStudent(data: Omit<Student, "id" | "uid">) {
   const id = newId();
+  const trackIds = getStudentTrackIds(data);
   const student: Student = {
     id,
     uid: null,
     email: data.email.toLowerCase().trim(),
     name: data.name,
     classId: data.classId,
-    trackId: data.trackId,
+    trackIds,
     mathUnits: data.mathUnits,
     englishUnits: data.englishUnits,
     extensions: data.extensions ?? null,
@@ -167,8 +179,15 @@ export async function updateStudent(
   id: string,
   data: Partial<Omit<Student, "id">>
 ) {
-  const updates: Record<string, unknown> = { ...data, updatedAt: FieldValue.serverTimestamp() };
+  const updates: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) updates[key] = value;
+  }
   if (data.email) updates.email = data.email.toLowerCase().trim();
+  if (data.trackIds !== undefined) {
+    updates.trackIds = data.trackIds;
+    updates.trackId = FieldValue.delete();
+  }
   await adminDb.collection("students").doc(id).update(updates);
   return getStudentById(id);
 }
@@ -189,7 +208,10 @@ type EnrichLookup = {
 
 function enrichStudentFromLookup(student: Student, lookup: EnrichLookup) {
   const cls = lookup.classes.get(student.classId) ?? null;
-  const track = student.trackId ? lookup.tracks.get(student.trackId) ?? null : null;
+  const trackIds = getStudentTrackIds(student);
+  const tracks = trackIds
+    .map((id) => lookup.tracks.get(id))
+    .filter(Boolean) as Track[];
   const examPath = cls ? lookup.examPaths.get(cls.examPathId) ?? null : null;
 
   return {
@@ -201,16 +223,16 @@ function enrichStudentFromLookup(student: Student, lookup: EnrichLookup) {
     class: cls
       ? { id: cls.id, name: cls.name, gradeYear: cls.gradeYear, examPath: examPath ?? { id: "", label: "", key: "" } }
       : null,
-    track,
+    tracks,
+    track: tracks[0] ?? null,
   };
 }
 
 export async function enrichStudent(student: Student) {
-  const [classesSnap, tracksSnap, pathsSnap] = await Promise.all([
+  const trackIds = getStudentTrackIds(student);
+  const [classesSnap, trackSnaps, pathsSnap] = await Promise.all([
     adminDb.collection("classes").doc(student.classId).get(),
-    student.trackId
-      ? adminDb.collection("tracks").doc(student.trackId).get()
-      : Promise.resolve(null),
+    Promise.all(trackIds.map((id) => adminDb.collection("tracks").doc(id).get())),
     adminDb.collection("classes").doc(student.classId).get().then(async (clsSnap) => {
       if (!clsSnap.exists) return null;
       const examPathId = (clsSnap.data() as Class).examPathId;
@@ -219,12 +241,14 @@ export async function enrichStudent(student: Student) {
   ]);
 
   const cls = classesSnap.exists ? docData<Class>(classesSnap) : null;
-  const track = tracksSnap?.exists ? docData<Track>(tracksSnap) : null;
+  const tracks = trackSnaps
+    .filter((snap) => snap.exists)
+    .map((snap) => docData<Track>(snap)!);
   const examPath = pathsSnap?.exists ? docData<ExamPath>(pathsSnap) : null;
 
   return enrichStudentFromLookup(student, {
     classes: cls ? new Map([[cls.id, cls]]) : new Map(),
-    tracks: track ? new Map([[track.id, track]]) : new Map(),
+    tracks: new Map(tracks.map((t) => [t.id, t])),
     examPaths: examPath ? new Map([[examPath.id, examPath]]) : new Map(),
   });
 }
@@ -397,7 +421,11 @@ export async function listSubjectsEnriched() {
 export async function addObligation(subjectId: string, obligation: Omit<Obligation, "id">) {
   const subject = await getSubjectById(subjectId);
   if (!subject) throw new Error("מקצוע לא נמצא");
-  const ob: Obligation = { id: newId(), ...obligation };
+  const ob: Obligation = {
+    id: newId(),
+    ...obligation,
+    sortOrder: obligation.sortOrder ?? subject.obligations.length,
+  };
   subject.obligations.push(ob);
   await adminDb.collection("subjects").doc(subjectId).update({ obligations: subject.obligations });
   return ob;

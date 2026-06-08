@@ -34,7 +34,11 @@ export async function POST(req: NextRequest) {
         name?: string;
         weightPercent: number;
         examType?: string;
+        studyMaterial?: string;
+        examEvent?: string;
+        gradeYear?: string;
         components?: Array<{ name: string; weightPercent: number }>;
+        subItems?: Array<{ name: string; weightPercent: number }>;
       },
       i: number
     ) => ({
@@ -43,12 +47,12 @@ export async function POST(req: NextRequest) {
       name: o.name ?? null,
       weightPercent: o.weightPercent,
       examType: o.examType ?? "פנימי",
-      studyMaterial: null,
-      examEvent: null,
-      gradeYear: null,
+      studyMaterial: o.studyMaterial ?? null,
+      examEvent: o.examEvent ?? null,
+      gradeYear: o.gradeYear ?? null,
       sortOrder: i,
       components: (o.components ?? []).map((c, j) => ({ ...c, sortOrder: j })),
-      subItems: [],
+      subItems: (o.subItems ?? []).map((si, j) => ({ ...si, sortOrder: j })),
     })
   );
 

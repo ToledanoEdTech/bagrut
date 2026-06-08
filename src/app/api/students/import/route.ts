@@ -69,10 +69,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    let trackId: string | null = null;
+    const trackIds: string[] = [];
     if (trackName) {
       const tracks = await listTracks();
-      trackId = tracks.find((t) => t.name.includes(trackName))?.id ?? null;
+      for (const part of trackName.split(/[,،+]/)) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        const match = tracks.find((t) => t.name.includes(trimmed));
+        if (match && !trackIds.includes(match.id)) trackIds.push(match.id);
+      }
     }
 
     try {
@@ -80,7 +85,7 @@ export async function POST(req: NextRequest) {
         email: normalizedEmail,
         name: String(name),
         classId: cls.id,
-        trackId,
+        trackIds,
         mathUnits: isNaN(mathUnits) ? 3 : mathUnits,
         englishUnits: isNaN(englishUnits) ? 3 : englishUnits,
         extensions: null,

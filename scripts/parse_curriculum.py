@@ -20,6 +20,7 @@ PATH_LABELS = {
 }
 
 GRADE_COMPONENTS = {"ציון פנימי", "ציון בחינה", "ציון הגשה", "יחידות מבוקרות"}
+SUB_ITEM_TYPES = {"סיפור", "שיר", "מבחן", "דוח"}
 
 
 def clean(val):
@@ -41,7 +42,7 @@ def parse_percent(val):
         expr = s[1:]
         if re.match(r"^[\d.\s*/()+-]+$", expr):
             try:
-                f = float(eval(expr))  # noqa: S307 — trusted curriculum formulas only
+                f = float(eval(expr))  # noqa: S307
                 if f <= 1:
                     return round(f * 100, 2)
                 return round(f, 2)
@@ -84,8 +85,11 @@ def is_subject_header(row):
 def is_questionnaire(val):
     if not val:
         return False
-    s = str(val).strip().replace(".0", "")
-    return s.isdigit() and len(s) >= 3
+    s = str(val).strip()
+    if "." in s and not s.endswith(".0"):
+        return False
+    s = s.replace(".0", "")
+    return s.isdigit() and len(s) >= 4
 
 
 def is_grade_component(name):
@@ -97,7 +101,27 @@ def is_literature_unit_row(exam_type, study_material, score_weight):
 
 
 def is_sub_item_component(name):
-    return name in {"סיפור", "שיר", "מבחן", "דוח"}
+    if not name:
+        return False
+    if name in SUB_ITEM_TYPES:
+        return True
+    # English story titles etc.
+    if not is_grade_component(name) and re.search(r"[A-Za-z]", name):
+        return True
+    return False
+
+
+def is_summary_row(row):
+    """Skip footer summary tables (e.g. music breakdown)."""
+    joined = " ".join(str(c or "") for c in row[:6])
+    if "ציון סופי" in joined:
+        return True
+    vals = [parse_percent(c) for c in row[1:6]]
+    if vals.count(100.0) >= 1 and sum(1 for v in vals if v is not None) >= 3:
+        first = clean(row[1])
+        if first and parse_percent(first) in (15.0, 25.0, 30.0):
+            return True
+    return False
 
 
 def start_subject(name, units=None):
@@ -118,6 +142,28 @@ def new_obligation(questionnaire, weight, event_name, exam_type, study_material,
     }
 
 
+def finalize_obligation(ob):
+    if not ob["components"] and not ob["subItems"]:
+        if ob["examType"] == "פנימי":
+            ob["components"] = [{"name": "ציון פנימי", "weightPercent": 100.0}]
+        elif ob["examType"] == "חיצוני":
+            ob["components"] = [
+                {"name": "ציון בחינה", "weightPercent": 70.0},
+                {"name": "ציון בחינה", "weightPercent": 30.0},
+            ]
+    return ob
+
+
+def add_component(ob, name, weight):
+    if name and weight is not None:
+        ob["components"].append({"name": name, "weightPercent": weight})
+
+
+def add_sub_item(ob, name, weight):
+    if name and weight is not None:
+        ob["subItems"].append({"name": name, "weightPercent": weight})
+
+
 def parse_sheet(rows):
     subjects = []
     current_subject = None
@@ -126,6 +172,11 @@ def parse_sheet(rows):
     i = 0
     while i < len(rows):
         row = rows[i]
+
+        if is_summary_row(row):
+            i += 1
+            continue
+
         first = clean(row[0]) if row else None
         second = clean(row[1]) if len(row) > 1 else None
 
@@ -178,46 +229,44 @@ def parse_sheet(rows):
             )
             current_subject["obligations"].append(current_obligation)
 
-            if score_component and score_weight is not None:
-                if is_literature_unit_row(exam_type, study_material, score_weight):
-                    current_obligation["subItems"].append({
-                        "name": study_material,
-                        "weightPercent": score_weight,
-                    })
-                elif is_sub_item_component(score_component):
-                    current_obligation["subItems"].append({
-                        "name": score_component,
-                        "weightPercent": score_weight,
-                    })
-                elif is_grade_component(score_component):
-                    current_obligation["components"].append({
-                        "name": score_component,
-                        "weightPercent": score_weight,
-                    })
-        elif current_obligation:
             if is_literature_unit_row(exam_type, study_material, score_weight):
-                current_obligation["subItems"].append({
-                    "name": study_material,
-                    "weightPercent": score_weight,
-                })
+                add_sub_item(current_obligation, study_material, score_weight)
+            elif (
+                study_material
+                and score_weight is not None
+                and event_name
+                and "בגרות" in event_name
+            ):
+                add_sub_item(current_obligation, study_material, score_weight)
             elif score_component and score_weight is not None:
                 if is_sub_item_component(score_component):
-                    current_obligation["subItems"].append({
-                        "name": score_component,
-                        "weightPercent": score_weight,
-                    })
+                    add_sub_item(current_obligation, score_component, score_weight)
+                elif is_grade_component(score_component):
+                    add_component(current_obligation, score_component, score_weight)
+
+            current_obligation = finalize_obligation(current_obligation)
+
+        elif current_obligation:
+            if is_literature_unit_row(exam_type, study_material, score_weight):
+                add_sub_item(current_obligation, study_material, score_weight)
+            elif event_name and score_weight is not None and study_material and weight is None:
+                add_sub_item(current_obligation, study_material, score_weight)
+            elif event_name and score_weight is not None and study_material and weight is None and exam_type:
+                add_sub_item(current_obligation, study_material or event_name, score_weight)
+            elif event_name and score_weight and study_material and weight is None:
+                add_sub_item(current_obligation, study_material, score_weight)
+            elif score_component and score_weight is not None:
+                if is_sub_item_component(score_component):
+                    add_sub_item(current_obligation, score_component, score_weight)
                 else:
-                    current_obligation["components"].append({
-                        "name": score_component,
-                        "weightPercent": score_weight,
-                    })
+                    add_component(current_obligation, score_component, score_weight)
             elif event_name and weight is not None and not has_q:
-                current_obligation["subItems"].append({
-                    "name": event_name,
-                    "weightPercent": weight,
-                })
+                add_sub_item(current_obligation, event_name, weight)
 
         i += 1
+
+    for subject in subjects:
+        subject["obligations"] = [finalize_obligation(o) for o in subject["obligations"]]
 
     return subjects
 

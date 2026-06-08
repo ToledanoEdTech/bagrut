@@ -31,13 +31,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [configError, setConfigError] = useState<string | null>(null);
 
   const refreshSession = useCallback(async () => {
-    const res = await fetch("/api/auth/me");
-    if (res.ok) {
-      setSession(await res.json());
-    } else {
+    try {
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        setSession(await res.json());
+      } else {
+        setSession(null);
+      }
+    } catch {
       setSession(null);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -53,6 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       refreshSession();
       unsub = onAuthStateChanged(getFirebaseAuth(), async (user) => {
+        setLoading(true);
         if (!user) {
           setSession(null);
           setLoading(false);
@@ -86,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await fbSignOut(getFirebaseAuth());
       throw new Error(data.error ?? "שגיאה בהתחברות");
     }
+    setLoading(true);
     await refreshSession();
   }
 

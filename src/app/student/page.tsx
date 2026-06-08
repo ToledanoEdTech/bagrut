@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { SubjectCard } from "@/components/subjects/SubjectCard";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatCard } from "@/components/ui/StatCard";
-import { BookOpen, Target, Award, Loader2 } from "lucide-react";
+import { useAuth } from "@/components/AuthProvider";
+import { BookOpen, Target, Award, Loader2, LogOut } from "lucide-react";
 
 type DashboardData = {
   student: {
     user: { name: string };
     class: { name: string; gradeYear: string | null };
+    tracks: { name: string }[];
     track: { name: string } | null;
     mathUnits: number;
     englishUnits: number;
@@ -37,6 +39,7 @@ type DashboardData = {
 };
 
 export default function StudentDashboard() {
+  const { signOut } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -87,14 +90,34 @@ export default function StudentDashboard() {
   return (
     <>
       <header className="-mx-8 -mt-8 border-b border-slate-200 bg-gradient-to-l from-primary-600 to-primary-700 px-8 py-8 text-white">
-        <p className="text-sm text-primary-100">שלום,</p>
-        <h1 className="text-3xl font-bold">{data.student.user.name}</h1>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm text-primary-100">שלום,</p>
+            <h1 className="text-3xl font-bold">{data.student.user.name}</h1>
+          </div>
+          <button
+            onClick={() => signOut()}
+            className="flex shrink-0 items-center gap-2 rounded-xl bg-white/15 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/25"
+          >
+            <LogOut className="h-4 w-4" />
+            התנתק
+          </button>
+        </div>
         <div className="mt-3 flex flex-wrap gap-4 text-sm text-primary-100">
           <span>כיתה {data.student.class.name}</span>
           {data.student.class.gradeYear && (
             <span>{data.student.class.gradeYear}</span>
           )}
-          {data.student.track && <span>מגמה: {data.student.track.name}</span>}
+          {(data.student.tracks?.length
+            ? data.student.tracks.map((t) => t.name).join(", ")
+            : data.student.track?.name) && (
+            <span>
+              מגמות:{" "}
+              {data.student.tracks?.length
+                ? data.student.tracks.map((t) => t.name).join(", ")
+                : data.student.track!.name}
+            </span>
+          )}
           <span>מתמטיקה {data.student.mathUnits} יח&quot;ל</span>
           <span>אנגלית {data.student.englishUnits} יח&quot;ל</span>
         </div>

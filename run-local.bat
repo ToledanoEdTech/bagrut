@@ -15,6 +15,12 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo בודק אם יש שרת ישן על פורט 3000...
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":3000" ^| findstr "LISTENING"') do (
+    taskkill /PID %%a /F >nul 2>&1
+)
+ping 127.0.0.1 -n 3 >nul
+
 if not exist "node_modules\" (
     echo מתקין תלויות...
     call npm install
@@ -43,9 +49,13 @@ if not exist ".env.local" (
 
 echo מפעיל שרת פיתוח...
 echo.
-echo   האתר: http://localhost:3000
+echo   האתר: http://localhost:3000/login
+echo   הדפדפן ייפתח אוטומטית כשהשרת מוכן
 echo   לעצירה: Ctrl+C
 echo.
+
+start "" powershell -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\open-when-ready.ps1"
+
 call npm run dev
 
 pause

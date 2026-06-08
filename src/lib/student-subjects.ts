@@ -1,6 +1,7 @@
 import {
   getClassById,
   getExamPathById,
+  getStudentTrackIds,
   getTrackById,
   listSubjects,
 } from "@/lib/firestore";
@@ -37,15 +38,16 @@ export async function getRelevantSubjects(
     (s) => s.category === "ENGLISH" && s.units === student.englishUnits
   );
 
-  let trackSubject: Subject | null = null;
-  if (student.trackId) {
-    trackSubject =
+  const trackIds = getStudentTrackIds(student);
+  const trackSubjects: Subject[] = [];
+  for (const trackId of trackIds) {
+    let trackSubject =
       allSubjects.find(
-        (s) => s.category === "TRACK" && s.trackId === student.trackId
+        (s) => s.category === "TRACK" && s.trackId === trackId
       ) ?? null;
 
     if (!trackSubject) {
-      const track = await getTrackById(student.trackId);
+      const track = await getTrackById(trackId);
       if (track) {
         trackSubject =
           allSubjects.find(
@@ -55,13 +57,15 @@ export async function getRelevantSubjects(
           ) ?? null;
       }
     }
+
+    if (trackSubject) trackSubjects.push(trackSubject);
   }
 
   const all: Subject[] = [
     ...mandatory,
     ...(math ? [math] : []),
     ...(english ? [english] : []),
-    ...(trackSubject ? [trackSubject] : []),
+    ...trackSubjects,
   ];
 
   const seen = new Set<string>();

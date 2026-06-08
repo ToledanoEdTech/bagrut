@@ -10,7 +10,11 @@ export async function POST(req: NextRequest) {
   const { error } = await requireAdmin();
   if (error) return error;
 
+  try {
   const body = await req.json();
+  if (!body.subjectId) {
+    return NextResponse.json({ error: "חסר מזהה מקצוע" }, { status: 400 });
+  }
   const obligation = await addObligation(body.subjectId, {
     questionnaireNumber: body.questionnaireNumber ?? null,
     name: body.name ?? null,
@@ -35,14 +39,22 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json(obligation);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "שגיאה בשמירת מטלה";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 export async function PATCH(req: NextRequest) {
   const { error } = await requireAdmin();
   if (error) return error;
 
+  try {
   const body = await req.json();
   const { subjectId, ...obligation } = body;
+  if (!subjectId || !obligation.id) {
+    return NextResponse.json({ error: "חסר מזהה" }, { status: 400 });
+  }
   const result = await updateObligation(subjectId, {
     ...obligation,
     components: (obligation.components ?? []).map(
@@ -59,6 +71,10 @@ export async function PATCH(req: NextRequest) {
     ),
   });
   return NextResponse.json(result);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "שגיאה בעדכון מטלה";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 export async function DELETE(req: NextRequest) {

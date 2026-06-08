@@ -221,6 +221,10 @@
               "gradeYear": "שכבת י",
               "components": [
                 {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                },
+                {
                   "name": "שוויון בגיוס לצה\"ל",
                   "weightPercent": 40.0
                 },
@@ -321,6 +325,10 @@
               "gradeYear": "שכבת י",
               "components": [],
               "subItems": [
+                {
+                  "name": "ביתו של רבי עקיבא",
+                  "weightPercent": 12.0
+                },
                 {
                   "name": "כינורו של רוטשילד",
                   "weightPercent": 16.0
@@ -772,7 +780,12 @@
               "studyMaterial": null,
               "examEvent": null,
               "gradeYear": null,
-              "components": [],
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
               "subItems": []
             },
             {
@@ -803,7 +816,12 @@
               "studyMaterial": null,
               "examEvent": null,
               "gradeYear": null,
-              "components": [
+              "components": [],
+              "subItems": [
+                {
+                  "name": "Count That Day Lost",
+                  "weightPercent": 6.67
+                },
                 {
                   "name": "The Road Not Taken",
                   "weightPercent": 6.67
@@ -823,9 +841,7 @@
                 {
                   "name": "Thank You Mam",
                   "weightPercent": 6.66
-                }
-              ],
-              "subItems": [
+                },
                 {
                   "name": "מבחן",
                   "weightPercent": 20.0
@@ -886,7 +902,12 @@
               "studyMaterial": null,
               "examEvent": null,
               "gradeYear": null,
-              "components": [],
+              "components": [
+                {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                }
+              ],
               "subItems": []
             },
             {
@@ -917,7 +938,12 @@
               "studyMaterial": null,
               "examEvent": null,
               "gradeYear": null,
-              "components": [
+              "components": [],
+              "subItems": [
+                {
+                  "name": "Count That Day Lost",
+                  "weightPercent": 6.67
+                },
                 {
                   "name": "The Road Not Taken",
                   "weightPercent": 6.67
@@ -937,9 +963,7 @@
                 {
                   "name": "The Wave",
                   "weightPercent": 6.66
-                }
-              ],
-              "subItems": [
+                },
                 {
                   "name": "מבחן",
                   "weightPercent": 20.0
@@ -1334,25 +1358,25 @@
               "studyMaterial": "תולדות המוזיקה המערבית",
               "examEvent": null,
               "gradeYear": "שכבת יב",
-              "components": [
+              "components": [],
+              "subItems": [
                 {
-                  "name": "ציון הגשה",
+                  "name": "תולדות המוזיקה המערבית",
                   "weightPercent": 15.0
                 },
                 {
-                  "name": "ציון הגשה",
+                  "name": "מוזיקה יהודית",
                   "weightPercent": 25.0
                 },
                 {
-                  "name": "ציון הגשה",
+                  "name": "תורת המוזיקה",
                   "weightPercent": 30.0
                 },
                 {
-                  "name": "ציון הגשה",
+                  "name": "הרכבים",
                   "weightPercent": 30.0
                 }
-              ],
-              "subItems": []
+              ]
             }
           ]
         },
@@ -1378,17 +1402,6 @@
                   "weightPercent": 70.0
                 }
               ],
-              "subItems": []
-            },
-            {
-              "questionnaireNumber": null,
-              "weightPercent": 30.0,
-              "eventName": "0.3",
-              "examType": "פנימי",
-              "studyMaterial": null,
-              "examEvent": null,
-              "gradeYear": null,
-              "components": [],
               "subItems": []
             }
           ]
@@ -1684,6 +1697,10 @@
               "gradeYear": "שכבת י",
               "components": [
                 {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                },
+                {
                   "name": "שוויון בגיוס לצה\"ל",
                   "weightPercent": 40.0
                 },
@@ -1784,6 +1801,10 @@
               "gradeYear": "שכבת י",
               "components": [],
               "subItems": [
+                {
+                  "name": "ביתו של רבי עקיבא",
+                  "weightPercent": 12.0
+                },
                 {
                   "name": "כינורו של רוטשילד",
                   "weightPercent": 16.0
@@ -2247,6 +2268,10 @@
               "gradeYear": "שכבת י",
               "components": [
                 {
+                  "name": "ציון פנימי",
+                  "weightPercent": 100.0
+                },
+                {
                   "name": "שוויון בגיוס לצה\"ל",
                   "weightPercent": 40.0
                 },
@@ -2347,6 +2372,10 @@
               "gradeYear": "שכבת י",
               "components": [],
               "subItems": [
+                {
+                  "name": "ביתו של רבי עקיבא",
+                  "weightPercent": 12.0
+                },
                 {
                   "name": "כינורו של רוטשילד",
                   "weightPercent": 16.0

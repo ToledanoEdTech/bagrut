@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GraduationCap, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
@@ -11,22 +11,29 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  if (!authLoading && session) {
-    router.replace(session.role === "STUDENT" ? "/student" : "/admin");
-  }
+  useEffect(() => {
+    if (!authLoading && session) {
+      router.replace(session.role === "STUDENT" ? "/student" : "/admin");
+    }
+  }, [authLoading, session, router]);
 
   async function handleGoogleSignIn() {
     setLoading(true);
     setError("");
     try {
       await signInWithGoogle();
-      router.push("/");
-      router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "שגיאה בהתחברות");
-    } finally {
       setLoading(false);
     }
+  }
+
+  if (authLoading || session) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <Loader2 className="h-10 w-10 animate-spin text-primary-600" />
+      </div>
+    );
   }
 
   return (

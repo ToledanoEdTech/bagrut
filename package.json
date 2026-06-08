@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "db:seed": "tsx scripts/seed-firestore.ts",
+    "db:sync-curriculum": "tsx scripts/sync-curriculum.ts",
+    "curriculum:parse": "python scripts/parse_curriculum.py",
     "firebase:setup": "node scripts/setup-firebase-admin.mjs",
     "firebase:deploy-rules": "firebase deploy --only firestore:rules",
     "firebase:verify": "node scripts/verify-firestore.mjs"

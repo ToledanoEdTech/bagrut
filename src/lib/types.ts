@@ -74,7 +74,9 @@ export interface Student {
   name: string;
   uid: string | null;
   classId: string;
-  trackId: string | null;
+  /** @deprecated use trackIds */
+  trackId?: string | null;
+  trackIds: string[];
   mathUnits: number;
   englishUnits: number;
   extensions: string | null;

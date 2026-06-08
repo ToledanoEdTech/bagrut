@@ -4,7 +4,12 @@ import {
   buildStudentWithRelations,
   getRelevantSubjects,
 } from "@/lib/student-subjects";
-import { getGradesByStudent, getStudentById, getTrackById } from "@/lib/firestore";
+import {
+  getGradesByStudent,
+  getStudentById,
+  getStudentTrackIds,
+  getTrackById,
+} from "@/lib/firestore";
 import { requireStudent } from "@/lib/api-auth";
 
 export async function GET() {
@@ -16,10 +21,13 @@ export async function GET() {
     return NextResponse.json({ error: "לא נמצא תלמיד" }, { status: 404 });
   }
 
-  const [studentWithRelations, grades, track] = await Promise.all([
+  const trackIds = getStudentTrackIds(student);
+  const [studentWithRelations, grades, tracks] = await Promise.all([
     buildStudentWithRelations(student),
     getGradesByStudent(student.id),
-    student.trackId ? getTrackById(student.trackId) : Promise.resolve(null),
+    Promise.all(trackIds.map((id) => getTrackById(id))).then((items) =>
+      items.filter(Boolean)
+    ),
   ]);
   const subjects = await getRelevantSubjects(studentWithRelations);
 
@@ -42,7 +50,8 @@ export async function GET() {
       ...studentWithRelations,
       user: { name: student.name, email: student.email },
       class: studentWithRelations.class,
-      track,
+      tracks,
+      track: tracks[0] ?? null,
     },
     subjects: subjectsWithProgress,
     overallProgress,

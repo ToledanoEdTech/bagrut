@@ -9,6 +9,7 @@ type Student = {
   englishUnits: number;
   user: { name: string; email: string };
   class: { id: string; name: string; examPath: { label: string } };
+  tracks: { id: string; name: string }[];
   track: { id: string; name: string } | null;
 };
 
@@ -20,8 +21,16 @@ export default function StudentsPage() {
   const [classes, setClasses] = useState<ClassOption[]>([]);
   const [tracks, setTracks] = useState<TrackOption[]>([]);
   const [editing, setEditing] = useState<string | null>(null);
-  const [form, setForm] = useState<Partial<Student & { name: string; email: string }>>({});
+  const [form, setForm] = useState<{
+    name: string;
+    email: string;
+    class: { id: string; name: string };
+    trackIds: string[];
+    mathUnits: number;
+    englishUnits: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saveError, setSaveError] = useState("");
 
   async function load() {
     const [sRes, cRes, tRes] = await Promise.all([
@@ -42,30 +51,53 @@ export default function StudentsPage() {
 
   function startEdit(s: Student) {
     setEditing(s.id);
+    setSaveError("");
     setForm({
-      ...s,
       name: s.user.name,
       email: s.user.email,
+      class: { id: s.class.id, name: s.class.name },
+      trackIds: s.tracks?.map((t) => t.id) ?? (s.track ? [s.track.id] : []),
+      mathUnits: s.mathUnits,
+      englishUnits: s.englishUnits,
     });
   }
 
+  function toggleTrack(trackId: string) {
+    if (!form) return;
+    const trackIds = form.trackIds.includes(trackId)
+      ? form.trackIds.filter((id) => id !== trackId)
+      : [...form.trackIds, trackId];
+    setForm({ ...form, trackIds });
+  }
+
   async function save() {
-    if (!editing) return;
-    await fetch("/api/students", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: editing,
-        name: form.name,
-        email: form.email,
-        classId: form.class?.id,
-        trackId: form.track?.id,
-        mathUnits: form.mathUnits,
-        englishUnits: form.englishUnits,
-      }),
-    });
-    setEditing(null);
-    load();
+    if (!editing || !form) return;
+    setSaveError("");
+    try {
+      const res = await fetch("/api/students", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editing,
+          name: form.name,
+          email: form.email,
+          classId: form.class.id,
+          trackIds: form.trackIds,
+          mathUnits: form.mathUnits,
+          englishUnits: form.englishUnits,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSaveError(data.error ?? "שגיאה בשמירה");
+        return;
+      }
+      setEditing(null);
+      setForm(null);
+      load();
+    } catch {
+      setSaveError("שגיאת רשת — לא ניתן לשמור");
+    }
   }
 
   async function remove(id: string) {
@@ -87,6 +119,12 @@ export default function StudentsPage() {
         </p>
       </header>
 
+      {saveError && (
+        <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
+          {saveError}
+        </div>
+      )}
+
       <div className="mt-8 card overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-600">
@@ -95,7 +133,7 @@ export default function StudentsPage() {
               <th className="px-4 py-3 text-right font-medium">אימייל</th>
               <th className="px-4 py-3 text-right font-medium">כיתה</th>
               <th className="px-4 py-3 text-right font-medium">תוכנית חובה</th>
-              <th className="px-4 py-3 text-right font-medium">מגמה</th>
+              <th className="px-4 py-3 text-right font-medium">מגמות</th>
               <th className="px-4 py-3 text-right font-medium">מתמטיקה</th>
               <th className="px-4 py-3 text-right font-medium">אנגלית</th>
               <th className="px-4 py-3 text-right font-medium">פעולות</th>
@@ -104,12 +142,12 @@ export default function StudentsPage() {
           <tbody className="divide-y divide-slate-100">
             {students.map((s) => (
               <tr key={s.id} className="hover:bg-slate-50/50">
-                {editing === s.id ? (
+                {editing === s.id && form ? (
                   <>
                     <td className="px-4 py-3">
                       <input
                         className="input py-1.5"
-                        value={form.name ?? ""}
+                        value={form.name}
                         onChange={(e) => setForm({ ...form, name: e.target.value })}
                       />
                     </td>
@@ -117,19 +155,18 @@ export default function StudentsPage() {
                       <input
                         className="input py-1.5"
                         dir="ltr"
-                        value={form.email ?? ""}
+                        value={form.email}
                         onChange={(e) => setForm({ ...form, email: e.target.value })}
                       />
                     </td>
                     <td className="px-4 py-3">
                       <select
                         className="input py-1.5"
-                        value={form.class?.id}
+                        value={form.class.id}
                         onChange={(e) =>
                           setForm({
                             ...form,
                             class: {
-                              ...form.class!,
                               id: e.target.value,
                               name: classes.find((c) => c.id === e.target.value)?.name ?? "",
                             },
@@ -147,29 +184,22 @@ export default function StudentsPage() {
                       {s.class.examPath.label}
                     </td>
                     <td className="px-4 py-3">
-                      <select
-                        className="input py-1.5"
-                        value={form.track?.id ?? ""}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            track: e.target.value
-                              ? {
-                                  id: e.target.value,
-                                  name:
-                                    tracks.find((t) => t.id === e.target.value)?.name ?? "",
-                                }
-                              : null,
-                          })
-                        }
-                      >
-                        <option value="">ללא מגמה</option>
+                      <div className="flex max-w-xs flex-wrap gap-2">
                         {tracks.map((t) => (
-                          <option key={t.id} value={t.id}>
+                          <label
+                            key={t.id}
+                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={form.trackIds.includes(t.id)}
+                              onChange={() => toggleTrack(t.id)}
+                              className="rounded"
+                            />
                             {t.name}
-                          </option>
+                          </label>
                         ))}
-                      </select>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <select
@@ -207,7 +237,11 @@ export default function StudentsPage() {
                           <Save className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => setEditing(null)}
+                          onClick={() => {
+                            setEditing(null);
+                            setForm(null);
+                            setSaveError("");
+                          }}
                           className="text-slate-400 hover:text-slate-600"
                         >
                           <X className="h-4 w-4" />
@@ -223,7 +257,11 @@ export default function StudentsPage() {
                     </td>
                     <td className="px-4 py-3">{s.class.name}</td>
                     <td className="px-4 py-3 text-slate-500">{s.class.examPath.label}</td>
-                    <td className="px-4 py-3">{s.track?.name ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      {s.tracks?.length
+                        ? s.tracks.map((t) => t.name).join(", ")
+                        : s.track?.name ?? "—"}
+                    </td>
                     <td className="px-4 py-3">{s.mathUnits}</td>
                     <td className="px-4 py-3">{s.englishUnits}</td>
                     <td className="px-4 py-3">

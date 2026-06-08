@@ -1,3 +1,4 @@
+import { AuthGuard } from "@/components/AuthGuard";
 import { Sidebar } from "./Sidebar";
 import type { Role } from "@/lib/types";
 
@@ -13,6 +14,7 @@ export function AppShell({
   subtitle?: string;
 }) {
   return (
+    <AuthGuard role={role}>
     <div className="min-h-screen bg-slate-50">
       <Sidebar role={role} />
       <main className="mr-64 min-h-screen">
@@ -25,5 +27,6 @@ export function AppShell({
         <div className="p-8">{children}</div>
       </main>
     </div>
+    </AuthGuard>
   );
 }
