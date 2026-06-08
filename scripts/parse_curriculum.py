@@ -14,7 +14,7 @@ SHEET_TO_PATH = {
 
 PATH_LABELS = {
     "meubar_hinuch": 'מב"ר / חנ"מ',
-    "flexible": "גמיש (מתמטיקה, אנגלית, מגמות)",
+    "flexible": "בחירת תלמיד (מתמטיקה, אנגלית, מגמות)",
     "regular": "רגילה",
     "beit_midrash": "בית מדרש",
 }

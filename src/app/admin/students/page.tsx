@@ -83,7 +83,7 @@ export default function StudentsPage() {
       <header className="-mx-8 -mt-8 border-b border-slate-200 bg-white px-8 py-6">
         <h1 className="text-2xl font-bold text-slate-900">ניהול תלמידים</h1>
         <p className="mt-1 text-sm text-slate-500">
-          עריכת שיוכים, מגמות, רמות יחידות וכיתות
+          עריכת שיוכים, מגמות, רמות יחידות (מתמטיקה/אנגלית) וכיתות
         </p>
       </header>
 
@@ -94,7 +94,7 @@ export default function StudentsPage() {
               <th className="px-4 py-3 text-right font-medium">שם</th>
               <th className="px-4 py-3 text-right font-medium">אימייל</th>
               <th className="px-4 py-3 text-right font-medium">כיתה</th>
-              <th className="px-4 py-3 text-right font-medium">מסלול</th>
+              <th className="px-4 py-3 text-right font-medium">תוכנית חובה</th>
               <th className="px-4 py-3 text-right font-medium">מגמה</th>
               <th className="px-4 py-3 text-right font-medium">מתמטיקה</th>
               <th className="px-4 py-3 text-right font-medium">אנגלית</th>

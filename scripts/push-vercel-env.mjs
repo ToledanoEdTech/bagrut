@@ -1,10 +1,11 @@
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { execSync } from "child_process";
+import { tmpdir } from "os";
 
 const envPath = join(process.cwd(), ".env.local");
 if (!existsSync(envPath)) {
-  console.error("Missing .env.local");
+  console.error("חסר קובץ .env.local");
   process.exit(1);
 }
 
@@ -36,17 +37,30 @@ for (const line of readFileSync(envPath, "utf-8").split("\n")) {
 
 for (const key of keys) {
   if (!env[key]) {
-    console.warn(`Skip ${key} (empty)`);
+    console.warn(`דילוג על ${key} (ריק)`);
     continue;
   }
-  console.log(`Setting ${key}...`);
-  try {
-    execSync(`npx vercel env rm ${key} production --yes`, { stdio: "ignore" });
-  } catch {}
-  execSync(`npx vercel env add ${key} production`, {
-    input: env[key],
-    stdio: ["pipe", "inherit", "inherit"],
-  });
+  console.log(`מגדיר ${key}...`);
+  for (const target of ["production", "preview", "development"]) {
+    try {
+      execSync(`npx vercel env rm ${key} ${target} --yes`, { stdio: "ignore" });
+    } catch {}
+
+    const tmpFile = join(tmpdir(), `vercel-env-${key}.txt`);
+    writeFileSync(tmpFile, env[key], "utf-8");
+    try {
+      execSync(`cmd /c "npx vercel env add ${key} ${target} < "${tmpFile}""`, {
+        stdio: "inherit",
+        shell: true,
+      });
+    } catch (e) {
+      console.error(`שגיאה בהגדרת ${key} (${target}):`, e.message);
+    } finally {
+      try {
+        unlinkSync(tmpFile);
+      } catch {}
+    }
+  }
 }
 
-console.log("Environment variables uploaded to Vercel");
+console.log("סיום העלאת משתני סביבה ל-Vercel");

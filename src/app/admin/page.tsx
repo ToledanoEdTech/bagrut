@@ -40,8 +40,10 @@ export default async function AdminDashboard() {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <div className="card p-6">
-          <h2 className="text-lg font-semibold text-slate-900">מסלולי היבחנות</h2>
-          <p className="mt-1 text-sm text-slate-500">{counts.paths} מסלולים מוגדרים במערכת</p>
+          <h2 className="text-lg font-semibold text-slate-900">תוכניות חובה</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {counts.paths} תוכניות חובה מוגדרות (מתמטיקה, אנגלית ומגמות נקבעים לפי תלמיד)
+          </p>
           <div className="mt-4 space-y-2">
             {paths.map((p) => (
               <div

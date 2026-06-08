@@ -4,6 +4,13 @@ import { getAuth, GoogleAuthProvider, type Auth } from "firebase/auth";
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 
+export function isFirebaseClientConfigured(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+  );
+}
+
 function getFirebaseApp(): FirebaseApp {
   if (app) return app;
 
@@ -17,7 +24,9 @@ function getFirebaseApp(): FirebaseApp {
   };
 
   if (!config.apiKey || !config.projectId) {
-    throw new Error("Firebase client config is missing. Check .env.local");
+    throw new Error(
+      "חסרה הגדרת Firebase בשרת. ודא שמשתני NEXT_PUBLIC_FIREBASE_* מוגדרים ב-Vercel."
+    );
   }
 
   app = getApps().length ? getApp() : initializeApp(config);

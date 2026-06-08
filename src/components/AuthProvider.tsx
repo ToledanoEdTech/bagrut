@@ -8,12 +8,17 @@ import {
   useState,
 } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut as fbSignOut } from "firebase/auth";
-import { getFirebaseAuth, googleProvider } from "@/lib/firebase/client";
+import {
+  getFirebaseAuth,
+  googleProvider,
+  isFirebaseClientConfigured,
+} from "@/lib/firebase/client";
 import type { AuthSession } from "@/lib/types";
 
 type AuthContextValue = {
   session: AuthSession | null;
   loading: boolean;
+  configError: string | null;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -23,6 +28,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [loading, setLoading] = useState(true);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   const refreshSession = useCallback(async () => {
     const res = await fetch("/api/auth/me");
@@ -35,19 +41,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refreshSession();
-    const unsub = onAuthStateChanged(getFirebaseAuth(), async (user) => {
-      if (!user) {
-        setSession(null);
-        setLoading(false);
-        return;
-      }
-      await refreshSession();
-    });
-    return unsub;
+    if (!isFirebaseClientConfigured()) {
+      setConfigError(
+        "חסרה הגדרת Firebase בשרת. ודא שמשתני NEXT_PUBLIC_FIREBASE_* מוגדרים ב-Vercel."
+      );
+      setLoading(false);
+      return;
+    }
+
+    let unsub: (() => void) | undefined;
+    try {
+      refreshSession();
+      unsub = onAuthStateChanged(getFirebaseAuth(), async (user) => {
+        if (!user) {
+          setSession(null);
+          setLoading(false);
+          return;
+        }
+        await refreshSession();
+      });
+    } catch (error) {
+      setConfigError(
+        error instanceof Error ? error.message : "שגיאה באתחול Firebase"
+      );
+      setLoading(false);
+    }
+
+    return () => unsub?.();
   }, [refreshSession]);
 
   async function signInWithGoogle() {
+    if (configError) {
+      throw new Error(configError);
+    }
     const result = await signInWithPopup(getFirebaseAuth(), googleProvider);
     const idToken = await result.user.getIdToken();
     const res = await fetch("/api/auth/session", {
@@ -65,13 +91,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signOut() {
     await fetch("/api/auth/session", { method: "DELETE" });
-    await fbSignOut(getFirebaseAuth());
+    if (!configError) {
+      await fbSignOut(getFirebaseAuth());
+    }
     setSession(null);
     window.location.href = "/login";
   }
 
   return (
-    <AuthContext.Provider value={{ session, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider
+      value={{ session, loading, configError, signInWithGoogle, signOut }}
+    >
       {children}
     </AuthContext.Provider>
   );

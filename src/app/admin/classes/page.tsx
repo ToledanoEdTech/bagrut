@@ -68,9 +68,9 @@ export default function ClassesPage() {
       <header className="-mx-8 -mt-8 border-b border-slate-200 bg-white px-8 py-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">כיתות ומסלולי היבחנות</h1>
+            <h1 className="text-2xl font-bold text-slate-900">כיתות ותוכניות חובה</h1>
             <p className="mt-1 text-sm text-slate-500">
-              הגדרת כיתות ושיוך למסלולי בגרות
+              הגדרת כיתות ושיוך לתוכנית חובה (רגילה, בית מדרש, מב&quot;ר/חנ&quot;מ)
             </p>
           </div>
           <button onClick={() => setShowNew(true)} className="btn-primary">
@@ -108,7 +108,7 @@ export default function ClassesPage() {
               </select>
             </div>
             <div>
-              <label className="label">מסלול היבחנות</label>
+              <label className="label">תוכנית חובה</label>
               <select
                 className="input"
                 value={form.examPathId}
@@ -203,7 +203,7 @@ export default function ClassesPage() {
                   </div>
                 </div>
                 <div className="mt-4 rounded-xl bg-primary-50 px-3 py-2">
-                  <p className="text-xs text-primary-600">מסלול</p>
+                  <p className="text-xs text-primary-600">תוכנית חובה</p>
                   <p className="text-sm font-medium text-primary-800">
                     {c.examPath.label}
                   </p>

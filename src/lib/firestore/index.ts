@@ -252,7 +252,7 @@ export async function getExamPathById(id: string): Promise<ExamPath | null> {
 
 export async function listExamPaths() {
   const snap = await adminDb.collection("examPaths").orderBy("label").get();
-  const paths = docsData<ExamPath>(snap);
+  const paths = docsData<ExamPath>(snap).filter((p) => p.key !== "flexible");
   const classes = await adminDb.collection("classes").get();
 
   return paths.map((p) => ({
@@ -320,7 +320,7 @@ export async function listSubjectsEnriched() {
   return subjects.map((s) => ({
     ...s,
     pathLinks: paths
-      .filter((p) => p.subjectIds.includes(s.id))
+      .filter((p) => p.key !== "flexible" && p.subjectIds.includes(s.id))
       .map((p) => ({ path: { label: p.label, key: p.key, id: p.id } })),
   }));
 }
@@ -426,11 +426,10 @@ export async function upsertGrades(
 // ─── counts ────────────────────────────────────────────────────────────────
 
 export async function getDashboardCounts() {
-  const [students, classes, subjects, paths, grades] = await Promise.all([
+  const [students, classes, subjects, grades] = await Promise.all([
     adminDb.collection("students").count().get(),
     adminDb.collection("classes").count().get(),
     adminDb.collection("subjects").count().get(),
-    adminDb.collection("examPaths").count().get(),
     adminDb.collection("grades").where("status", "==", "GRADED").count().get(),
   ]);
 
@@ -441,7 +440,7 @@ export async function getDashboardCounts() {
     students: students.data().count,
     classes: classes.data().count,
     subjects: subjects.data().count,
-    paths: paths.data().count,
+    paths: (await listExamPaths()).length,
     obligations,
     gradedCount: grades.data().count,
   };

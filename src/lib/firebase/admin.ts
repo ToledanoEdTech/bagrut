@@ -1,8 +1,8 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { initializeApp, getApps, cert, type App } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { getAuth, type Auth } from "firebase-admin/auth";
+import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
 function loadEnvLocal() {
   if (process.env.FIREBASE_PRIVATE_KEY) return;
@@ -22,13 +22,25 @@ function loadEnvLocal() {
   }
 }
 
+export function normalizePrivateKey(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  let key = raw.trim();
+  if (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1);
+  }
+  return key.replace(/\\n/g, "\n");
+}
+
 function createAdminApp(): App {
   loadEnvLocal();
   if (getApps().length) return getApps()[0]!;
 
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
 
   if (projectId && clientEmail && privateKey) {
     return initializeApp({
@@ -36,10 +48,43 @@ function createAdminApp(): App {
     });
   }
 
-  // Local dev fallback when using Firebase emulator or application default credentials
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Firebase Admin credentials are missing. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY in Vercel."
+    );
+  }
+
   return initializeApp({ projectId: projectId ?? "demo-bagrut" });
 }
 
-export const adminApp = createAdminApp();
-export const adminAuth = getAuth(adminApp);
-export const adminDb = getFirestore(adminApp);
+let adminApp: App | null = null;
+let adminAuthInstance: Auth | null = null;
+let adminDbInstance: Firestore | null = null;
+
+function getAdminApp(): App {
+  if (!adminApp) adminApp = createAdminApp();
+  return adminApp;
+}
+
+function getAdminAuthInstance(): Auth {
+  if (!adminAuthInstance) adminAuthInstance = getAuth(getAdminApp());
+  return adminAuthInstance;
+}
+
+function getAdminDbInstance(): Firestore {
+  if (!adminDbInstance) adminDbInstance = getFirestore(getAdminApp());
+  return adminDbInstance;
+}
+
+function lazyProxy<T extends object>(getInstance: () => T): T {
+  return new Proxy({} as T, {
+    get(_target, prop) {
+      const instance = getInstance();
+      const value = Reflect.get(instance, prop, instance);
+      return typeof value === "function" ? value.bind(instance) : value;
+    },
+  });
+}
+
+export const adminAuth = lazyProxy(getAdminAuthInstance);
+export const adminDb = lazyProxy(getAdminDbInstance);

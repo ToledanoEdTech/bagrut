@@ -212,17 +212,10 @@ export default function SubjectsPage() {
               <button
                 type="button"
                 onClick={() => setExpanded(isOpen ? null : subject.id)}
-                className="flex w-full items-center justify-between p-5"
+                className="flex w-full items-center gap-3 p-5"
               >
-                <div className="flex items-center gap-2">
-                  {isOpen ? (
-                    <ChevronUp className="h-5 w-5 text-slate-400" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 text-slate-400" />
-                  )}
-                </div>
-                <div className="flex-1 text-right">
-                  <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="min-w-0 flex-1 text-right">
+                  <div className="flex flex-wrap items-center justify-start gap-2">
                     <span className="badge-info">{categories[subject.category]}</span>
                     {subject.units && (
                       <span className="badge-muted">{subject.units} יח&quot;ל</span>
@@ -235,6 +228,13 @@ export default function SubjectsPage() {
                       <> • {subject.pathLinks.map((pl) => pl.path.label).join(", ")}</>
                     )}
                   </p>
+                </div>
+                <div className="shrink-0">
+                  {isOpen ? (
+                    <ChevronUp className="h-5 w-5 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-slate-400" />
+                  )}
                 </div>
               </button>
 
@@ -253,16 +253,10 @@ export default function SubjectsPage() {
                     {subject.obligations.map((o) => (
                       <div
                         key={o.id}
-                        className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3"
+                        className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
                       >
-                        <button
-                          onClick={() => deleteObligation(subject.id, o.id)}
-                          className="text-red-400 hover:text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                        <div className="flex-1 text-right">
-                          <div className="flex flex-wrap items-center justify-end gap-2">
+                        <div className="min-w-0 flex-1 text-right">
+                          <div className="flex flex-wrap items-center justify-start gap-2">
                             <span className="font-medium">
                               {o.name || o.examEvent || "חובה"}
                             </span>
@@ -283,7 +277,7 @@ export default function SubjectsPage() {
                             </p>
                           )}
                           {o.components.length > 0 && (
-                            <div className="mt-1 flex flex-wrap justify-end gap-1">
+                            <div className="mt-1 flex flex-wrap justify-start gap-1">
                               {o.components.map((c, i) => (
                                 <span key={i} className="text-xs text-slate-400">
                                   {c.name}: {c.weightPercent}%
@@ -298,13 +292,19 @@ export default function SubjectsPage() {
                                   key={i}
                                   className="flex justify-between rounded bg-slate-50 px-2 py-1 text-xs"
                                 >
-                                  <span>{si.weightPercent}%</span>
+                                  <span className="text-slate-400">{si.weightPercent}%</span>
                                   <span>{si.name}</span>
                                 </div>
                               ))}
                             </div>
                           )}
                         </div>
+                        <button
+                          onClick={() => deleteObligation(subject.id, o.id)}
+                          className="shrink-0 text-red-400 hover:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     ))}
                   </div>

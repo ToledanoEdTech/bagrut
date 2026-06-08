@@ -22,7 +22,7 @@ import { canImportStudents, canManageStructure } from "@/lib/roles";
 const allStaffLinks = [
   { href: "/admin", label: "דשבורד", icon: LayoutDashboard, adminOnly: false },
   { href: "/admin/students", label: "תלמידים", icon: Users, adminOnly: false },
-  { href: "/admin/classes", label: "כיתות ומסלולים", icon: School, adminOnly: true },
+  { href: "/admin/classes", label: "כיתות ותוכניות", icon: School, adminOnly: true },
   { href: "/admin/subjects", label: "מקצועות וחובות", icon: BookOpen, adminOnly: true },
   { href: "/admin/grades", label: "הזנת ציונים", icon: ClipboardList, adminOnly: false },
   { href: "/admin/import", label: "ייבוא תלמידים", icon: Upload, adminOnly: true },

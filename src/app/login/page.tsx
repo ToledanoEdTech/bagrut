@@ -7,7 +7,7 @@ import { useAuth } from "@/components/AuthProvider";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { signInWithGoogle, session, loading: authLoading } = useAuth();
+  const { signInWithGoogle, session, loading: authLoading, configError } = useAuth();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -58,6 +58,11 @@ export default function LoginPage() {
           </div>
 
           <div className="card space-y-5 p-8">
+            {configError && (
+              <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {configError}
+              </div>
+            )}
             {error && (
               <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
                 {error}
@@ -67,7 +72,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={handleGoogleSignIn}
-              disabled={loading}
+              disabled={loading || Boolean(configError)}
               className="btn-primary w-full"
             >
               {loading ? (

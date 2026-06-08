@@ -24,3 +24,5 @@ prisma/*.db-journal
 # misc
 *.log
 .DS_Store
+.vercel
+tsconfig.tsbuildinfo
