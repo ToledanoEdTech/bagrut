@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
+import { prefetchAllRoutes, prefetchRoute } from "@/lib/api-cache";
 import clsx from "clsx";
 import {
   LayoutDashboard,
@@ -47,6 +49,11 @@ export function Sidebar({ role }: { role: Role }) {
           return true;
         });
 
+  useEffect(() => {
+    const timer = setTimeout(() => prefetchAllRoutes(links.map((l) => l.href)), 300);
+    return () => clearTimeout(timer);
+  }, [links]);
+
   return (
     <aside className="fixed inset-y-0 right-0 z-30 flex w-64 flex-col border-l border-slate-200 bg-white">
       <div className="flex items-center gap-3 border-b border-slate-100 px-6 py-5">
@@ -79,6 +86,9 @@ export function Sidebar({ role }: { role: Role }) {
             <Link
               key={link.href}
               href={link.href}
+              prefetch
+              onMouseEnter={() => prefetchRoute(link.href)}
+              onFocus={() => prefetchRoute(link.href)}
               className={clsx(
                 "flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition",
                 active

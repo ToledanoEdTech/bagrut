@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { initializeApp, getApps, cert, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
-import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import { initializeFirestore, type Firestore } from "firebase-admin/firestore";
 
 function loadEnvLocal() {
   if (process.env.FIREBASE_PRIVATE_KEY) return;
@@ -72,7 +72,9 @@ function getAdminAuthInstance(): Auth {
 }
 
 function getAdminDbInstance(): Firestore {
-  if (!adminDbInstance) adminDbInstance = getFirestore(getAdminApp());
+  if (!adminDbInstance) {
+    adminDbInstance = initializeFirestore(getAdminApp(), { preferRest: true });
+  }
   return adminDbInstance;
 }
 

@@ -219,10 +219,11 @@
               "studyMaterial": null,
               "examEvent": "מבחן סוף שנה",
               "gradeYear": "שכבת י",
-              "components": [
+              "components": [],
+              "subItems": [
                 {
-                  "name": "ציון פנימי",
-                  "weightPercent": 100.0
+                  "name": "המסעות לפולין",
+                  "weightPercent": 15.0
                 },
                 {
                   "name": "שוויון בגיוס לצה\"ל",
@@ -244,8 +245,7 @@
                   "name": "למידה, סדר וארגון",
                   "weightPercent": 15.0
                 }
-              ],
-              "subItems": []
+              ]
             },
             {
               "questionnaireNumber": "11281",
@@ -490,7 +490,7 @@
     {
       "key": "flexible",
       "label": "גמיש (מתמטיקה, אנגלית, מגמות)",
-      "sheetName": "תוכנית היבחנות גמיש מתמטיקה אנג",
+      "sheetName": "תוכנית היבחנות גמיש מתמטיקה אנגלית ומגמות",
       "subjects": [
         {
           "name": "מתמטיקה",
@@ -718,15 +718,15 @@
               "subItems": [
                 {
                   "name": "סיפור",
-                  "weightPercent": 16.67
+                  "weightPercent": 17.0
                 },
                 {
                   "name": "שיר",
-                  "weightPercent": 16.67
+                  "weightPercent": 17.0
                 },
                 {
                   "name": "שיר",
-                  "weightPercent": 16.67
+                  "weightPercent": 17.0
                 },
                 {
                   "name": "מבחן",
@@ -1434,13 +1434,13 @@
               "subItems": []
             },
             {
-              "questionnaireNumber": null,
+              "questionnaireNumber": "2383",
               "weightPercent": 9.0,
               "eventName": "פנימי",
               "examType": "מבחן אוקטובר יא",
               "studyMaterial": "במדבר",
               "examEvent": null,
-              "gradeYear": null,
+              "gradeYear": "שכבת י",
               "components": [
                 {
                   "name": "ציון פנימי",
@@ -1526,7 +1526,7 @@
               "subItems": []
             },
             {
-              "questionnaireNumber": null,
+              "questionnaireNumber": "2563",
               "weightPercent": 8.0,
               "eventName": "פנימי",
               "examType": "מבחן פנימי שכבת י",
@@ -1695,10 +1695,11 @@
               "studyMaterial": null,
               "examEvent": "מבחן סוף שנה",
               "gradeYear": "שכבת י",
-              "components": [
+              "components": [],
+              "subItems": [
                 {
-                  "name": "ציון פנימי",
-                  "weightPercent": 100.0
+                  "name": "המסעות לפולין",
+                  "weightPercent": 15.0
                 },
                 {
                   "name": "שוויון בגיוס לצה\"ל",
@@ -1720,8 +1721,7 @@
                   "name": "למידה, סדר וארגון",
                   "weightPercent": 15.0
                 }
-              ],
-              "subItems": []
+              ]
             },
             {
               "questionnaireNumber": "11281",
@@ -2025,13 +2025,13 @@
               "subItems": []
             },
             {
-              "questionnaireNumber": null,
+              "questionnaireNumber": "2383",
               "weightPercent": 9.0,
               "eventName": "פנימי",
               "examType": "מבחן אוקטובר יא",
               "studyMaterial": "במדבר",
               "examEvent": null,
-              "gradeYear": null,
+              "gradeYear": "שכבת י",
               "components": [
                 {
                   "name": "ציון פנימי",
@@ -2117,7 +2117,7 @@
               "subItems": []
             },
             {
-              "questionnaireNumber": null,
+              "questionnaireNumber": "2563",
               "weightPercent": 8.0,
               "eventName": "פנימי",
               "examType": "מבחן פנימי שכבת י",
@@ -2266,10 +2266,11 @@
               "studyMaterial": null,
               "examEvent": "מבחן סוף שנה",
               "gradeYear": "שכבת י",
-              "components": [
+              "components": [],
+              "subItems": [
                 {
-                  "name": "ציון פנימי",
-                  "weightPercent": 100.0
+                  "name": "המסעות לפולין",
+                  "weightPercent": 15.0
                 },
                 {
                   "name": "שוויון בגיוס לצה\"ל",
@@ -2291,8 +2292,7 @@
                   "name": "למידה, סדר וארגון",
                   "weightPercent": 15.0
                 }
-              ],
-              "subItems": []
+              ]
             },
             {
               "questionnaireNumber": "11281",

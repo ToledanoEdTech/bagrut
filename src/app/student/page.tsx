@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { SubjectCard } from "@/components/subjects/SubjectCard";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatCard } from "@/components/ui/StatCard";
+import { PageLoader } from "@/components/ui/PageLoader";
 import { useAuth } from "@/components/AuthProvider";
-import { BookOpen, Target, Award, Loader2, LogOut } from "lucide-react";
+import { useApi } from "@/hooks/useApi";
+import { BookOpen, Target, Award, LogOut } from "lucide-react";
 
 type DashboardData = {
   student: {
@@ -40,24 +41,10 @@ type DashboardData = {
 
 export default function StudentDashboard() {
   const { signOut } = useAuth();
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, loading } = useApi<DashboardData>("/api/student/dashboard");
 
-  useEffect(() => {
-    fetch("/api/student/dashboard")
-      .then((r) => r.json())
-      .then((d) => {
-        setData(d);
-        setLoading(false);
-      });
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="h-10 w-10 animate-spin text-primary-600" />
-      </div>
-    );
+  if (loading && !data) {
+    return <PageLoader />;
   }
 
   if (!data) {

@@ -40,6 +40,39 @@ function newId() {
   return adminDb.collection("_").doc().id;
 }
 
+/** Ensure every obligation in a subject has a unique id (fixes sync duplicates). */
+export function deduplicateObligations(
+  obligations: Obligation[],
+  options?: { assignNewIds?: boolean }
+): {
+  obligations: Obligation[];
+  changed: boolean;
+} {
+  const seenIds = new Set<string>();
+  let changed = false;
+
+  const normalized = obligations.map((o, index) => {
+    if (!seenIds.has(o.id)) {
+      seenIds.add(o.id);
+      return o;
+    }
+    changed = true;
+    const id = options?.assignNewIds
+      ? newId()
+      : `${o.id}__${o.sortOrder ?? index}`;
+    const fixed = { ...o, id };
+    seenIds.add(fixed.id);
+    return fixed;
+  });
+
+  return { obligations: normalized, changed };
+}
+
+function normalizeSubject(subject: Subject): Subject {
+  const { obligations, changed } = deduplicateObligations(subject.obligations ?? []);
+  return changed ? { ...subject, obligations } : subject;
+}
+
 export function getStudentTrackIds(student: Pick<Student, "trackIds" | "trackId">): string[] {
   if (student.trackIds?.length) return student.trackIds;
   if (student.trackId) return [student.trackId];
@@ -363,11 +396,12 @@ export async function listTracks(): Promise<Track[]> {
 // ─── subjects ──────────────────────────────────────────────────────────────
 
 export async function getSubjectById(id: string): Promise<Subject | null> {
-  return docData<Subject>(await adminDb.collection("subjects").doc(id).get());
+  const subject = docData<Subject>(await adminDb.collection("subjects").doc(id).get());
+  return subject ? normalizeSubject(subject) : null;
 }
 
 export async function listSubjects(): Promise<Subject[]> {
-  return docsData<Subject>(await adminDb.collection("subjects").get());
+  return docsData<Subject>(await adminDb.collection("subjects").get()).map(normalizeSubject);
 }
 
 export async function listSubjectsByPath(pathId: string): Promise<Subject[]> {
@@ -426,8 +460,8 @@ export async function addObligation(subjectId: string, obligation: Omit<Obligati
     ...obligation,
     sortOrder: obligation.sortOrder ?? subject.obligations.length,
   };
-  subject.obligations.push(ob);
-  await adminDb.collection("subjects").doc(subjectId).update({ obligations: subject.obligations });
+  const { obligations } = deduplicateObligations([...subject.obligations, ob]);
+  await adminDb.collection("subjects").doc(subjectId).update({ obligations });
   return ob;
 }
 

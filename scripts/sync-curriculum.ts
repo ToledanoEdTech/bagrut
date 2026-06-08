@@ -51,6 +51,72 @@ function newId() {
   return adminDb.collection("_").doc().id;
 }
 
+function obligationKey(o: {
+  questionnaireNumber?: string | null;
+  name?: string | null;
+  weightPercent?: number;
+  examEvent?: string | null;
+  gradeYear?: string | null;
+}) {
+  return [
+    o.questionnaireNumber ?? "",
+    o.name ?? "",
+    o.weightPercent ?? 0,
+    o.examEvent ?? "",
+    o.gradeYear ?? "",
+  ].join("|");
+}
+
+function mapObligations(
+  parsed: ParsedCurriculum["paths"][0]["subjects"][0]["obligations"],
+  existing: Array<{ id: string } & Record<string, unknown>> = []
+) {
+  const existingByKey = new Map(
+    existing.map((o) => [
+      obligationKey(
+        o as {
+          questionnaireNumber?: string | null;
+          name?: string | null;
+          weightPercent?: number;
+          examEvent?: string | null;
+          gradeYear?: string | null;
+        }
+      ),
+      o,
+    ])
+  );
+  const usedIds = new Set<string>();
+
+  return parsed.map((o, i) => {
+    const key = obligationKey({
+      questionnaireNumber: o.questionnaireNumber,
+      name: o.eventName,
+      weightPercent: o.weightPercent,
+      examEvent: o.examEvent,
+      gradeYear: o.gradeYear,
+    });
+    const prev = existingByKey.get(key);
+    let id = prev?.id ?? newId();
+    if (usedIds.has(id)) {
+      id = newId();
+    }
+    usedIds.add(id);
+    return {
+      id,
+      questionnaireNumber: o.questionnaireNumber,
+      name: o.eventName,
+      weightPercent: o.weightPercent,
+      examType: o.examType,
+      studyMaterial: o.studyMaterial,
+      examEvent: o.examEvent,
+      gradeYear: o.gradeYear,
+      sortOrder: i,
+      components: o.components.map((c, j) => ({ ...c, sortOrder: j })),
+      subItems: (o.subItems ?? []).map((si, j) => ({ ...si, sortOrder: j })),
+    };
+  });
+}
+
 async function main() {
   const dataPath = path.join(process.cwd(), "data", "curriculum_parsed.json");
   const data: ParsedCurriculum = JSON.parse(readFileSync(dataPath, "utf-8"));
@@ -77,19 +143,10 @@ async function main() {
     const parsed = parsedByKey.get(key);
     if (!parsed) continue;
 
-    const obligations = parsed.obligations.map((o, i) => ({
-      id: newId(),
-      questionnaireNumber: o.questionnaireNumber,
-      name: o.eventName,
-      weightPercent: o.weightPercent,
-      examType: o.examType,
-      studyMaterial: o.studyMaterial,
-      examEvent: o.examEvent,
-      gradeYear: o.gradeYear,
-      sortOrder: i,
-      components: o.components.map((c, j) => ({ ...c, sortOrder: j })),
-      subItems: (o.subItems ?? []).map((si, j) => ({ ...si, sortOrder: j })),
-    }));
+    const obligations = mapObligations(
+      parsed.obligations,
+      (subject.obligations as Array<{ id: string } & Record<string, unknown>>) ?? []
+    );
 
     await doc.ref.update({ obligations });
     updated++;
@@ -101,19 +158,7 @@ async function main() {
     const [category, name, unitsStr] = key.split("|");
     const units = parseInt(unitsStr) || null;
     const id = newId();
-    const obligations = s.obligations.map((o, i) => ({
-      id: newId(),
-      questionnaireNumber: o.questionnaireNumber,
-      name: o.eventName,
-      weightPercent: o.weightPercent,
-      examType: o.examType,
-      studyMaterial: o.studyMaterial,
-      examEvent: o.examEvent,
-      gradeYear: o.gradeYear,
-      sortOrder: i,
-      components: o.components.map((c, j) => ({ ...c, sortOrder: j })),
-      subItems: (o.subItems ?? []).map((si, j) => ({ ...si, sortOrder: j })),
-    }));
+    const obligations = mapObligations(s.obligations);
 
     await adminDb.collection("subjects").doc(id).set({
       id,

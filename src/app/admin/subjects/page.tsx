@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp, Pencil } from "lucide-react";
+import { useApi } from "@/hooks/useApi";
+import { PageLoader } from "@/components/ui/PageLoader";
 import {
   ObligationEditor,
   EMPTY_OBLIGATION,
@@ -83,7 +85,7 @@ function draftToPayload(draft: ObligationDraft, subjectId: string, sortOrder: nu
 }
 
 export default function SubjectsPage() {
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const { data: subjects = [], loading, mutate: refreshSubjects } = useApi<Subject[]>("/api/subjects");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
   const [showNew, setShowNew] = useState(false);
@@ -104,20 +106,19 @@ export default function SubjectsPage() {
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    const { data, error: err } = await apiJson<Subject[]>("/api/subjects");
-    if (err) {
-      setError(err);
-      return;
+    try {
+      await refreshSubjects();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "שגיאה בטעינה");
     }
-    setSubjects(data ?? []);
-    setError(null);
   }
 
-  useEffect(() => {
-    load();
-  }, []);
-
   const filtered = subjects.filter((s) => filter === "all" || s.category === filter);
+
+  if (loading && subjects.length === 0) {
+    return <PageLoader />;
+  }
 
   async function addSubject() {
     if (!newSubjectMeta.name.trim()) {

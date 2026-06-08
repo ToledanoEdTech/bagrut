@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus, Pencil, Trash2, Save, X } from "lucide-react";
+import { useApi } from "@/hooks/useApi";
+import { PageLoader } from "@/components/ui/PageLoader";
 
 type ExamPath = { id: string; label: string; key: string };
 type ClassItem = {
@@ -13,27 +15,18 @@ type ClassItem = {
 };
 
 export default function ClassesPage() {
-  const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [paths, setPaths] = useState<ExamPath[]>([]);
+  const { data: classes = [], loading, mutate: refreshClasses } = useApi<ClassItem[]>("/api/classes");
+  const { data: paths = [], mutate: refreshPaths } = useApi<ExamPath[]>("/api/paths");
   const [editing, setEditing] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ name: "", gradeYear: "", examPathId: "" });
 
   async function load() {
-    const [cRes, pRes] = await Promise.all([
-      fetch("/api/classes"),
-      fetch("/api/paths"),
-    ]);
-    setClasses(await cRes.json());
-    const p = await pRes.json();
-    setPaths(p);
-    if (p.length && !form.examPathId) setForm((f) => ({ ...f, examPathId: p[0].id }));
+    await Promise.all([refreshClasses(), refreshPaths()]);
+    if (paths.length && !form.examPathId) {
+      setForm((f) => ({ ...f, examPathId: paths[0].id }));
+    }
   }
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   async function saveNew() {
     await fetch("/api/classes", {
@@ -61,6 +54,10 @@ export default function ClassesPage() {
     const data = await res.json();
     if (!res.ok) alert(data.error);
     else load();
+  }
+
+  if (loading && classes.length === 0) {
+    return <PageLoader />;
   }
 
   return (

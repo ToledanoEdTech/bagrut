@@ -111,6 +111,12 @@ def is_sub_item_component(name):
     return False
 
 
+def is_task_label(name):
+    if not name or is_grade_component(name) or is_sub_item_component(name):
+        return False
+    return bool(re.search(r"[\u0590-\u05FF]", name))
+
+
 def is_summary_row(row):
     """Skip footer summary tables (e.g. music breakdown)."""
     joined = " ".join(str(c or "") for c in row[:6])
@@ -177,8 +183,23 @@ def parse_sheet(rows):
             i += 1
             continue
 
+        if is_header_row(row):
+            i += 1
+            continue
+
         first = clean(row[0]) if row else None
         second = clean(row[1]) if len(row) > 1 else None
+
+        if first and second and is_units_number(second):
+            new_units = int(float(second))
+            if (
+                current_subject is None
+                or current_subject["name"] != first
+                or current_subject["units"] != new_units
+            ):
+                current_subject = start_subject(first, new_units)
+                subjects.append(current_subject)
+                current_obligation = None
 
         if is_subject_header(row):
             name = first
@@ -243,6 +264,8 @@ def parse_sheet(rows):
                     add_sub_item(current_obligation, score_component, score_weight)
                 elif is_grade_component(score_component):
                     add_component(current_obligation, score_component, score_weight)
+                elif is_task_label(score_component):
+                    add_sub_item(current_obligation, score_component, score_weight)
 
             current_obligation = finalize_obligation(current_obligation)
 
@@ -256,10 +279,21 @@ def parse_sheet(rows):
             elif event_name and score_weight and study_material and weight is None:
                 add_sub_item(current_obligation, study_material, score_weight)
             elif score_component and score_weight is not None:
-                if is_sub_item_component(score_component):
+                if (
+                    study_material
+                    and weight is None
+                    and not event_name
+                    and is_grade_component(score_component)
+                    and current_obligation.get("eventName")
+                    and "בגרות" in current_obligation["eventName"]
+                ):
+                    add_sub_item(current_obligation, study_material, score_weight)
+                elif is_sub_item_component(score_component):
                     add_sub_item(current_obligation, score_component, score_weight)
-                else:
+                elif is_grade_component(score_component):
                     add_component(current_obligation, score_component, score_weight)
+                elif is_task_label(score_component):
+                    add_sub_item(current_obligation, score_component, score_weight)
             elif event_name and weight is not None and not has_q:
                 add_sub_item(current_obligation, event_name, weight)
 

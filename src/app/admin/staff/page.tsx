@@ -1,25 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus, Trash2, UserCog } from "lucide-react";
+import { useApi } from "@/hooks/useApi";
+import { PageLoader } from "@/components/ui/PageLoader";
 
 type StaffMember = { id: string; email: string; name: string; role: string };
 
 export default function StaffPage() {
-  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const { data: staff = [], loading, mutate: refreshStaff } = useApi<StaffMember[]>("/api/staff");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [loading, setLoading] = useState(true);
 
   async function load() {
-    const res = await fetch("/api/staff");
-    setStaff(await res.json());
-    setLoading(false);
+    await refreshStaff();
   }
-
-  useEffect(() => {
-    load();
-  }, []);
 
   async function addStaff() {
     if (!email) return;
@@ -42,6 +37,10 @@ export default function StaffPage() {
     if (!confirm("להסיר מורה זה?")) return;
     await fetch(`/api/staff?id=${id}`, { method: "DELETE" });
     load();
+  }
+
+  if (loading && staff.length === 0) {
+    return <PageLoader />;
   }
 
   return (

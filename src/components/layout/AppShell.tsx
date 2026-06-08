@@ -1,4 +1,5 @@
 import { AuthGuard } from "@/components/AuthGuard";
+import { KeepAlive } from "./KeepAlive";
 import { Sidebar } from "./Sidebar";
 import type { Role } from "@/lib/types";
 
@@ -24,7 +25,9 @@ export function AppShell({
             {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
           </header>
         )}
-        <div className="p-8">{children}</div>
+        <div className="p-8">
+          <KeepAlive>{children}</KeepAlive>
+        </div>
       </main>
     </div>
     </AuthGuard>

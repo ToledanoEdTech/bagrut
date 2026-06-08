@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Pencil, Trash2, Save, X } from "lucide-react";
+import { useApi } from "@/hooks/useApi";
+import { PageLoader } from "@/components/ui/PageLoader";
 
 type Student = {
   id: string;
@@ -14,12 +16,14 @@ type Student = {
 };
 
 type ClassOption = { id: string; name: string };
+type ClassItem = { id: string; name: string };
 type TrackOption = { id: string; name: string };
 
 export default function StudentsPage() {
-  const [students, setStudents] = useState<Student[]>([]);
-  const [classes, setClasses] = useState<ClassOption[]>([]);
-  const [tracks, setTracks] = useState<TrackOption[]>([]);
+  const { data: students = [], loading: studentsLoading, mutate: refreshStudents } = useApi<Student[]>("/api/students");
+  const { data: classesRaw = [], mutate: refreshClasses } = useApi<ClassItem[]>("/api/classes");
+  const { data: tracks = [], mutate: refreshTracks } = useApi<TrackOption[]>("/api/tracks");
+  const classes: ClassOption[] = classesRaw.map((c) => ({ id: c.id, name: c.name }));
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<{
     name: string;
@@ -29,25 +33,11 @@ export default function StudentsPage() {
     mathUnits: number;
     englishUnits: number;
   } | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saveError, setSaveError] = useState("");
 
   async function load() {
-    const [sRes, cRes, tRes] = await Promise.all([
-      fetch("/api/students"),
-      fetch("/api/classes"),
-      fetch("/api/tracks"),
-    ]);
-    setStudents(await sRes.json());
-    const cls = await cRes.json();
-    setClasses(cls.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
-    setTracks(await tRes.json());
-    setLoading(false);
+    await Promise.all([refreshStudents(), refreshClasses(), refreshTracks()]);
   }
-
-  useEffect(() => {
-    load();
-  }, []);
 
   function startEdit(s: Student) {
     setEditing(s.id);
@@ -106,8 +96,8 @@ export default function StudentsPage() {
     load();
   }
 
-  if (loading) {
-    return <div className="text-center text-slate-500">טוען...</div>;
+  if (studentsLoading && students.length === 0) {
+    return <PageLoader />;
   }
 
   return (
