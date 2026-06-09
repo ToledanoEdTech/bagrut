@@ -203,6 +203,9 @@ export async function createStudent(data: Omit<Student, "id" | "uid">) {
     mathUnits: data.mathUnits,
     englishUnits: data.englishUnits,
     extensions: data.extensions ?? null,
+    ...(data.mandatorySubjectIds !== undefined && {
+      mandatorySubjectIds: data.mandatorySubjectIds,
+    }),
   };
   await adminDb.collection("students").doc(id).set({
     ...student,
@@ -219,6 +222,9 @@ export async function updateStudent(
   const updates: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   for (const [key, value] of Object.entries(data)) {
     if (value !== undefined) updates[key] = value;
+  }
+  if (data.mandatorySubjectIds === null) {
+    updates.mandatorySubjectIds = FieldValue.delete();
   }
   if (data.email) updates.email = data.email.toLowerCase().trim();
   if (data.trackIds !== undefined) {
@@ -258,6 +264,7 @@ function enrichStudentFromLookup(student: Student, lookup: EnrichLookup) {
     mathUnits: student.mathUnits,
     englishUnits: student.englishUnits,
     extensions: student.extensions,
+    mandatorySubjectIds: student.mandatorySubjectIds ?? null,
     user: { id: student.uid ?? student.id, name: student.name, email: student.email },
     class: cls
       ? { id: cls.id, name: cls.name, gradeYear: cls.gradeYear, examPath: examPath ?? { id: "", label: "", key: "" } }
@@ -530,6 +537,8 @@ export async function upsertGrades(
   grades: Array<{
     obligationId: string;
     score?: number | null;
+    componentScores?: Record<number, number | null> | null;
+    subItemScores?: Record<number, number | null> | null;
     status: SubmissionStatus;
     notes?: string;
   }>
@@ -550,6 +559,8 @@ export async function upsertGrades(
         studentId,
         obligationId: g.obligationId,
         score: g.score ?? null,
+        componentScores: g.componentScores ?? null,
+        subItemScores: g.subItemScores ?? null,
         status: g.status,
         notes: g.notes ?? null,
       };
@@ -559,6 +570,8 @@ export async function upsertGrades(
       const doc = existing.docs[0]!;
       const updates = {
         score: g.score ?? null,
+        componentScores: g.componentScores ?? null,
+        subItemScores: g.subItemScores ?? null,
         status: g.status,
         notes: g.notes ?? null,
         updatedAt: FieldValue.serverTimestamp(),
@@ -570,6 +583,8 @@ export async function upsertGrades(
         studentId: gradeData.studentId,
         obligationId: gradeData.obligationId,
         score: g.score ?? null,
+        componentScores: g.componentScores ?? null,
+        subItemScores: g.subItemScores ?? null,
         status: g.status,
         notes: g.notes ?? null,
       });
@@ -605,6 +620,8 @@ export async function upsertGradesBulk(
     studentId: string;
     obligationId: string;
     score?: number | null;
+    componentScores?: Record<number, number | null> | null;
+    subItemScores?: Record<number, number | null> | null;
     status: SubmissionStatus;
     notes?: string | null;
   }>
@@ -649,6 +666,8 @@ export async function upsertGradesBulk(
     if (existing) {
       batch.update(adminDb.collection("grades").doc(existing.id), {
         score: entry.score ?? null,
+        componentScores: entry.componentScores ?? null,
+        subItemScores: entry.subItemScores ?? null,
         status: entry.status,
         notes: entry.notes ?? null,
         updatedAt: FieldValue.serverTimestamp(),
@@ -656,6 +675,8 @@ export async function upsertGradesBulk(
       results.push({
         ...existing,
         score: entry.score ?? null,
+        componentScores: entry.componentScores ?? null,
+        subItemScores: entry.subItemScores ?? null,
         status: entry.status,
         notes: entry.notes ?? null,
       });
@@ -666,6 +687,8 @@ export async function upsertGradesBulk(
         studentId: entry.studentId,
         obligationId: entry.obligationId,
         score: entry.score ?? null,
+        componentScores: entry.componentScores ?? null,
+        subItemScores: entry.subItemScores ?? null,
         status: entry.status,
         notes: entry.notes ?? null,
       };

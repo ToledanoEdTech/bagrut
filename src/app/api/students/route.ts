@@ -5,10 +5,12 @@ import {
   enrichStudent,
   getClassById,
   getStudentByEmail,
+  getStudentById,
   listStudents,
   listStudentsEnriched,
   updateStudent,
 } from "@/lib/firestore";
+import { resolveMandatorySubjectIdsForClass } from "@/lib/student-subjects";
 import { checkPermission, requireStaff, requireAdmin } from "@/lib/api-auth";
 
 export async function GET() {
@@ -27,7 +29,8 @@ export async function POST(req: NextRequest) {
   if (error) return error;
 
   const body = await req.json();
-  const { name, email, classId, trackIds, trackId, mathUnits, englishUnits } = body;
+  const { name, email, classId, trackIds, trackId, mathUnits, englishUnits, mandatorySubjectIds } =
+    body;
 
   if (!name?.trim()) {
     return NextResponse.json({ error: "חסר שם תלמיד" }, { status: 400 });
@@ -63,6 +66,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const resolvedMandatorySubjectIds = await resolveMandatorySubjectIdsForClass(
+      classId,
+      mandatorySubjectIds
+    );
     const student = await createStudent({
       name: name.trim(),
       email: normalizedEmail,
@@ -71,6 +78,7 @@ export async function POST(req: NextRequest) {
       mathUnits: resolvedMathUnits,
       englishUnits: resolvedEnglishUnits,
       extensions: null,
+      mandatorySubjectIds: resolvedMandatorySubjectIds,
     });
     return NextResponse.json(await enrichStudent(student), { status: 201 });
   } catch (e) {
@@ -86,8 +94,18 @@ export async function PATCH(req: NextRequest) {
   if (error || !session) return error;
 
   const body = await req.json();
-  const { id, classId, trackId, trackIds, mathUnits, englishUnits, extensions, name, email } =
-    body;
+  const {
+    id,
+    classId,
+    trackId,
+    trackIds,
+    mathUnits,
+    englishUnits,
+    extensions,
+    mandatorySubjectIds,
+    name,
+    email,
+  } = body;
 
   if (!id) {
     return NextResponse.json({ error: "חסר מזהה תלמיד" }, { status: 400 });
@@ -100,6 +118,25 @@ export async function PATCH(req: NextRequest) {
       : [];
 
   try {
+    const existing = await getStudentById(id);
+    if (!existing) {
+      return NextResponse.json({ error: "לא נמצא" }, { status: 404 });
+    }
+
+    const targetClassId = classId ?? existing.classId;
+    let resolvedMandatorySubjectIds: string[] | undefined | null = undefined;
+    if (mandatorySubjectIds !== undefined) {
+      resolvedMandatorySubjectIds = await resolveMandatorySubjectIdsForClass(
+        targetClassId,
+        mandatorySubjectIds
+      );
+    } else if (classId !== undefined && classId !== existing.classId) {
+      resolvedMandatorySubjectIds = await resolveMandatorySubjectIdsForClass(
+        targetClassId,
+        existing.mandatorySubjectIds
+      );
+    }
+
     await updateStudent(id, {
       ...(classId !== undefined && { classId }),
       trackIds: resolvedTrackIds,
@@ -108,6 +145,9 @@ export async function PATCH(req: NextRequest) {
       ...(extensions !== undefined && { extensions }),
       ...(name !== undefined && { name }),
       ...(email !== undefined && { email }),
+      ...(resolvedMandatorySubjectIds !== undefined && {
+        mandatorySubjectIds: resolvedMandatorySubjectIds ?? null,
+      }),
     });
   } catch (e) {
     return NextResponse.json(

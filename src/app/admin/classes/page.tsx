@@ -9,7 +9,14 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { ExportButton } from "@/components/ui/ExportButton";
 import { StudentCardView } from "@/components/students/StudentCardView";
+import {
+  buildClassStudentsSheet,
+  buildClassesSheet,
+  downloadExcel,
+  exportTimestamp,
+} from "@/lib/excel-export";
 
 type ExamPath = { id: string; label: string; key: string };
 type ClassItem = {
@@ -113,6 +120,18 @@ export default function ClassesPage() {
     setSelectedStudentId(null);
   }
 
+  async function handleExport() {
+    if (view === "students" && selectedClass) {
+      await downloadExcel(
+        `תלמידים_${selectedClass.name}_${exportTimestamp()}.xlsx`,
+        [buildClassStudentsSheet(selectedClass.name, classStudents)]
+      );
+      return;
+    }
+
+    await downloadExcel(`כיתות_${exportTimestamp()}.xlsx`, [buildClassesSheet(classes)]);
+  }
+
   if (loading && classes.length === 0) {
     return <PageLoader />;
   }
@@ -135,12 +154,21 @@ export default function ClassesPage() {
               : 'הגדרת כיתות ושיוך לתוכנית חובה (רגילה, בית מדרש, מב"ר/חנ"מ)'
         }
       >
-        {view === "classes" && (
-          <Button onClick={() => setShowNew(true)}>
-            <Plus className="h-4 w-4" />
-            כיתה חדשה
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {view !== "detail" && (
+            <ExportButton
+              onExport={handleExport}
+              disabled={view === "students" ? classStudents.length === 0 : classes.length === 0}
+              label={view === "students" ? "ייצוא תלמידי כיתה" : "ייצוא כיתות"}
+            />
+          )}
+          {view === "classes" && (
+            <Button onClick={() => setShowNew(true)}>
+              <Plus className="h-4 w-4" />
+              כיתה חדשה
+            </Button>
+          )}
+        </div>
       </PageHeader>
 
       <Breadcrumb

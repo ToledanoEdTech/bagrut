@@ -4,24 +4,41 @@ import { useEffect, useMemo, useState } from "react";
 import { Save, Loader2, AlertCircle } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
+import { ExportButton } from "@/components/ui/ExportButton";
 import { GradeMatrixTable, type MatrixRow } from "@/components/grades/GradeMatrixTable";
 import { invalidateCache } from "@/lib/api-cache";
+import {
+  buildMatrixSheet,
+  downloadExcel,
+  exportTimestamp,
+} from "@/lib/excel-export";
+import {
+  makeMatrixTaskKey,
+  matrixTaskLabel,
+  parseMatrixTaskKey,
+} from "@/lib/grade-components";
 import { autoStatusOnScore } from "@/lib/grade-status";
 import type { SubmissionStatus } from "@/lib/types";
 
 type ClassItem = { id: string; name: string; gradeYear: string | null };
+
+type MatrixTask = {
+  id: string;
+  taskKind: "subItem" | "component" | "single";
+  sortOrder: number;
+  taskName: string;
+  questionnaireNumber: string | null;
+  name: string | null;
+  relevantStudentCount: number;
+  label: string;
+};
 
 type MatrixOptions = {
   subjects: Array<{
     id: string;
     name: string;
     units: number | null;
-    obligations: Array<{
-      id: string;
-      name: string | null;
-      questionnaireNumber: string | null;
-      relevantStudentCount: number;
-    }>;
+    tasks: MatrixTask[];
   }>;
 };
 
@@ -34,56 +51,60 @@ type MatrixData = {
     questionnaireNumber: string | null;
     weightPercent: number;
     examType: string;
+    taskKind: "subItem" | "component" | "single" | null;
+    taskSortOrder: number | null;
+    components: Array<{ name: string; weightPercent: number; sortOrder: number }>;
   };
   rows: Array<{
     studentId: string;
     studentName: string;
-    grade: { score: number | null; status: SubmissionStatus; notes: string | null } | null;
+    grade: {
+      score: number | null;
+      componentScores?: Record<number, number | null> | null;
+      subItemScores?: Record<number, number | null> | null;
+      status: SubmissionStatus;
+      notes: string | null;
+    } | null;
   }>;
   notRelevantCount: number;
 };
 
 type RowState = Record<string, { score: number | null; status: SubmissionStatus }>;
 
-function obligationLabel(ob: {
-  name: string | null;
-  questionnaireNumber: string | null;
-}): string {
-  if (ob.name) return ob.name;
-  if (ob.questionnaireNumber) return `שאלון ${ob.questionnaireNumber}`;
-  return "חובה";
-}
-
 export default function GradesMatrixPage() {
   const { data: classes = [], loading: classesLoading } = useApi<ClassItem[]>("/api/classes/list");
   const [classId, setClassId] = useState("");
   const [subjectId, setSubjectId] = useState("");
-  const [obligationId, setObligationId] = useState("");
+  const [taskKey, setTaskKey] = useState("");
   const [rowState, setRowState] = useState<RowState>({});
   const [savedSnapshot, setSavedSnapshot] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [bulkScore, setBulkScore] = useState("");
 
+  const parsedTask = parseMatrixTaskKey(taskKey);
+
   const optionsKey = classId ? `/api/grades/matrix/options?classId=${classId}` : null;
   const { data: options, loading: optionsLoading } = useApi<MatrixOptions>(optionsKey);
 
   const matrixKey =
-    classId && obligationId
-      ? `/api/grades/matrix?classId=${classId}&obligationId=${obligationId}`
+    classId && parsedTask
+      ? `/api/grades/matrix?classId=${classId}&obligationId=${parsedTask.obligationId}&taskKind=${parsedTask.taskKind}&taskSortOrder=${parsedTask.sortOrder}`
       : null;
   const { data: matrixData, loading: matrixLoading, mutate: refreshMatrix } =
     useApi<MatrixData>(matrixKey);
 
+  const components = matrixData?.obligation.components ?? [];
+
   useEffect(() => {
     setSubjectId("");
-    setObligationId("");
+    setTaskKey("");
     setRowState({});
     setSavedSnapshot("");
   }, [classId]);
 
   useEffect(() => {
-    setObligationId("");
+    setTaskKey("");
     setRowState({});
     setSavedSnapshot("");
   }, [subjectId]);
@@ -107,7 +128,14 @@ export default function GradesMatrixPage() {
   }, [matrixData]);
 
   const selectedSubject = options?.subjects.find((s) => s.id === subjectId);
-  const obligations = selectedSubject?.obligations ?? [];
+  const tasks = selectedSubject?.tasks ?? [];
+  const selectedTask = tasks.find(
+    (t) =>
+      parsedTask &&
+      t.id === parsedTask.obligationId &&
+      t.taskKind === parsedTask.taskKind &&
+      t.sortOrder === parsedTask.sortOrder
+  );
 
   const tableRows: MatrixRow[] = useMemo(() => {
     if (!matrixData) return [];
@@ -123,12 +151,16 @@ export default function GradesMatrixPage() {
 
   function handleChange(
     studentId: string,
-    field: "score" | "status",
+    field: "score" | "status" | `componentScore:${number}`,
     value: number | null | SubmissionStatus
   ) {
     setRowState((prev) => {
-      const current = prev[studentId] ?? { score: null, status: "NOT_STARTED" as SubmissionStatus };
-      if (field === "score") {
+      const current = prev[studentId] ?? {
+        score: null,
+        status: "NOT_STARTED" as SubmissionStatus,
+      };
+
+      if (field === "score" || field.startsWith("componentScore:")) {
         const score = value as number | null;
         return {
           ...prev,
@@ -138,6 +170,7 @@ export default function GradesMatrixPage() {
           },
         };
       }
+
       return {
         ...prev,
         [studentId]: { ...current, status: value as SubmissionStatus },
@@ -149,14 +182,12 @@ export default function GradesMatrixPage() {
   function applyBulkScore() {
     const score = parseFloat(bulkScore);
     if (isNaN(score) || score < 0 || score > 100) return;
+
     setRowState((prev) => {
       const next = { ...prev };
       for (const row of tableRows) {
-        if (row.score == null) {
-          next[row.studentId] = {
-            score,
-            status: "GRADED",
-          };
+        if (next[row.studentId]?.score == null) {
+          next[row.studentId] = { score, status: "GRADED" };
         }
       }
       return next;
@@ -164,7 +195,7 @@ export default function GradesMatrixPage() {
   }
 
   async function saveGrades() {
-    if (!obligationId || !matrixData) return;
+    if (!parsedTask || !matrixData) return;
     setSaving(true);
     setSaveError(null);
     try {
@@ -172,7 +203,9 @@ export default function GradesMatrixPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          obligationId,
+          obligationId: parsedTask.obligationId,
+          taskKind: parsedTask.taskKind,
+          taskSortOrder: parsedTask.sortOrder,
           entries: matrixData.rows.map((r) => ({
             studentId: r.studentId,
             score: rowState[r.studentId]?.score ?? null,
@@ -193,6 +226,33 @@ export default function GradesMatrixPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  const taskHeaderLabel =
+    selectedTask?.label ??
+    (matrixData
+      ? matrixTaskLabel({
+          name: matrixData.obligation.name,
+          questionnaireNumber: matrixData.obligation.questionnaireNumber,
+          taskName: matrixData.obligation.components[0]?.name ?? "ציון",
+        })
+      : "");
+
+  async function handleExport() {
+    if (!matrixData) return;
+    const safeName = matrixData.class.name.replace(/[/\\?*[\]]/g, "-");
+    await downloadExcel(`ציונים_${safeName}_${exportTimestamp()}.xlsx`, [
+      buildMatrixSheet({
+        className: matrixData.class.name,
+        subjectName: matrixData.subject.name,
+        taskLabel: taskHeaderLabel,
+        rows: tableRows.map((r) => ({
+          studentName: r.studentName,
+          score: r.score,
+          status: r.status,
+        })),
+      }),
+    ]);
   }
 
   if (classesLoading && classes.length === 0) {
@@ -242,14 +302,17 @@ export default function GradesMatrixPage() {
             <label className="label">מטלה</label>
             <select
               className="input"
-              value={obligationId}
-              onChange={(e) => setObligationId(e.target.value)}
+              value={taskKey}
+              onChange={(e) => setTaskKey(e.target.value)}
               disabled={!subjectId}
             >
               <option value="">— בחר מטלה —</option>
-              {obligations.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {obligationLabel(o)} ({o.relevantStudentCount} תלמידים)
+              {tasks.map((t) => (
+                <option
+                  key={makeMatrixTaskKey(t.id, t.taskKind, t.sortOrder)}
+                  value={makeMatrixTaskKey(t.id, t.taskKind, t.sortOrder)}
+                >
+                  {t.label} ({t.relevantStudentCount} תלמידים)
                 </option>
               ))}
             </select>
@@ -257,13 +320,13 @@ export default function GradesMatrixPage() {
         </div>
       </div>
 
-      {matrixLoading && obligationId && (
+      {matrixLoading && taskKey && (
         <div className="mt-8">
           <PageLoader variant="table" />
         </div>
       )}
 
-      {!matrixLoading && matrixData && obligationId && (
+      {!matrixLoading && matrixData && taskKey && (
         <>
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-slate-600">
@@ -277,12 +340,18 @@ export default function GradesMatrixPage() {
                 {matrixData.subject.name}
                 {matrixData.subject.units ? ` (${matrixData.subject.units} יח"ל)` : ""}
                 {" — "}
-                {obligationLabel(matrixData.obligation)}
+                {taskHeaderLabel}
               </span>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               {isDirty && <span className="badge-warning">שינויים לא שמורים</span>}
+              <ExportButton
+                onExport={handleExport}
+                disabled={tableRows.length === 0}
+                label="ייצוא לאקסל"
+                size="sm"
+              />
               <div className="flex items-center gap-2">
                 <input
                   type="number"
@@ -316,7 +385,7 @@ export default function GradesMatrixPage() {
           )}
 
           <div className="mt-4">
-            <GradeMatrixTable rows={tableRows} onChange={handleChange} />
+            <GradeMatrixTable rows={tableRows} components={components} onChange={handleChange} />
           </div>
         </>
       )}

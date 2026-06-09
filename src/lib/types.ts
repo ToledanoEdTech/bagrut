@@ -80,6 +80,8 @@ export interface Student {
   mathUnits: number;
   englishUnits: number;
   extensions: string | null;
+  /** Explicit mandatory subjects; undefined/null = all mandatory subjects from class path */
+  mandatorySubjectIds?: string[];
 }
 
 export interface Grade {
@@ -87,6 +89,8 @@ export interface Grade {
   studentId: string;
   obligationId: string;
   score: number | null;
+  componentScores?: Record<number, number | null> | null;
+  subItemScores?: Record<number, number | null> | null;
   status: SubmissionStatus;
   notes: string | null;
 }

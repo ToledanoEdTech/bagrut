@@ -3,10 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { SubjectCard } from "@/components/subjects/SubjectCard";
+import { calcWeightedComponentScore, calcWeightedSubItemScore, normalizeComponents, normalizeSubItems, resolveObligationGradeScore } from "@/lib/grade-components";
 import { calcSubjectProgress } from "@/lib/progress";
+import { autoStatusOnScore } from "@/lib/grade-status";
+import type { SubmissionStatus } from "@/lib/types";
 import { Save, Loader2, ChevronRight, ChevronLeft, ArrowLeft, AlertCircle, Check } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
+import { ExportButton } from "@/components/ui/ExportButton";
+import {
+  buildStudentGradesSheet,
+  downloadExcel,
+  exportTimestamp,
+} from "@/lib/excel-export";
 import { prefetch, invalidateCache } from "@/lib/api-cache";
 
 type Student = {
@@ -31,20 +40,24 @@ type Subject = {
     studyMaterial: string | null;
     examEvent: string | null;
     gradeYear: string | null;
-    components: Array<{ name: string; weightPercent: number }>;
-    subItems: Array<{ name: string; weightPercent: number }>;
+    components: Array<{ name: string; weightPercent: number; sortOrder?: number }>;
+    subItems: Array<{ name: string; weightPercent: number; sortOrder?: number }>;
   }>;
 };
 
 type Grade = {
   obligationId: string;
   score: number | null;
+  componentScores?: Record<number, number | null> | null;
+  subItemScores?: Record<number, number | null> | null;
   status: string;
 };
 
 type GradeRow = {
   obligationId: string;
   score: number | null;
+  componentScores?: Record<number, number | null> | null;
+  subItemScores?: Record<number, number | null> | null;
   status: string;
 };
 
@@ -101,6 +114,8 @@ export default function GradesPage() {
     const initial = gradesData.map((g) => ({
       obligationId: g.obligationId,
       score: g.score,
+      componentScores: g.componentScores ?? null,
+      subItemScores: g.subItemScores ?? null,
       status: g.status,
     }));
     setGrades(initial);
@@ -150,17 +165,92 @@ export default function GradesPage() {
 
   function handleGradeChange(obligationId: string, field: string, value: string | number | null) {
     setGrades((prev) => {
+      const obligation = subjects
+        .flatMap((s) => s.obligations)
+        .find((o) => o.id === obligationId);
       const existing = prev.find((g) => g.obligationId === obligationId);
+
+      if (field.startsWith("componentScore:")) {
+        const sortOrder = Number(field.split(":")[1]);
+        const componentScores = {
+          ...(existing?.componentScores ?? {}),
+          [sortOrder]: value as number | null,
+        };
+        const score = obligation
+          ? calcWeightedComponentScore(normalizeComponents(obligation.components), componentScores)
+          : null;
+        const hasAnyScore = Object.values(componentScores).some((s) => s != null);
+        const status = (existing?.status ?? "NOT_STARTED") as SubmissionStatus;
+        const nextStatus = hasAnyScore ? autoStatusOnScore(score ?? 0, status) : status;
+
+        if (existing) {
+          return prev.map((g) =>
+            g.obligationId === obligationId
+              ? { ...g, componentScores, score, status: nextStatus }
+              : g
+          );
+        }
+        return [
+          ...prev,
+          {
+            obligationId,
+            score,
+            componentScores,
+            subItemScores: null,
+            status: nextStatus,
+          },
+        ];
+      }
+
+      if (field.startsWith("subItemScore:")) {
+        const sortOrder = Number(field.split(":")[1]);
+        const subItemScores = {
+          ...(existing?.subItemScores ?? {}),
+          [sortOrder]: value as number | null,
+        };
+        const score = obligation
+          ? calcWeightedSubItemScore(normalizeSubItems(obligation.subItems), subItemScores)
+          : null;
+        const hasAnyScore = Object.values(subItemScores).some((s) => s != null);
+        const status = (existing?.status ?? "NOT_STARTED") as SubmissionStatus;
+        const nextStatus = hasAnyScore ? autoStatusOnScore(score ?? 0, status) : status;
+
+        if (existing) {
+          return prev.map((g) =>
+            g.obligationId === obligationId
+              ? { ...g, subItemScores, score, status: nextStatus }
+              : g
+          );
+        }
+        return [
+          ...prev,
+          {
+            obligationId,
+            score,
+            componentScores: null,
+            subItemScores,
+            status: nextStatus,
+          },
+        ];
+      }
+
       if (existing) {
-        return prev.map((g) =>
-          g.obligationId === obligationId ? { ...g, [field]: value } : g
-        );
+        const next = { ...existing, [field]: value };
+        if (field === "score") {
+          next.status = autoStatusOnScore(
+            value as number | null,
+            existing.status as SubmissionStatus
+          );
+        }
+        return prev.map((g) => (g.obligationId === obligationId ? next : g));
       }
       return [
         ...prev,
         {
           obligationId,
           score: field === "score" ? (value as number | null) : null,
+          componentScores: null,
+          subItemScores: null,
           status: field === "status" ? (value as string) : "NOT_STARTED",
         },
       ];
@@ -182,6 +272,21 @@ export default function GradesPage() {
 
   const selectedStudent = students.find((s) => s.id === selectedId);
 
+  async function handleExport() {
+    if (!selectedStudent) return;
+    await downloadExcel(
+      `ציונים_${selectedStudent.user.name}_${exportTimestamp()}.xlsx`,
+      [
+        buildStudentGradesSheet(
+          selectedStudent.user.name,
+          selectedStudent.class.name,
+          subjects,
+          grades
+        ),
+      ]
+    );
+  }
+
   if (studentsLoading && students.length === 0) {
     return <PageLoader variant="skeleton" />;
   }
@@ -193,7 +298,13 @@ export default function GradesPage() {
           <ArrowLeft className="h-4 w-4" />
           הזנה מהירה לפי מטלה
         </Link>
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <ExportButton
+            onExport={handleExport}
+            disabled={!selectedId || subjects.length === 0}
+            label="ייצוא ציונים"
+          />
+          <div className="flex items-center gap-2 text-sm">
           {saveState === "saving" && (
             <span className="flex items-center gap-1 text-slate-500">
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -215,6 +326,7 @@ export default function GradesPage() {
           {isDirty && saveState !== "saving" && (
             <span className="badge-warning">שינויים לא שמורים</span>
           )}
+          </div>
         </div>
       </div>
 
@@ -322,9 +434,16 @@ export default function GradesPage() {
 
           <div className="mt-4 space-y-4">
             {subjects.map((subject) => {
-              const subjectGrades = grades.filter((g) =>
-                subject.obligations.some((o) => o.id === g.obligationId)
-              );
+              const subjectGrades = grades
+                .filter((g) => subject.obligations.some((o) => o.id === g.obligationId))
+                .map((g) => {
+                  const obligation = subject.obligations.find((o) => o.id === g.obligationId);
+                  if (!obligation) return g;
+                  return {
+                    ...g,
+                    score: resolveObligationGradeScore(obligation, g),
+                  };
+                });
               const progress = calcSubjectProgress(subject.obligations, subjectGrades);
 
               return (

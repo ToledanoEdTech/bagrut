@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGradesByStudent, upsertGrades } from "@/lib/firestore";
 import { checkPermission, requireAuth, requireStaff } from "@/lib/api-auth";
+import { validateComponentScores, validateSubItemScores } from "@/lib/grade-components";
 import { isValidSubmissionStatus, validateScore } from "@/lib/grade-status";
 import type { SubmissionStatus } from "@/lib/types";
 
@@ -43,6 +44,8 @@ export async function PUT(req: NextRequest) {
     grades: Array<{
       obligationId: string;
       score?: number | null;
+      componentScores?: Record<number, number | null> | null;
+      subItemScores?: Record<number, number | null> | null;
       status: string;
       notes?: string;
     }>;
@@ -55,6 +58,12 @@ export async function PUT(req: NextRequest) {
     if (!validateScore(g.score)) {
       return NextResponse.json({ error: "ציון לא חוקי (0–100)" }, { status: 400 });
     }
+    if (!validateComponentScores(g.componentScores)) {
+      return NextResponse.json({ error: "ציון רכיב לא חוקי (0–100)" }, { status: 400 });
+    }
+    if (!validateSubItemScores(g.subItemScores)) {
+      return NextResponse.json({ error: "ציון תת-מטלה לא חוקי (0–100)" }, { status: 400 });
+    }
   }
 
   const results = await upsertGrades(
@@ -62,6 +71,8 @@ export async function PUT(req: NextRequest) {
     grades.map((g) => ({
       obligationId: g.obligationId,
       score: g.score,
+      componentScores: g.componentScores,
+      subItemScores: g.subItemScores,
       status: g.status as SubmissionStatus,
       notes: g.notes,
     }))

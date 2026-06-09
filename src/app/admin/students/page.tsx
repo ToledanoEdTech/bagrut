@@ -7,20 +7,34 @@ import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
+import { ExportButton } from "@/components/ui/ExportButton";
+import { SearchInput } from "@/components/ui/SearchInput";
+import {
+  buildStudentsSheet,
+  downloadExcel,
+  exportTimestamp,
+} from "@/lib/excel-export";
 
 type Student = {
   id: string;
   mathUnits: number;
   englishUnits: number;
+  mandatorySubjectIds: string[] | null;
   user: { name: string; email: string };
-  class: { id: string; name: string; examPath: { label: string } } | null;
+  class: { id: string; name: string; examPath: { id: string; label: string } } | null;
   tracks: { id: string; name: string }[];
   track: { id: string; name: string } | null;
 };
 
 type ClassOption = { id: string; name: string };
-type ClassItem = { id: string; name: string; gradeYear: string | null };
+type ClassItem = { id: string; name: string; gradeYear: string | null; examPathId: string };
 type TrackOption = { id: string; name: string };
+type SubjectOption = {
+  id: string;
+  name: string;
+  category: string;
+  pathLinks?: { path: { id: string; label: string; key: string } }[];
+};
 
 type EditForm = {
   name: string;
@@ -29,6 +43,8 @@ type EditForm = {
   trackIds: string[];
   mathUnits: number;
   englishUnits: number;
+  /** null = all mandatory subjects from path */
+  mandatorySubjectIds: string[] | null;
 };
 
 const emptyForm = (classes: ClassOption[]): EditForm => ({
@@ -38,6 +54,7 @@ const emptyForm = (classes: ClassOption[]): EditForm => ({
   trackIds: [],
   mathUnits: 3,
   englishUnits: 3,
+  mandatorySubjectIds: null,
 });
 
 type ClassGroup = {
@@ -53,6 +70,7 @@ export default function StudentsPage() {
     useApi<Student[]>("/api/students");
   const { data: classesRaw = [], mutate: refreshClasses } = useApi<ClassItem[]>("/api/classes");
   const { data: tracks = [], mutate: refreshTracks } = useApi<TrackOption[]>("/api/tracks");
+  const { data: allSubjects = [] } = useApi<SubjectOption[]>("/api/subjects");
   const classes: ClassOption[] = classesRaw.map((c) => ({ id: c.id, name: c.name }));
   const [editing, setEditing] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
@@ -60,6 +78,38 @@ export default function StudentsPage() {
   const [newForm, setNewForm] = useState<EditForm>(() => emptyForm([]));
   const [saveError, setSaveError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [editExamPathId, setEditExamPathId] = useState<string | null>(null);
+  const [newExamPathId, setNewExamPathId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const mandatoryForPath = (pathId: string | null) =>
+    allSubjects.filter(
+      (s) =>
+        s.category === "MANDATORY" &&
+        (pathId ? s.pathLinks?.some((l) => l.path.id === pathId) : false)
+    );
+
+  const otherMandatoryForPath = (pathId: string | null) => {
+    const pathIds = new Set(mandatoryForPath(pathId).map((s) => s.id));
+    return allSubjects.filter((s) => s.category === "MANDATORY" && !pathIds.has(s.id));
+  };
+
+  const editPathMandatory = useMemo(
+    () => mandatoryForPath(editExamPathId),
+    [allSubjects, editExamPathId]
+  );
+  const editOtherMandatory = useMemo(
+    () => otherMandatoryForPath(editExamPathId),
+    [allSubjects, editExamPathId]
+  );
+  const newPathMandatory = useMemo(
+    () => mandatoryForPath(newExamPathId),
+    [allSubjects, newExamPathId]
+  );
+  const newOtherMandatory = useMemo(
+    () => otherMandatoryForPath(newExamPathId),
+    [allSubjects, newExamPathId]
+  );
 
   const classGroups = useMemo(() => {
     const classMeta = new Map(classesRaw.map((c) => [c.id, c]));
@@ -95,8 +145,47 @@ export default function StudentsPage() {
       });
   }, [students, classesRaw]);
 
+  const filteredClassGroups = useMemo(() => {
+    const q = search.trim();
+    if (!q) return classGroups;
+
+    const qLower = q.toLowerCase();
+    return classGroups
+      .map((group) => ({
+        ...group,
+        students: group.students.filter((s) => {
+          const trackNames =
+            s.tracks?.map((t) => t.name).join(" ") ?? s.track?.name ?? "";
+          return (
+            s.user.name.includes(q) ||
+            s.user.email.toLowerCase().includes(qLower) ||
+            group.name.includes(q) ||
+            trackNames.includes(q)
+          );
+        }),
+      }))
+      .filter((group) => group.students.length > 0);
+  }, [classGroups, search]);
+
+  const exportStudents = useMemo(() => {
+    if (search.trim()) {
+      return filteredClassGroups.flatMap((g) => g.students);
+    }
+    return students;
+  }, [students, filteredClassGroups, search]);
+
+  async function handleExport() {
+    await downloadExcel(`תלמידים_${exportTimestamp()}.xlsx`, [
+      buildStudentsSheet(exportStudents),
+    ]);
+  }
+
   async function load() {
     await Promise.all([refreshStudents(), refreshClasses(), refreshTracks()]);
+  }
+
+  function examPathIdForClass(classId: string) {
+    return classesRaw.find((c) => c.id === classId)?.examPathId ?? null;
   }
 
   function startEdit(s: Student) {
@@ -104,6 +193,7 @@ export default function StudentsPage() {
     setShowNew(false);
     setEditing(s.id);
     setSaveError("");
+    setEditExamPathId(examPathIdForClass(s.class.id));
     setForm({
       name: s.user.name,
       email: s.user.email,
@@ -111,7 +201,53 @@ export default function StudentsPage() {
       trackIds: s.tracks?.map((t) => t.id) ?? (s.track ? [s.track.id] : []),
       mathUnits: s.mathUnits,
       englishUnits: s.englishUnits,
+      mandatorySubjectIds: s.mandatorySubjectIds,
     });
+  }
+
+  function effectiveMandatoryIds(
+    mandatorySubjectIds: string[] | null,
+    pathMandatory: SubjectOption[]
+  ) {
+    if (mandatorySubjectIds === null) {
+      return pathMandatory.map((s) => s.id);
+    }
+    return mandatorySubjectIds;
+  }
+
+  function toggleMandatorySubject(
+    subjectId: string,
+    target: "edit" | "new",
+    pathMandatory: SubjectOption[]
+  ) {
+    const current = target === "edit" ? form : newForm;
+    if (!current) return;
+
+    const pathIds = pathMandatory.map((s) => s.id);
+    const selected = effectiveMandatoryIds(current.mandatorySubjectIds, pathMandatory);
+
+    const next = selected.includes(subjectId)
+      ? selected.filter((id) => id !== subjectId)
+      : [...selected, subjectId];
+
+    const isDefault =
+      next.length === pathIds.length && pathIds.every((id) => next.includes(id));
+
+    const mandatorySubjectIds = isDefault ? null : next;
+
+    if (target === "edit" && form) {
+      setForm({ ...form, mandatorySubjectIds });
+    } else {
+      setNewForm({ ...newForm, mandatorySubjectIds });
+    }
+  }
+
+  function isMandatorySelected(
+    subjectId: string,
+    mandatorySubjectIds: string[] | null,
+    pathMandatory: SubjectOption[]
+  ) {
+    return effectiveMandatoryIds(mandatorySubjectIds, pathMandatory).includes(subjectId);
   }
 
   function toggleTrack(trackId: string, target: "edit" | "new") {
@@ -145,6 +281,7 @@ export default function StudentsPage() {
           trackIds: newForm.trackIds,
           mathUnits: newForm.mathUnits,
           englishUnits: newForm.englishUnits,
+          mandatorySubjectIds: newForm.mandatorySubjectIds,
         }),
       });
       const data = await res.json();
@@ -165,7 +302,10 @@ export default function StudentsPage() {
   function openNewForm() {
     setEditing(null);
     setForm(null);
+    setEditExamPathId(null);
     setSaveError("");
+    const initialClass = classes[0];
+    setNewExamPathId(initialClass ? examPathIdForClass(initialClass.id) : null);
     setNewForm(emptyForm(classes));
     setShowNew(true);
   }
@@ -185,6 +325,7 @@ export default function StudentsPage() {
           trackIds: form.trackIds,
           mathUnits: form.mathUnits,
           englishUnits: form.englishUnits,
+          mandatorySubjectIds: form.mandatorySubjectIds,
         }),
       });
       const data = await res.json();
@@ -209,7 +350,77 @@ export default function StudentsPage() {
   function cancelEdit() {
     setEditing(null);
     setForm(null);
+    setEditExamPathId(null);
     setSaveError("");
+  }
+
+  function renderMandatorySubjects(
+    pathMandatory: SubjectOption[],
+    otherMandatory: SubjectOption[],
+    mandatorySubjectIds: string[] | null,
+    target: "edit" | "new"
+  ) {
+    if (pathMandatory.length === 0 && otherMandatory.length === 0) return null;
+
+    return (
+      <div className="mt-4 space-y-4">
+        <div>
+          <label className="label">מקצועות חובה</label>
+          <p className="mb-2 text-xs text-slate-500">
+            ניתן להסיר מקצועות ממסלול הכיתה, או להוסיף מקצועות חובה ממסלולים אחרים
+          </p>
+        </div>
+
+        {pathMandatory.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-medium text-slate-600">מסלול הכיתה</p>
+            <div className="flex flex-wrap gap-2">
+              {pathMandatory.map((s) => (
+                <label
+                  key={s.id}
+                  className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isMandatorySelected(s.id, mandatorySubjectIds, pathMandatory)}
+                    onChange={() => toggleMandatorySubject(s.id, target, pathMandatory)}
+                    className="rounded"
+                  />
+                  {s.name}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {otherMandatory.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-medium text-slate-600">ממסלולים אחרים</p>
+            <div className="flex flex-wrap gap-2">
+              {otherMandatory.map((s) => (
+                <label
+                  key={s.id}
+                  className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isMandatorySelected(s.id, mandatorySubjectIds, pathMandatory)}
+                    onChange={() => toggleMandatorySubject(s.id, target, pathMandatory)}
+                    className="rounded"
+                  />
+                  <span>{s.name}</span>
+                  {s.pathLinks && s.pathLinks.length > 0 && (
+                    <span className="text-slate-400">
+                      ({s.pathLinks.map((l) => l.path.label).join(", ")})
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   }
 
   function renderStudentRow(s: Student) {
@@ -247,15 +458,18 @@ export default function StudentsPage() {
                 <select
                   className="input py-1.5"
                   value={form.class.id}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const classId = e.target.value;
+                    setEditExamPathId(examPathIdForClass(classId));
                     setForm({
                       ...form,
                       class: {
-                        id: e.target.value,
-                        name: classes.find((c) => c.id === e.target.value)?.name ?? "",
+                        id: classId,
+                        name: classes.find((c) => c.id === classId)?.name ?? "",
                       },
-                    })
-                  }
+                      mandatorySubjectIds: null,
+                    });
+                  }}
                 >
                   {classes.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -312,6 +526,12 @@ export default function StudentsPage() {
                 ))}
               </div>
             </div>
+            {renderMandatorySubjects(
+              editPathMandatory,
+              editOtherMandatory,
+              form.mandatorySubjectIds,
+              "edit"
+            )}
             <div className="mt-4 flex gap-2">
               <Button onClick={save} size="sm">
                 <Save className="h-4 w-4" />
@@ -363,7 +583,7 @@ export default function StudentsPage() {
       <>
         <PageHeader
           title="ניהול תלמידים"
-          subtitle="הוספה ידנית, עריכת שיוכים, מגמות, רמות יחידות (מתמטיקה/אנגלית) וכיתות"
+          subtitle="הוספה ידנית, עריכת שיוכים, מגמות, מקצועות חובה, רמות יחידות (מתמטיקה/אנגלית) וכיתות"
         />
         <div className="mt-8">
           <PageLoader variant="table" />
@@ -376,18 +596,33 @@ export default function StudentsPage() {
     <>
       <PageHeader
         title="ניהול תלמידים"
-        subtitle="הוספה ידנית, עריכת שיוכים, מגמות, רמות יחידות (מתמטיקה/אנגלית) וכיתות"
+        subtitle="הוספה ידנית, עריכת שיוכים, מגמות, מקצועות חובה, רמות יחידות (מתמטיקה/אנגלית) וכיתות"
       >
-        <Button
-          onClick={openNewForm}
-          disabled={classes.length === 0}
-          className="shrink-0"
-          title={classes.length === 0 ? "יש ליצור כיתה לפני הוספת תלמיד" : undefined}
-        >
-          <Plus className="h-4 w-4" />
-          תלמיד חדש
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <ExportButton
+            onExport={handleExport}
+            disabled={exportStudents.length === 0}
+          />
+          <Button
+            onClick={openNewForm}
+            disabled={classes.length === 0}
+            className="shrink-0"
+            title={classes.length === 0 ? "יש ליצור כיתה לפני הוספת תלמיד" : undefined}
+          >
+            <Plus className="h-4 w-4" />
+            תלמיד חדש
+          </Button>
+        </div>
       </PageHeader>
+
+      <div className="mt-6">
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="חיפוש לפי שם, אימייל, כיתה או מגמה..."
+          className="max-w-md"
+        />
+      </div>
 
       {saveError && (
         <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
@@ -424,15 +659,18 @@ export default function StudentsPage() {
               <select
                 className="input"
                 value={newForm.class.id}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const classId = e.target.value;
+                  setNewExamPathId(examPathIdForClass(classId));
                   setNewForm({
                     ...newForm,
                     class: {
-                      id: e.target.value,
-                      name: classes.find((c) => c.id === e.target.value)?.name ?? "",
+                      id: classId,
+                      name: classes.find((c) => c.id === classId)?.name ?? "",
                     },
-                  })
-                }
+                    mandatorySubjectIds: null,
+                  });
+                }}
               >
                 {classes.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -493,6 +731,12 @@ export default function StudentsPage() {
               ))}
             </div>
           </div>
+          {renderMandatorySubjects(
+            newPathMandatory,
+            newOtherMandatory,
+            newForm.mandatorySubjectIds,
+            "new"
+          )}
           <div className="mt-4 flex gap-3">
             <button onClick={createNew} disabled={creating} className="btn-primary">
               <Save className="h-4 w-4" />
@@ -501,6 +745,7 @@ export default function StudentsPage() {
             <button
               onClick={() => {
                 setShowNew(false);
+                setNewExamPathId(null);
                 setSaveError("");
               }}
               className="btn-secondary"
@@ -514,8 +759,12 @@ export default function StudentsPage() {
       <div className="mt-8 space-y-6">
         {classGroups.length === 0 ? (
           <div className="card p-8 text-center text-slate-500">אין תלמידים במערכת</div>
+        ) : filteredClassGroups.length === 0 ? (
+          <div className="card p-8 text-center text-slate-500">
+            לא נמצאו תלמידים התואמים לחיפוש &quot;{search}&quot;
+          </div>
         ) : (
-          classGroups.map((group) => (
+          filteredClassGroups.map((group) => (
             <section key={group.id} className="card overflow-hidden">
               <div className="border-b border-slate-100 bg-slate-50 px-5 py-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">

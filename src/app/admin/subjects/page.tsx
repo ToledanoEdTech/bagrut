@@ -1,11 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp, Pencil } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
+import { ExportButton } from "@/components/ui/ExportButton";
+import { SearchInput } from "@/components/ui/SearchInput";
+import {
+  buildSubjectsSheets,
+  downloadExcel,
+  exportTimestamp,
+} from "@/lib/excel-export";
 import {
   ObligationEditor,
   EMPTY_OBLIGATION,
@@ -90,6 +97,7 @@ export default function SubjectsPage() {
   const { data: subjects = [], loading, mutate: refreshSubjects } = useApi<Subject[]>("/api/subjects");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [editingSubject, setEditingSubject] = useState<string | null>(null);
   const [subjectDraft, setSubjectDraft] = useState({ name: "", units: 5, category: "MANDATORY" });
@@ -116,7 +124,33 @@ export default function SubjectsPage() {
     }
   }
 
-  const filtered = subjects.filter((s) => filter === "all" || s.category === filter);
+  const filtered = useMemo(() => {
+    let list = subjects.filter((s) => filter === "all" || s.category === filter);
+
+    const q = search.trim();
+    if (q) {
+      list = list.filter(
+        (s) =>
+          s.name.includes(q) ||
+          s.obligations.some(
+            (o) =>
+              o.name?.includes(q) ||
+              o.questionnaireNumber?.includes(q) ||
+              o.studyMaterial?.includes(q)
+          )
+      );
+    }
+
+    return list.sort((a, b) => a.name.localeCompare(b.name, "he"));
+  }, [subjects, filter, search]);
+
+  async function handleExport() {
+    const exportList =
+      search.trim() || filter !== "all"
+        ? filtered
+        : subjects.sort((a, b) => a.name.localeCompare(b.name, "he"));
+    await downloadExcel(`מקצועות_${exportTimestamp()}.xlsx`, buildSubjectsSheets(exportList));
+  }
 
   if (loading && subjects.length === 0) {
     return <PageLoader />;
@@ -242,10 +276,13 @@ export default function SubjectsPage() {
         title="מקצועות ומטלות"
         subtitle="לכל מטלה: אחוז מהציון הסופי, סוג היבחנות, ושקלול פנימי / עבודות"
       >
-        <Button type="button" onClick={() => setShowNew(true)}>
-          <Plus className="h-4 w-4" />
-          מקצוע חדש
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <ExportButton onExport={handleExport} disabled={subjects.length === 0} />
+          <Button type="button" onClick={() => setShowNew(true)}>
+            <Plus className="h-4 w-4" />
+            מקצוע חדש
+          </Button>
+        </div>
       </PageHeader>
 
       {error && (
@@ -261,7 +298,14 @@ export default function SubjectsPage() {
         </div>
       )}
 
-      <div className="mt-6 flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
+      <div className="mt-6 flex flex-wrap items-center gap-4">
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="חיפוש לפי שם מקצוע או מטלה..."
+          className="max-w-md flex-1"
+        />
+        <div className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
         {[
           { key: "all", label: "הכל" },
           ...Object.entries(categories).map(([k, v]) => ({ key: k, label: v })),
@@ -279,6 +323,7 @@ export default function SubjectsPage() {
             {f.label}
           </button>
         ))}
+        </div>
       </div>
 
       {showNew && (
@@ -374,6 +419,11 @@ export default function SubjectsPage() {
       )}
 
       <div className="mt-6 space-y-3">
+        {filtered.length === 0 && subjects.length > 0 && (
+          <div className="card p-8 text-center text-slate-500">
+            לא נמצאו מקצועות התואמים לחיפוש &quot;{search}&quot;
+          </div>
+        )}
         {filtered.map((subject) => {
           const totalWeight = subject.obligations.reduce((s, o) => s + o.weightPercent, 0);
           const isOpen = expanded === subject.id;

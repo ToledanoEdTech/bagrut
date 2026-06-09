@@ -12,6 +12,17 @@ import {
   type StudentWithRelations,
   type SubjectContext,
 } from "@/lib/student-subjects";
+import {
+  calcWeightedComponentScore,
+  calcWeightedSubItemScore,
+  expandObligationMatrixTasks,
+  hasSeparateComponentGrades,
+  hasSubItemGrades,
+  normalizeComponents,
+  normalizeSubItems,
+  type MatrixTaskKind,
+  type MatrixTaskOption,
+} from "@/lib/grade-components";
 import type { Class, ExamPath, Student } from "@/lib/types";
 
 function withClass(student: Student, cls: Class): StudentWithRelations {
@@ -72,9 +83,7 @@ export async function getMatrixOptions(classId: string) {
       obligations: Map<
         string,
         {
-          id: string;
-          name: string | null;
-          questionnaireNumber: string | null;
+          obligation: (typeof ctx.allSubjects)[0]["obligations"][0];
           relevantStudentCount: number;
         }
       >;
@@ -105,12 +114,7 @@ export async function getMatrixOptions(classId: string) {
         if (existing) {
           existing.relevantStudentCount++;
         } else {
-          entry.obligations.set(ob.id, {
-            id: ob.id,
-            name: ob.name,
-            questionnaireNumber: ob.questionnaireNumber,
-            relevantStudentCount: 1,
-          });
+          entry.obligations.set(ob.id, { obligation: ob, relevantStudentCount: 1 });
         }
       }
     }
@@ -121,12 +125,19 @@ export async function getMatrixOptions(classId: string) {
       id: s.id,
       name: s.name,
       units: s.units,
-      obligations: Array.from(s.obligations.values()),
+      tasks: Array.from(s.obligations.values()).flatMap(({ obligation, relevantStudentCount }) =>
+        expandObligationMatrixTasks(obligation, relevantStudentCount)
+      ),
     })),
   };
 }
 
-export async function getMatrixData(classId: string, obligationId: string) {
+export async function getMatrixData(
+  classId: string,
+  obligationId: string,
+  taskKind?: MatrixTaskKind,
+  taskSortOrder?: number
+) {
   const found = await findObligation(obligationId);
   if (!found) throw new Error("מטלה לא נמצאה");
 
@@ -153,6 +164,62 @@ export async function getMatrixData(classId: string, obligationId: string) {
     obligationId
   );
 
+  const subItems = normalizeSubItems(found.obligation.subItems);
+  const components = normalizeComponents(found.obligation.components);
+  const usesSubItems = hasSubItemGrades(subItems);
+
+  let selectedTaskName = "ציון";
+  let tableComponents: Array<{ name: string; weightPercent: number; sortOrder: number }> = [];
+
+  if (taskKind === "subItem" && taskSortOrder != null) {
+    const selected = subItems.find((s) => s.sortOrder === taskSortOrder);
+    if (selected) {
+      selectedTaskName = selected.name ?? "ציון";
+      tableComponents = [
+        {
+          name: selectedTaskName,
+          weightPercent: selected.weightPercent,
+          sortOrder: selected.sortOrder,
+        },
+      ];
+    }
+  } else if (taskKind === "component" && taskSortOrder != null) {
+    const selected = components.find((c) => c.sortOrder === taskSortOrder);
+    if (selected) {
+      selectedTaskName = selected.name ?? "ציון";
+      tableComponents = [
+        {
+          name: selectedTaskName,
+          weightPercent: selected.weightPercent,
+          sortOrder: selected.sortOrder,
+        },
+      ];
+    }
+  } else if (usesSubItems) {
+    tableComponents = subItems.map((s) => ({
+      name: s.name ?? "ציון",
+      weightPercent: s.weightPercent,
+      sortOrder: s.sortOrder,
+    }));
+  } else if (hasSeparateComponentGrades(components)) {
+    tableComponents = components.map((c) => ({
+      name: c.name ?? "ציון",
+      weightPercent: c.weightPercent,
+      sortOrder: c.sortOrder,
+    }));
+  } else if (components.length === 1) {
+    selectedTaskName = components[0]!.name ?? "ציון";
+    tableComponents = [
+      {
+        name: selectedTaskName,
+        weightPercent: components[0]!.weightPercent,
+        sortOrder: components[0]!.sortOrder,
+      },
+    ];
+  } else {
+    tableComponents = [{ name: "ציון", weightPercent: 100, sortOrder: 0 }];
+  }
+
   return {
     class: { id: cls.id, name: cls.name, gradeYear: cls.gradeYear },
     subject: {
@@ -166,15 +233,34 @@ export async function getMatrixData(classId: string, obligationId: string) {
       questionnaireNumber: found.obligation.questionnaireNumber,
       weightPercent: found.obligation.weightPercent,
       examType: found.obligation.examType,
+      taskKind: taskKind ?? null,
+      taskSortOrder: taskSortOrder ?? null,
+      components: tableComponents,
     },
     rows: relevantStudents.map((s) => {
       const grade = gradesMap.get(s.id);
+      let itemScore: number | null = null;
+
+      if (taskKind === "subItem" && taskSortOrder != null) {
+        itemScore = grade?.subItemScores?.[taskSortOrder] ?? null;
+      } else if (taskKind === "component" && taskSortOrder != null) {
+        itemScore = grade?.componentScores?.[taskSortOrder] ?? null;
+      } else if (usesSubItems) {
+        itemScore = calcWeightedSubItemScore(subItems, grade?.subItemScores);
+      } else if (hasSeparateComponentGrades(components)) {
+        itemScore = calcWeightedComponentScore(components, grade?.componentScores);
+      } else {
+        itemScore = grade?.score ?? null;
+      }
+
       return {
         studentId: s.id,
         studentName: s.name,
         grade: grade
           ? {
-              score: grade.score,
+              score: itemScore,
+              componentScores: grade.componentScores ?? null,
+              subItemScores: grade.subItemScores ?? null,
               status: grade.status,
               notes: grade.notes,
             }
@@ -184,6 +270,8 @@ export async function getMatrixData(classId: string, obligationId: string) {
     notRelevantCount,
   };
 }
+
+export type { MatrixTaskOption };
 
 export async function isObligationRelevantForStudent(
   student: Student,

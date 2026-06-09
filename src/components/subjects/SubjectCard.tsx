@@ -5,6 +5,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import clsx from "clsx";
+import {
+  hasSeparateComponentGrades,
+  hasSubItemGrades,
+  normalizeComponents,
+  normalizeSubItems,
+  resolveObligationGradeScore,
+} from "@/lib/grade-components";
 import { STATUS_LABELS, isValidSubmissionStatus } from "@/lib/grade-status";
 
 type Obligation = {
@@ -16,13 +23,15 @@ type Obligation = {
   studyMaterial: string | null;
   examEvent: string | null;
   gradeYear: string | null;
-  components: Array<{ name: string; weightPercent: number }>;
-  subItems: Array<{ name: string; weightPercent: number }>;
+  components: Array<{ name: string; weightPercent: number; sortOrder?: number }>;
+  subItems: Array<{ name: string; weightPercent: number; sortOrder?: number }>;
 };
 
 type Grade = {
   obligationId: string;
   score: number | null;
+  componentScores?: Record<number, number | null> | null;
+  subItemScores?: Record<number, number | null> | null;
   status: string;
   notes?: string | null;
 };
@@ -111,6 +120,12 @@ export function SubjectCard({
                       ? grade.status
                       : "NOT_STARTED";
                   const status = STATUS_LABELS[statusKey];
+                  const normalizedSubItems = normalizeSubItems(o.subItems);
+                  const normalizedComponents = normalizeComponents(o.components);
+                  const usesSubItems = hasSubItemGrades(normalizedSubItems);
+                  const multiComponent =
+                    !usesSubItems && hasSeparateComponentGrades(normalizedComponents);
+                  const displayScore = resolveObligationGradeScore(o, grade ?? {});
 
                   return (
                     <div
@@ -177,39 +192,107 @@ export function SubjectCard({
                                 </option>
                               ))}
                             </select>
-                            <input
-                              type="number"
-                              min={0}
-                              max={100}
-                              className="input w-24 py-2 text-base"
-                              placeholder="ציון"
-                              value={grade?.score ?? ""}
-                              onChange={(e) =>
-                                onGradeChange(
-                                  o.id,
-                                  "score",
-                                  e.target.value ? parseFloat(e.target.value) : null
-                                )
-                              }
-                            />
+                            {!usesSubItems && multiComponent ? (
+                              <div className="flex flex-wrap items-center gap-2">
+                                {o.components.map((c, i) => {
+                                  const sortOrder = c.sortOrder ?? i;
+                                  return (
+                                    <label
+                                      key={sortOrder}
+                                      className="flex flex-col items-end gap-1"
+                                    >
+                                      <span className="text-xs font-medium text-slate-600">
+                                        {c.name} ({c.weightPercent}%)
+                                      </span>
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        className="input w-24 py-2 text-base"
+                                        placeholder="ציון"
+                                        value={grade?.componentScores?.[sortOrder] ?? ""}
+                                        onChange={(e) =>
+                                          onGradeChange(
+                                            o.id,
+                                            `componentScore:${sortOrder}`,
+                                            e.target.value ? parseFloat(e.target.value) : null
+                                          )
+                                        }
+                                      />
+                                    </label>
+                                  );
+                                })}
+                                {displayScore != null && (
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="text-xs font-medium text-slate-600">
+                                      ציון משוקלל
+                                    </span>
+                                    <span className="flex h-10 w-16 items-center justify-center rounded-lg bg-primary-50 text-lg font-bold text-primary-600">
+                                      {displayScore}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : !usesSubItems ? (
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                className="input w-24 py-2 text-base"
+                                placeholder="ציון"
+                                value={grade?.score ?? ""}
+                                onChange={(e) =>
+                                  onGradeChange(
+                                    o.id,
+                                    "score",
+                                    e.target.value ? parseFloat(e.target.value) : null
+                                  )
+                                }
+                              />
+                            ) : displayScore != null ? (
+                              <div className="flex flex-col items-end gap-1">
+                                <span className="text-xs font-medium text-slate-600">ציון משוקלל</span>
+                                <span className="flex h-10 w-16 items-center justify-center rounded-lg bg-primary-50 text-lg font-bold text-primary-600">
+                                  {displayScore}
+                                </span>
+                              </div>
+                            ) : null}
                           </div>
                         ) : (
-                          grade?.score != null && (
+                          displayScore != null && (
                             <div
                               className={clsx(
                                 "flex h-16 w-16 shrink-0 items-center justify-center rounded-xl text-2xl font-bold",
-                                grade.score >= 70
+                                displayScore >= 70
                                   ? "bg-emerald-50 text-emerald-600"
-                                  : grade.score >= 55
+                                  : displayScore >= 55
                                     ? "bg-amber-50 text-amber-600"
                                     : "bg-red-50 text-red-600"
                               )}
                             >
-                              {grade.score}
+                              {displayScore}
                             </div>
                           )
                         )}
                       </div>
+
+                      {multiComponent && readOnly && grade?.componentScores && (
+                        <div className="mt-4 border-t border-slate-100 pt-4">
+                          <p className="mb-2 text-base font-semibold text-slate-800">ציוני רכיבים:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {o.components.map((c, i) => {
+                              const sortOrder = c.sortOrder ?? i;
+                              const componentScore = grade.componentScores?.[sortOrder];
+                              if (componentScore == null) return null;
+                              return (
+                                <span key={sortOrder} className="badge-muted text-sm font-medium">
+                                  {c.name}: <strong>{componentScore}</strong>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
                       {o.components.length > 0 && (
                         <div className="mt-4 border-t border-slate-100 pt-4">
@@ -224,21 +307,48 @@ export function SubjectCard({
                         </div>
                       )}
 
-                      {o.subItems.length > 0 && (
+                      {usesSubItems && (
                         <div className="mt-4 border-t border-slate-100 pt-4">
-                          <p className="mb-2 text-base font-semibold text-slate-800">פריטי משנה:</p>
+                          <p className="mb-2 text-base font-semibold text-slate-800">תתי מטלות:</p>
                           <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                            {o.subItems.map((si, i) => (
-                              <div
-                                key={i}
-                                className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-2.5 text-base"
-                              >
-                                <span className="font-medium text-slate-800">{si.name}</span>
-                                <span className="font-semibold text-primary-600">
-                                  {si.weightPercent}%
-                                </span>
-                              </div>
-                            ))}
+                            {o.subItems.map((si, i) => {
+                              const sortOrder = si.sortOrder ?? i;
+                              const subItemScore = grade?.subItemScores?.[sortOrder];
+                              return (
+                                <div
+                                  key={sortOrder}
+                                  className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-4 py-2.5 text-base"
+                                >
+                                  <div className="min-w-0">
+                                    <span className="font-medium text-slate-800">{si.name}</span>
+                                    <span className="me-2 text-sm text-primary-600">
+                                      ({si.weightPercent}%)
+                                    </span>
+                                  </div>
+                                  {!readOnly && onGradeChange ? (
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      className="input w-20 py-1.5 text-sm"
+                                      placeholder="ציון"
+                                      value={subItemScore ?? ""}
+                                      onChange={(e) =>
+                                        onGradeChange(
+                                          o.id,
+                                          `subItemScore:${sortOrder}`,
+                                          e.target.value ? parseFloat(e.target.value) : null
+                                        )
+                                      }
+                                    />
+                                  ) : subItemScore != null ? (
+                                    <span className="shrink-0 font-bold text-primary-600">
+                                      {subItemScore}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}

@@ -41,7 +41,16 @@ export function resolveRelevantSubjects(
     .map((id) => subjectById.get(id))
     .filter(Boolean) as Subject[];
 
-  const mandatory = pathSubjects.filter((s) => s.category === "MANDATORY");
+  const pathMandatory = pathSubjects.filter((s) => s.category === "MANDATORY");
+  const mandatoryById = new Map(
+    allSubjects.filter((s) => s.category === "MANDATORY").map((s) => [s.id, s])
+  );
+  const mandatory =
+    student.mandatorySubjectIds === undefined || student.mandatorySubjectIds === null
+      ? pathMandatory
+      : (student.mandatorySubjectIds
+          .map((id) => mandatoryById.get(id))
+          .filter(Boolean) as Subject[]);
 
   const math = allSubjects.find(
     (s) => s.category === "MATH" && s.units === student.mathUnits
@@ -115,4 +124,44 @@ export async function buildStudentWithRelations(
       gradeYear: cls?.gradeYear ?? null,
     },
   };
+}
+
+export async function resolveMandatorySubjectIdsForClass(
+  classId: string,
+  mandatorySubjectIds: string[] | null | undefined
+): Promise<string[] | undefined> {
+  if (mandatorySubjectIds === undefined) return undefined;
+  if (mandatorySubjectIds === null) return undefined;
+  if (mandatorySubjectIds.length === 0) return [];
+
+  const cls = await getClassById(classId);
+  if (!cls) {
+    throw new Error("כיתה לא נמצאה");
+  }
+
+  const examPath = await getExamPathById(cls.examPathId);
+  if (!examPath) {
+    throw new Error("תוכנית חובה לא נמצאה");
+  }
+
+  const allSubjects = await listSubjects();
+  const mandatoryById = new Map(
+    allSubjects.filter((s) => s.category === "MANDATORY").map((s) => [s.id, s])
+  );
+
+  const invalid = mandatorySubjectIds.filter((id) => !mandatoryById.has(id));
+  if (invalid.length > 0) {
+    throw new Error("מקצועות חובה לא תקינים");
+  }
+
+  const pathMandatoryIds = examPath.subjectIds.filter((id) => mandatoryById.has(id));
+  const selected = mandatorySubjectIds.filter((id) => mandatoryById.has(id));
+  if (
+    selected.length === pathMandatoryIds.length &&
+    pathMandatoryIds.every((id) => selected.includes(id))
+  ) {
+    return undefined;
+  }
+
+  return selected;
 }

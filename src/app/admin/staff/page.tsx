@@ -4,6 +4,13 @@ import { useState } from "react";
 import { Plus, Trash2, UserCog } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ExportButton } from "@/components/ui/ExportButton";
+import {
+  buildStaffSheet,
+  downloadExcel,
+  exportTimestamp,
+} from "@/lib/excel-export";
 
 type StaffMember = { id: string; email: string; name: string; role: string };
 
@@ -39,18 +46,22 @@ export default function StaffPage() {
     load();
   }
 
+  async function handleExport() {
+    await downloadExcel(`צוות_${exportTimestamp()}.xlsx`, [buildStaffSheet(staff)]);
+  }
+
   if (loading && staff.length === 0) {
     return <PageLoader />;
   }
 
   return (
     <>
-      <header className="-mx-8 -mt-8 border-b border-slate-200 bg-white px-8 py-6">
-        <h1 className="text-2xl font-bold text-slate-900">ניהול צוות מורים</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          הוספת מורים שיוכלו להתחבר עם Google ולהזין ציונים
-        </p>
-      </header>
+      <PageHeader
+        title="ניהול צוות מורים"
+        subtitle="הוספת מורים שיוכלו להתחבר עם Google ולהזין ציונים"
+      >
+        <ExportButton onExport={handleExport} disabled={staff.length === 0} />
+      </PageHeader>
 
       <div className="mt-8 card p-6">
         <h2 className="font-semibold">הוספת מורה</h2>
