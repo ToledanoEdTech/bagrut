@@ -103,7 +103,7 @@ const ROUTE_PREFETCH: Record<string, string[]> = {
   "/admin/subjects": ["/api/subjects"],
   "/admin/grades": ["/api/students", "/api/classes/list"],
   "/admin/grades/matrix": ["/api/classes/list"],
-  "/admin/grades/import": [],
+  "/admin/grades/import": ["/api/classes/list", "/api/grades/import/template"],
   "/admin/import": [],
   "/admin/staff": ["/api/staff"],
   "/student": ["/api/student/dashboard"],

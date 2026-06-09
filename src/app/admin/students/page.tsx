@@ -547,29 +547,38 @@ export default function StudentsPage() {
       );
     }
 
+    const trackText = s.tracks?.length
+      ? s.tracks.map((t) => t.name).join(", ")
+      : s.track?.name ?? "—";
+
     return (
-      <tr key={s.id} className="even:bg-slate-50/30 hover:bg-primary-50/20">
-        <td className="px-4 py-3 font-medium">{s.user.name}</td>
-        <td className="px-4 py-3 text-slate-500" dir="ltr">
+      <tr key={s.id} className="transition-colors even:bg-slate-50/40 hover:bg-primary-50/30">
+        <td className="truncate px-4 py-3 font-semibold text-slate-800" title={s.user.name}>
+          {s.user.name}
+        </td>
+        <td className="truncate px-4 py-3 text-slate-500" dir="ltr" title={s.user.email}>
           {s.user.email}
         </td>
-        <td className="px-4 py-3">
-          {s.tracks?.length
-            ? s.tracks.map((t) => t.name).join(", ")
-            : s.track?.name ?? "—"}
+        <td className="truncate px-4 py-3 text-slate-600" title={trackText}>
+          {trackText}
         </td>
-        <td className="px-4 py-3">{s.mathUnits}</td>
-        <td className="px-4 py-3">{s.englishUnits}</td>
+        <td className="px-4 py-3 text-center tabular-nums text-slate-700">{s.mathUnits}</td>
+        <td className="px-4 py-3 text-center tabular-nums text-slate-700">{s.englishUnits}</td>
         <td className="px-4 py-3">
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => startEdit(s)}
               disabled={!s.class}
-              className="text-primary-600 hover:text-primary-700 disabled:opacity-40"
+              aria-label="עריכה"
+              className="rounded-lg p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700 disabled:opacity-40 disabled:hover:bg-transparent"
             >
               <Pencil className="h-4 w-4" />
             </button>
-            <button onClick={() => remove(s.id)} className="text-red-500 hover:text-red-600">
+            <button
+              onClick={() => remove(s.id)}
+              aria-label="מחיקה"
+              className="rounded-lg p-1.5 text-red-500 transition hover:bg-red-50 hover:text-red-600"
+            >
               <Trash2 className="h-4 w-4" />
             </button>
           </div>
@@ -780,25 +789,33 @@ export default function StudentsPage() {
                 )}
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-base">
-                  <thead className="sticky top-0 z-10 bg-white">
-                    <tr className="border-b border-slate-200 text-slate-600">
-                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wide">
+                <table className="w-full min-w-[880px] table-fixed text-base">
+                  <colgroup>
+                    <col className="w-[22%]" />
+                    <col className="w-[28%]" />
+                    <col className="w-[24%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[8%]" />
+                  </colgroup>
+                  <thead className="bg-slate-50/80">
+                    <tr className="border-b border-slate-200 text-slate-500">
+                      <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide">
                         שם
                       </th>
-                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wide">
+                      <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide">
                         אימייל
                       </th>
-                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wide">
+                      <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide">
                         מגמות
                       </th>
-                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wide">
+                      <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide">
                         מתמטיקה
                       </th>
-                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wide">
+                      <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide">
                         אנגלית
                       </th>
-                      <th className="px-4 py-3 text-right text-sm font-semibold uppercase tracking-wide">
+                      <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide">
                         פעולות
                       </th>
                     </tr>

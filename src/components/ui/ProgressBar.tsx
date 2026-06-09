@@ -10,25 +10,29 @@ export function ProgressBar({
   color?: "primary" | "success" | "warning";
 }) {
   const fills = {
-    primary: "bg-gradient-to-l from-primary-500 to-primary-600",
-    success: "bg-gradient-to-l from-emerald-500 to-emerald-600",
-    warning: "bg-gradient-to-l from-amber-500 to-amber-600",
+    primary: "from-primary-500 to-brand-600",
+    success: "from-emerald-500 to-teal-500",
+    warning: "from-amber-500 to-orange-500",
   };
+
+  const clamped = Math.min(100, Math.max(0, value));
 
   return (
     <div
       className={clsx(
-        "h-2.5 w-full overflow-hidden rounded-full bg-slate-100",
+        "relative h-2.5 w-full overflow-hidden rounded-full bg-slate-200/70 shadow-inner",
         className
       )}
     >
       <div
         className={clsx(
-          "h-full rounded-full transition-all duration-700 ease-out",
+          "relative h-full rounded-full bg-gradient-to-l transition-all duration-700 ease-out",
           fills[color]
         )}
-        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
-      />
+        style={{ width: `${clamped}%` }}
+      >
+        <div className="absolute inset-0 rounded-full bg-gradient-to-b from-white/40 to-transparent" />
+      </div>
     </div>
   );
 }

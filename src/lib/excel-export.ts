@@ -1,6 +1,22 @@
 import ExcelJS from "exceljs";
-import { STATUS_LABELS } from "@/lib/grade-status";
+import { obligationDisplayLabel } from "@/lib/grade-components";
+import { STATUS_LABELS, SUBMISSION_STATUSES } from "@/lib/grade-status";
 import type { SubmissionStatus } from "@/lib/types";
+
+type DataValidationRule = {
+  type: string;
+  operator?: string;
+  allowBlank?: boolean;
+  formulae: Array<string | number>;
+  showErrorMessage?: boolean;
+  errorStyle?: string;
+  errorTitle?: string;
+  error?: string;
+};
+
+type WorksheetWithValidations = ExcelJS.Worksheet & {
+  dataValidations: { add: (sqref: string, rule: DataValidationRule) => void };
+};
 
 export type ExportColumn = {
   header: string;
@@ -405,4 +421,198 @@ export function buildClassStudentsSheet(
     ...sheet,
     title: `תלמידי כיתה ${className} (${students.length})`,
   };
+}
+
+const LISTS_SHEET = "Lists";
+const IMPORT_COLUMNS = [
+  { header: "כיתה", key: "className", width: 14 },
+  { header: "מקצוע", key: "subjectName", width: 18 },
+  { header: "מטלה", key: "obligationName", width: 28 },
+  { header: "שם תלמיד", key: "studentName", width: 20 },
+  { header: "ציון", key: "score", width: 10 },
+  { header: "סטטוס", key: "status", width: 14 },
+] as const;
+
+export type GradesImportTemplateInput = {
+  classes: string[];
+  subjects: string[];
+  obligations: string[];
+  statuses: string[];
+  students?: string[];
+  prefilledClass?: string;
+  prefilledSubject?: string;
+  prefilledObligation?: string;
+};
+
+function writeListColumn(
+  ws: ExcelJS.Worksheet,
+  col: number,
+  values: string[]
+): string {
+  values.forEach((value, i) => {
+    ws.getCell(i + 1, col).value = value;
+  });
+  const colLetter = ws.getColumn(col).letter;
+  return values.length > 0
+    ? `${LISTS_SHEET}!$${colLetter}$1:$${colLetter}$${values.length}`
+    : "";
+}
+
+function applyListValidation(
+  ws: ExcelJS.Worksheet,
+  columnLetter: string,
+  firstDataRow: number,
+  lastDataRow: number,
+  range: string
+) {
+  if (!range) return;
+  (ws as WorksheetWithValidations).dataValidations.add(
+    `${columnLetter}${firstDataRow}:${columnLetter}${lastDataRow}`,
+    {
+    type: "list",
+    allowBlank: true,
+    formulae: [range],
+    showErrorMessage: true,
+    errorStyle: "warning",
+    errorTitle: "ערך לא תקין",
+    error: "יש לבחור ערך מהרשימה",
+    }
+  );
+}
+
+export function buildObligationLabels(
+  subjects: Array<{
+    name: string;
+    obligations: Array<{ name: string | null; questionnaireNumber: string | null }>;
+  }>
+): string[] {
+  const labels = new Set<string>();
+  for (const subject of subjects) {
+    for (const ob of subject.obligations) {
+      labels.add(obligationDisplayLabel(ob));
+    }
+  }
+  return Array.from(labels).sort((a, b) => a.localeCompare(b, "he"));
+}
+
+export async function downloadGradesImportTemplate(
+  filename: string,
+  input: GradesImportTemplateInput
+): Promise<void> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Bagrut Manager";
+  workbook.created = new Date();
+
+  const listsWs = workbook.addWorksheet(LISTS_SHEET);
+  listsWs.state = "veryHidden";
+
+  const classRange = writeListColumn(listsWs, 1, input.classes);
+  const subjectRange = writeListColumn(listsWs, 2, input.subjects);
+  const obligationRange = writeListColumn(listsWs, 3, input.obligations);
+  const statusRange = writeListColumn(
+    listsWs,
+    4,
+    input.statuses.length > 0
+      ? input.statuses
+      : SUBMISSION_STATUSES.map((s) => STATUS_LABELS[s].label)
+  );
+  const studentRange = writeListColumn(listsWs, 5, input.students ?? []);
+
+  const title = input.students?.length
+    ? `תבנית ייבוא ציונים — ${input.prefilledClass ?? "כיתה"} (${input.students.length} תלמידים)`
+    : "תבנית ייבוא ציונים";
+
+  const ws = workbook.addWorksheet("ייבוא ציונים", {
+    views: [{ rightToLeft: true, state: "frozen", ySplit: 2 }],
+  });
+
+  ws.mergeCells(1, 1, 1, IMPORT_COLUMNS.length);
+  const titleCell = ws.getCell(1, 1);
+  titleCell.value = title;
+  titleCell.font = { bold: true, size: 14, color: { argb: "FF1E293B" } };
+  titleCell.alignment = { horizontal: "right", vertical: "middle" };
+  titleCell.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFEEF2FF" },
+  };
+  ws.getRow(1).height = 30;
+
+  const headerRow = ws.getRow(2);
+  IMPORT_COLUMNS.forEach((col, i) => {
+    const cell = headerRow.getCell(i + 1);
+    cell.value = col.header;
+    cell.font = HEADER_FONT;
+    cell.fill = HEADER_FILL;
+    cell.alignment = { horizontal: "right", vertical: "middle" };
+    cell.border = THIN_BORDER;
+  });
+  headerRow.height = 24;
+
+  const prefilledRows =
+    input.students?.map((studentName) => ({
+      className: input.prefilledClass ?? "",
+      subjectName: input.prefilledSubject ?? "",
+      obligationName: input.prefilledObligation ?? "",
+      studentName,
+      score: "",
+      status: "",
+    })) ?? [];
+
+  const rowCount = Math.max(prefilledRows.length, 50);
+  const dataStartRow = 3;
+
+  for (let idx = 0; idx < rowCount; idx++) {
+    const rowData = prefilledRows[idx];
+    const excelRow = ws.getRow(dataStartRow + idx);
+    IMPORT_COLUMNS.forEach((col, i) => {
+      const cell = excelRow.getCell(i + 1);
+      const val = rowData?.[col.key as keyof typeof rowData];
+      cell.value = val === null || val === undefined ? "" : val;
+      cell.alignment = { horizontal: "right", vertical: "middle", wrapText: true };
+      cell.border = THIN_BORDER;
+      if (idx % 2 === 1) {
+        cell.fill = ALT_ROW_FILL;
+      }
+    });
+    excelRow.height = 20;
+  }
+
+  IMPORT_COLUMNS.forEach((col, i) => {
+    ws.getColumn(i + 1).width = col.width;
+  });
+
+  const lastDataRow = dataStartRow + rowCount - 1;
+  applyListValidation(ws, "A", dataStartRow, lastDataRow, classRange);
+  applyListValidation(ws, "B", dataStartRow, lastDataRow, subjectRange);
+  applyListValidation(ws, "C", dataStartRow, lastDataRow, obligationRange);
+  if (studentRange) {
+    applyListValidation(ws, "D", dataStartRow, lastDataRow, studentRange);
+  }
+  applyListValidation(ws, "F", dataStartRow, lastDataRow, statusRange);
+
+  (ws as WorksheetWithValidations).dataValidations.add(
+    `E${dataStartRow}:E${lastDataRow}`,
+    {
+      type: "decimal",
+      operator: "between",
+      allowBlank: true,
+      formulae: [0, 100],
+      showErrorMessage: true,
+      errorStyle: "warning",
+      errorTitle: "ציון לא תקין",
+      error: "הציון חייב להיות בין 0 ל-100",
+    }
+  );
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`;
+  link.click();
+  URL.revokeObjectURL(url);
 }

@@ -3,7 +3,7 @@
 import { StatCardGrid } from "@/components/ui/StatCardGrid";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
-import { Users, BookOpen, Upload, ClipboardList } from "lucide-react";
+import { Users, BookOpen, Upload, ClipboardList, Target, Sparkles } from "lucide-react";
 import Link from "next/link";
 import clsx from "clsx";
 import { useAuth } from "@/components/AuthProvider";
@@ -69,25 +69,40 @@ export default function AdminDashboard() {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <div className="card p-6">
-          <h2 className="text-h2 text-slate-900">תוכניות חובה</h2>
-          <p className="mt-1 text-base text-slate-500">
-            {counts.paths} תוכניות חובה מוגדרות (מתמטיקה, אנגלית ומגמות נקבעים לפי תלמיד)
-          </p>
-          <div className="mt-4 space-y-2">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600 ring-1 ring-inset ring-primary-100">
+              <Target className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="text-h2 text-slate-900">תוכניות חובה</h2>
+              <p className="text-sm text-slate-500">
+                {counts.paths} תוכניות מוגדרות
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 space-y-2">
             {paths.map((p) => (
               <div
                 key={p.id}
-                className="rounded-xl bg-slate-50 px-4 py-3 transition hover:bg-white hover:shadow-sm"
+                className="group flex items-center gap-3 rounded-xl border border-transparent bg-slate-50 px-4 py-3 transition hover:border-primary-100 hover:bg-white hover:shadow-soft"
               >
-                <span className="text-base font-medium">{p.label}</span>
+                <span className="h-2 w-2 shrink-0 rounded-full bg-gradient-to-l from-primary-500 to-brand-500" />
+                <span className="text-base font-medium text-slate-700 group-hover:text-slate-900">
+                  {p.label}
+                </span>
               </div>
             ))}
           </div>
         </div>
 
         <div className="card p-6">
-          <h2 className="text-h2 text-slate-900">פעולות מהירות</h2>
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-100">
+              <Sparkles className="h-5 w-5" />
+            </span>
+            <h2 className="text-h2 text-slate-900">פעולות מהירות</h2>
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-3">
             {isAdmin && session && canImportStudents(session.role) && (
               <Link
                 href="/admin/import"

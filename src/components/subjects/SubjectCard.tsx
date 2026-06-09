@@ -56,8 +56,18 @@ export function SubjectCard({
   const [expanded, setExpanded] = useState(false);
   const gradeMap = new Map(grades.map((g) => [g.obligationId, g]));
 
+  const estGrade = progress.estimatedGrade;
+  const gradeTone =
+    estGrade == null
+      ? "text-slate-400"
+      : estGrade >= 70
+        ? "text-emerald-600"
+        : estGrade >= 55
+          ? "text-amber-600"
+          : "text-red-600";
+
   return (
-    <div className="card overflow-hidden hover:shadow-md">
+    <div className="card group overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -65,23 +75,28 @@ export function SubjectCard({
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <h3 className="text-xl font-bold text-slate-900">
-                {name}
-                {units && (
-                  <span className="me-2 text-base font-normal text-slate-500">
-                    ({units} יח&quot;ל)
-                  </span>
-                )}
-              </h3>
-              <p className="mt-1 text-base text-slate-500">
-                {obligations.length} חובות • {progress.progressPercent.toFixed(0)}% הושלם
-              </p>
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary-50 to-brand-50 text-base font-extrabold text-primary-600 ring-1 ring-inset ring-primary-100">
+                {name.slice(0, 2)}
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-xl font-bold text-slate-900">
+                  {name}
+                  {units && (
+                    <span className="me-2 text-base font-normal text-slate-500">
+                      ({units} יח&quot;ל)
+                    </span>
+                  )}
+                </h3>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  {obligations.length} חובות • {progress.progressPercent.toFixed(0)}% הושלם
+                </p>
+              </div>
             </div>
-            {progress.estimatedGrade != null && (
+            {estGrade != null && (
               <div className="shrink-0 text-end">
-                <p className="text-4xl font-extrabold text-primary-600">
-                  {progress.estimatedGrade.toFixed(0)}
+                <p className={clsx("text-4xl font-extrabold tabular-nums", gradeTone)}>
+                  {estGrade.toFixed(0)}
                 </p>
                 <p className="text-caption">ציון משוער</p>
               </div>
@@ -89,15 +104,15 @@ export function SubjectCard({
           </div>
           <ProgressBar
             value={progress.progressPercent}
-            className="mt-3 h-3"
+            className="mt-3 h-2.5"
             color={progress.progressPercent >= 70 ? "success" : "primary"}
           />
         </div>
-        <div className="shrink-0">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-400 transition group-hover:bg-primary-50 group-hover:text-primary-600">
           {expanded ? (
-            <ChevronUp className="h-5 w-5 text-slate-400" />
+            <ChevronUp className="h-5 w-5" />
           ) : (
-            <ChevronDown className="h-5 w-5 text-slate-400" />
+            <ChevronDown className="h-5 w-5" />
           )}
         </div>
       </button>

@@ -13,13 +13,13 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variants: Record<ButtonVariant, string> = {
   primary:
-    "bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-200",
+    "bg-gradient-to-l from-primary-600 to-brand-600 text-white shadow-glow hover:from-primary-500 hover:to-brand-500 hover:shadow-glow-lg focus-visible:ring-primary-400",
   secondary:
-    "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 focus:ring-primary-200",
+    "border border-slate-200 bg-white/90 text-slate-700 shadow-soft backdrop-blur-sm hover:border-primary-200 hover:bg-white hover:text-primary-700 hover:shadow-card focus-visible:ring-primary-300",
   ghost:
-    "bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus:ring-primary-200",
+    "bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-primary-300",
   danger:
-    "bg-red-600 text-white hover:bg-red-700 focus:ring-red-200",
+    "bg-gradient-to-l from-red-600 to-rose-600 text-white shadow-[0_8px_24px_-6px_rgba(220,38,38,0.45)] hover:from-red-500 hover:to-rose-500 focus-visible:ring-red-300",
 };
 
 const sizes: Record<ButtonSize, string> = {
@@ -38,7 +38,7 @@ export function Button({
   return (
     <button
       className={clsx(
-        "inline-flex items-center justify-center font-medium transition active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50",
+        "inline-flex items-center justify-center font-semibold transition-all duration-200 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
         variants[variant],
         sizes[size],
         className

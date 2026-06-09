@@ -28,3 +28,4 @@ prisma/*.db-journal
 tsconfig.tsbuildinfo
 __pycache__/
 *.pyc
+_diag*.png

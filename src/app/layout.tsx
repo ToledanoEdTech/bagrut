@@ -5,8 +5,9 @@ import { Providers } from "@/components/Providers";
 
 const heebo = Heebo({
   subsets: ["hebrew", "latin"],
-  weight: ["400", "600", "700"],
+  weight: ["300", "400", "500", "600", "700", "800", "900"],
   variable: "--font-heebo",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
