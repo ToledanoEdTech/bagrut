@@ -42,7 +42,7 @@ export function StatCardGrid({
       {items.map((item) => {
         const Icon = STAT_ICONS[item.icon];
         return (
-          <StaggerItem key={item.title}>
+          <StaggerItem key={item.title} className="min-w-0">
             <StatCard {...item} icon={Icon} />
           </StaggerItem>
         );

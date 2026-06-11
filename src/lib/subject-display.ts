@@ -1,7 +1,13 @@
-import type { ExamPath } from "@/lib/types";
+import type { ExamPath, SubjectCategory } from "@/lib/types";
 
 export type SubjectPathLink = {
   path: { id?: string; label: string; key?: string };
+};
+
+export type SubjectDisplayOptions = {
+  pathLabels?: string[] | null;
+  units?: number | null;
+  category?: SubjectCategory | string | null;
 };
 
 export function getPathLabels(pathLinks?: SubjectPathLink[] | null): string[] {
@@ -11,19 +17,41 @@ export function getPathLabels(pathLinks?: SubjectPathLink[] | null): string[] {
   );
 }
 
+export function subjectDisplaySuffixes(options?: SubjectDisplayOptions | null): string[] {
+  const suffixes: string[] = [];
+
+  if (options?.pathLabels?.length) {
+    suffixes.push(...options.pathLabels);
+  }
+
+  if (
+    (options?.category === "MATH" || options?.category === "ENGLISH") &&
+    options.units != null
+  ) {
+    suffixes.push(`${options.units} יח"ל`);
+  }
+
+  return suffixes;
+}
+
 export function formatSubjectDisplayName(
   name: string,
-  pathLabels?: string[] | null
+  options?: SubjectDisplayOptions | null
 ): string {
-  if (!pathLabels?.length) return name;
-  return `${name} (${pathLabels.join(", ")})`;
+  const suffixes = subjectDisplaySuffixes(options);
+  if (!suffixes.length) return name;
+  return `${name} (${suffixes.join(", ")})`;
 }
 
 export function formatSubjectWithPathLinks(
   name: string,
-  pathLinks?: SubjectPathLink[] | null
+  pathLinks?: SubjectPathLink[] | null,
+  options?: Omit<SubjectDisplayOptions, "pathLabels"> | null
 ): string {
-  return formatSubjectDisplayName(name, getPathLabels(pathLinks));
+  return formatSubjectDisplayName(name, {
+    ...options,
+    pathLabels: getPathLabels(pathLinks),
+  });
 }
 
 export function buildPathLabelsBySubjectId(
@@ -50,7 +78,14 @@ export function buildPathLabelsBySubjectId(
   return map;
 }
 
-export function attachPathLabels<T extends { id: string; name: string }>(
+export function attachPathLabels<
+  T extends {
+    id: string;
+    name: string;
+    units?: number | null;
+    category?: SubjectCategory | string | null;
+  },
+>(
   subjects: T[],
   pathLabelsBySubjectId: Map<string, string[]>
 ): Array<T & { pathLabels: string[]; displayName: string }> {
@@ -59,12 +94,23 @@ export function attachPathLabels<T extends { id: string; name: string }>(
     return {
       ...subject,
       pathLabels,
-      displayName: formatSubjectDisplayName(subject.name, pathLabels),
+      displayName: formatSubjectDisplayName(subject.name, {
+        pathLabels,
+        units: subject.units,
+        category: subject.category,
+      }),
     };
   });
 }
 
-export function attachPathLabelsFromLinks<T extends { id: string; name: string }>(
+export function attachPathLabelsFromLinks<
+  T extends {
+    id: string;
+    name: string;
+    units?: number | null;
+    category?: SubjectCategory | string | null;
+  },
+>(
   subjects: T[],
   pathLinksBySubjectId: Map<string, SubjectPathLink[]>
 ): Array<T & { pathLabels: string[]; displayName: string }> {
@@ -73,7 +119,11 @@ export function attachPathLabelsFromLinks<T extends { id: string; name: string }
     return {
       ...subject,
       pathLabels,
-      displayName: formatSubjectDisplayName(subject.name, pathLabels),
+      displayName: formatSubjectDisplayName(subject.name, {
+        pathLabels,
+        units: subject.units,
+        category: subject.category,
+      }),
     };
   });
 }

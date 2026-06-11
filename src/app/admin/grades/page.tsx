@@ -39,6 +39,7 @@ type Subject = {
   name: string;
   pathLabels?: string[];
   displayName?: string;
+  category?: string | null;
   units: number | null;
   obligations: Array<{
     id: string;
@@ -502,6 +503,7 @@ export default function GradesPage() {
                   <SubjectCard
                     name={subject.name}
                     pathLabels={subject.pathLabels}
+                    category={subject.category}
                     units={subject.units}
                     obligations={subject.obligations}
                     grades={subjectGrades}

@@ -45,6 +45,7 @@ type MatrixOptions = {
     name: string;
     displayName?: string;
     pathLabels?: string[];
+    category?: string | null;
     units: number | null;
     tasks: MatrixTask[];
   }>;
@@ -57,6 +58,7 @@ type MatrixData = {
     name: string;
     displayName?: string;
     pathLabels?: string[];
+    category?: string | null;
     units: number | null;
   };
   obligation: {
@@ -300,12 +302,16 @@ export default function GradesMatrixPage() {
             disabled={!classId || optionsLoading}
           >
             <option value="">— בחר מקצוע —</option>
-            {(options?.subjects ?? []).map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.displayName ?? s.name}
-                {s.units ? ` (${s.units} יח"ל)` : ""}
-              </option>
-            ))}
+              {(options?.subjects ?? []).map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.displayName ?? s.name}
+                  {s.units &&
+                  s.category !== "MATH" &&
+                  s.category !== "ENGLISH"
+                    ? ` (${s.units} יח"ל)`
+                    : ""}
+                </option>
+              ))}
           </Select>
 
           <Select
@@ -345,7 +351,11 @@ export default function GradesMatrixPage() {
               )}
               <span className="block text-slate-500">
                 {matrixData.subject.displayName ?? matrixData.subject.name}
-                {matrixData.subject.units ? ` (${matrixData.subject.units} יח"ל)` : ""}
+                {matrixData.subject.units &&
+                matrixData.subject.category !== "MATH" &&
+                matrixData.subject.category !== "ENGLISH"
+                  ? ` (${matrixData.subject.units} יח"ל)`
+                  : ""}
                 {" — "}
                 {taskHeaderLabel}
               </span>

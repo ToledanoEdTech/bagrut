@@ -38,7 +38,7 @@ export function StatCard({
   }[color];
 
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white p-5 shadow-card transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-card-hover">
+    <div className="group relative h-full w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200/70 bg-white p-5 shadow-card transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-card-hover">
       <span
         className={clsx(
           "absolute inset-x-0 top-0 h-1 bg-gradient-to-l opacity-80",
@@ -57,7 +57,9 @@ export function StatCard({
           <p className="mt-2 text-4xl font-extrabold tracking-tight text-slate-900">
             {value}
           </p>
-          {subtitle && <p className="mt-1.5 text-sm text-slate-400">{subtitle}</p>}
+          {subtitle && (
+            <p className="mt-1.5 truncate text-sm text-slate-400">{subtitle}</p>
+          )}
         </div>
         <div
           className={clsx(

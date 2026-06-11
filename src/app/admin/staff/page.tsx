@@ -39,8 +39,12 @@ type ClassItem = { id: string; name: string; gradeYear: string | null };
 type SubjectItem = {
   id: string;
   name: string;
+  units: number | null;
+  category: string;
   pathLinks?: Array<{ path: { label: string } }>;
 };
+
+type SubjectPickerItem = { id: string; name: string };
 
 type PermissionForm = {
   scopeMode: "all" | "gradeYear" | "class" | "subject";
@@ -70,7 +74,7 @@ function PermissionFields({
   form: PermissionForm;
   setForm: (f: PermissionForm) => void;
   classes: ClassItem[];
-  subjects: SubjectItem[];
+  subjects: SubjectPickerItem[];
   gradeYears: string[];
 }) {
   return (
@@ -202,7 +206,7 @@ function PermissionFields({
 function formatPermissionSummary(
   member: StaffMember,
   classes: ClassItem[],
-  subjects: SubjectItem[]
+  subjects: SubjectPickerItem[]
 ): string {
   if (member.role === "ADMIN") return "מנהל — הרשאות מלאות";
   if (!member.permissions?.length) return "ללא הרשאות";
@@ -222,9 +226,7 @@ function formatPermissionSummary(
       }
       if (p.scope === "subject") {
         const sub = subjects.find((s) => s.id === p.subjectId);
-        items.push(
-          sub ? formatSubjectWithPathLinks(sub.name, sub.pathLinks) : "מקצוע"
-        );
+        items.push(sub?.name ?? "מקצוע");
       }
     }
     if (items.length) parts.push(`ציונים: ${items.join(", ")}`);
@@ -290,7 +292,10 @@ export default function StaffPage() {
     () =>
       subjects.map((s) => ({
         id: s.id,
-        name: formatSubjectWithPathLinks(s.name, s.pathLinks),
+        name: formatSubjectWithPathLinks(s.name, s.pathLinks, {
+          units: s.units,
+          category: s.category,
+        }),
       })),
     [subjects]
   );

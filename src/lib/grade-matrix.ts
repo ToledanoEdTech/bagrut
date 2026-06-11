@@ -87,6 +87,7 @@ export async function getMatrixOptions(classId: string) {
       id: string;
       name: string;
       units: number | null;
+      category: (typeof ctx.allSubjects)[0]["category"];
       obligations: Map<
         string,
         {
@@ -112,6 +113,7 @@ export async function getMatrixOptions(classId: string) {
           id: subject.id,
           name: subject.name,
           units: subject.units,
+          category: subject.category,
           obligations: new Map(),
         });
       }
@@ -133,6 +135,7 @@ export async function getMatrixOptions(classId: string) {
         id: s.id,
         name: s.name,
         units: s.units,
+        category: s.category,
         tasks: Array.from(s.obligations.values()).flatMap(({ obligation, relevantStudentCount }) =>
           expandObligationMatrixTasks(obligation, relevantStudentCount)
         ),
@@ -238,8 +241,13 @@ export async function getMatrixData(
     subject: {
       id: found.subject.id,
       name: found.subject.name,
-      displayName: formatSubjectDisplayName(found.subject.name, subjectPathLabels),
+      displayName: formatSubjectDisplayName(found.subject.name, {
+        pathLabels: subjectPathLabels,
+        units: found.subject.units,
+        category: found.subject.category,
+      }),
       pathLabels: subjectPathLabels,
+      category: found.subject.category,
       units: found.subject.units,
     },
     obligation: {

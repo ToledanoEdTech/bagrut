@@ -512,7 +512,10 @@ export default function SubjectsPage() {
                       משקל {totalWeight}%
                     </span>
                     <h3 className="text-lg font-semibold">
-                      {formatSubjectWithPathLinks(subject.name, subject.pathLinks)}
+                      {formatSubjectWithPathLinks(subject.name, subject.pathLinks, {
+                        units: subject.units,
+                        category: subject.category,
+                      })}
                     </h3>
                   </div>
                   <p className="mt-1 text-sm text-slate-500">

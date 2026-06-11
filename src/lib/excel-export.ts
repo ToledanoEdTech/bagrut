@@ -237,7 +237,10 @@ export function buildSubjectsSheets(subjects: SubjectExportRow[]): ExportSheet[]
       { header: "מסלולים", key: "paths" },
     ],
     rows: sorted.map((s) => ({
-      name: formatSubjectWithPathLinks(s.name, s.pathLinks),
+      name: formatSubjectWithPathLinks(s.name, s.pathLinks, {
+        units: s.units,
+        category: s.category,
+      }),
       category: SUBJECT_CATEGORIES[s.category] ?? s.category,
       units: s.units ?? "—",
       obligationCount: s.obligations.length,
@@ -263,7 +266,10 @@ export function buildSubjectsSheets(subjects: SubjectExportRow[]): ExportSheet[]
     ],
     rows: sorted.flatMap((s) =>
       s.obligations.map((o) => ({
-        subject: formatSubjectWithPathLinks(s.name, s.pathLinks),
+        subject: formatSubjectWithPathLinks(s.name, s.pathLinks, {
+          units: s.units,
+          category: s.category,
+        }),
         taskName: o.name ?? o.examEvent ?? "—",
         questionnaire: o.questionnaireNumber ?? "—",
         weight: `${o.weightPercent}%`,
@@ -339,6 +345,7 @@ type GradeSubjectExport = {
   name: string;
   displayName?: string;
   pathLabels?: string[];
+  category?: string | null;
   units: number | null;
   obligations: Array<{
     id: string;
@@ -367,7 +374,13 @@ export function buildStudentGradesSheet(
     subject.obligations.map((o) => {
       const grade = gradeMap.get(o.id);
       return {
-        subject: subject.displayName ?? formatSubjectDisplayName(subject.name, subject.pathLabels),
+        subject:
+          subject.displayName ??
+          formatSubjectDisplayName(subject.name, {
+            pathLabels: subject.pathLabels,
+            units: subject.units,
+            category: subject.category,
+          }),
         units: subject.units ?? "—",
         task: o.name ?? "—",
         questionnaire: o.questionnaireNumber ?? "—",

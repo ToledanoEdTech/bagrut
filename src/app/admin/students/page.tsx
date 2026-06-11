@@ -43,6 +43,7 @@ type TrackOption = { id: string; name: string };
 type SubjectOption = {
   id: string;
   name: string;
+  units: number | null;
   category: string;
   pathLinks?: { path: { id: string; label: string; key: string } }[];
 };

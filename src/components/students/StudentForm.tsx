@@ -22,6 +22,7 @@ type TrackOption = { id: string; name: string };
 type SubjectOption = {
   id: string;
   name: string;
+  units: number | null;
   category: string;
   pathLinks?: { path: { id: string; label: string; key: string } }[];
 };
@@ -212,7 +213,10 @@ export function StudentForm({
                       onChange={() => toggleMandatorySubject(s.id)}
                       className="rounded"
                     />
-                    {formatSubjectWithPathLinks(s.name, s.pathLinks)}
+                    {formatSubjectWithPathLinks(s.name, s.pathLinks, {
+                      units: s.units,
+                      category: s.category,
+                    })}
                   </label>
                 ))}
               </div>
@@ -233,7 +237,12 @@ export function StudentForm({
                       onChange={() => toggleMandatorySubject(s.id)}
                       className="rounded"
                     />
-                    <span>{formatSubjectWithPathLinks(s.name, s.pathLinks)}</span>
+                    <span>
+                      {formatSubjectWithPathLinks(s.name, s.pathLinks, {
+                        units: s.units,
+                        category: s.category,
+                      })}
+                    </span>
                   </label>
                 ))}
               </div>

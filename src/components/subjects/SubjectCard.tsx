@@ -40,6 +40,7 @@ type Grade = {
 export function SubjectCard({
   name,
   pathLabels,
+  category,
   units,
   obligations,
   grades,
@@ -49,6 +50,7 @@ export function SubjectCard({
 }: {
   name: string;
   pathLabels?: string[];
+  category?: string | null;
   units?: number | null;
   obligations: Obligation[];
   grades: Grade[];
@@ -58,7 +60,9 @@ export function SubjectCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const gradeMap = new Map(grades.map((g) => [g.obligationId, g]));
-  const displayName = formatSubjectDisplayName(name, pathLabels);
+  const displayName = formatSubjectDisplayName(name, { pathLabels, units, category });
+  const showUnitsSeparately =
+    units != null && category !== "MATH" && category !== "ENGLISH";
 
   const estGrade = progress.estimatedGrade;
   const gradeTone =
@@ -86,7 +90,7 @@ export function SubjectCard({
               <div className="min-w-0">
                 <h3 className="text-xl font-bold text-slate-900">
                   {displayName}
-                  {units && (
+                  {showUnitsSeparately && (
                     <span className="me-2 text-base font-normal text-slate-500">
                       ({units} יח&quot;ל)
                     </span>

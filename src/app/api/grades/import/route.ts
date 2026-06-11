@@ -93,11 +93,13 @@ export async function POST(req: NextRequest) {
   const subjectByName = new Map<string, Subject>();
   for (const subject of subjects) {
     const pathLabels = pathLabelsBySubjectId.get(subject.id) ?? [];
+    const displayName = formatSubjectDisplayName(subject.name, {
+      pathLabels,
+      units: subject.units,
+      category: subject.category,
+    });
     subjectByName.set(subject.name.trim().toLowerCase(), subject);
-    subjectByName.set(
-      formatSubjectDisplayName(subject.name, pathLabels).trim().toLowerCase(),
-      subject
-    );
+    subjectByName.set(displayName.trim().toLowerCase(), subject);
   }
 
   const parsedRows: Array<{ rowNum: number; data: ImportRow | null; error?: string }> = [];

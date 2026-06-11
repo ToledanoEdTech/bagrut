@@ -20,6 +20,7 @@ export type StudentDashboardData = {
     id: string;
     name: string;
     pathLabels?: string[];
+    category?: string | null;
     units: number | null;
     obligations: Array<{
       id: string;
@@ -145,6 +146,7 @@ export function StudentDashboardContent({
                 <SubjectCard
                   name={subject.name}
                   pathLabels={subject.pathLabels}
+                  category={subject.category}
                   units={subject.units}
                   obligations={subject.obligations}
                   grades={subject.grades}
