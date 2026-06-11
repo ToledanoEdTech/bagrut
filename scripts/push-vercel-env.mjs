@@ -3,6 +3,8 @@ import { join } from "path";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
 
+const PRODUCTION_APP_URL = "https://bagrut-two.vercel.app";
+
 const envPath = join(process.cwd(), ".env.local");
 if (!existsSync(envPath)) {
   console.error("חסר קובץ .env.local");
@@ -19,6 +21,11 @@ const keys = [
   "FIREBASE_PROJECT_ID",
   "FIREBASE_CLIENT_EMAIL",
   "FIREBASE_PRIVATE_KEY",
+  "SMTP_USER",
+  "SMTP_APP_PASSWORD",
+  "MAIL_FROM",
+  "APP_URL",
+  "CRON_SECRET",
 ];
 
 const env = {};
@@ -35,32 +42,47 @@ for (const line of readFileSync(envPath, "utf-8").split("\n")) {
   env[key] = value;
 }
 
-for (const key of keys) {
+function setEnv(key, value, target) {
+  try {
+    execSync(`npx vercel env rm ${key} ${target} --yes`, { stdio: "ignore" });
+  } catch {}
+
+  const tmpFile = join(tmpdir(), `vercel-env-${key}-${target}.txt`);
+  writeFileSync(tmpFile, value, "utf-8");
+  try {
+    execSync(`cmd /c "npx vercel env add ${key} ${target} < "${tmpFile}""`, {
+      stdio: "inherit",
+      shell: true,
+    });
+    console.log(`  ✓ ${key} (${target})`);
+  } catch (e) {
+    console.error(`  ✗ שגיאה ב-${key} (${target}):`, e.message);
+  } finally {
+    try {
+      unlinkSync(tmpFile);
+    } catch {}
+  }
+}
+
+const only = process.argv.slice(2);
+const toPush = only.length ? only : keys;
+
+console.log("מעלה משתני סביבה ל-Vercel...\n");
+
+for (const key of toPush) {
   if (!env[key]) {
     console.warn(`דילוג על ${key} (ריק)`);
     continue;
   }
   console.log(`מגדיר ${key}...`);
-  for (const target of ["production", "preview", "development"]) {
-    try {
-      execSync(`npx vercel env rm ${key} ${target} --yes`, { stdio: "ignore" });
-    } catch {}
-
-    const tmpFile = join(tmpdir(), `vercel-env-${key}.txt`);
-    writeFileSync(tmpFile, env[key], "utf-8");
-    try {
-      execSync(`cmd /c "npx vercel env add ${key} ${target} < "${tmpFile}""`, {
-        stdio: "inherit",
-        shell: true,
-      });
-    } catch (e) {
-      console.error(`שגיאה בהגדרת ${key} (${target}):`, e.message);
-    } finally {
-      try {
-        unlinkSync(tmpFile);
-      } catch {}
+  for (const target of ["production"]) {
+    let value = env[key];
+    if (key === "APP_URL") {
+      value = PRODUCTION_APP_URL;
     }
+    setEnv(key, value, target);
   }
 }
 
-console.log("סיום העלאת משתני סביבה ל-Vercel");
+console.log("\nסיום העלאת משתני סביבה ל-Vercel");
+console.log(`APP_URL בפרודקשן: ${PRODUCTION_APP_URL}`);

@@ -16,6 +16,7 @@ import {
   LogOut,
   GraduationCap,
   UserCog,
+  Bell,
   X,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
@@ -42,6 +43,7 @@ const managementLinks: NavLink[] = [
   { href: "/admin/subjects", label: "מקצועות וחובות", icon: BookOpen },
   { href: "/admin/import", label: "ייבוא תלמידים", icon: Upload },
   { href: "/admin/staff", label: "צוות והרשאות", icon: UserCog },
+  { href: "/admin/settings", label: "תזכורות ציונים", icon: Bell },
 ];
 
 function getInitials(name: string): string {
@@ -150,6 +152,7 @@ export function Sidebar({
             !canManageStructure(role)
           )
             return false;
+          if (l.href === "/admin/settings" && role !== "ADMIN") return false;
           return true;
         });
 

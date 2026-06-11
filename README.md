@@ -68,18 +68,86 @@ npm run db:seed
 npm run dev
 ```
 
+## תזכורות אוטומטיות להזנת ציונים
+
+מערכת שולחת מייל תזכורת בעברית (RTL) כאשר חלף תאריך היעד להזנת ציונים במטלה ועדיין חסרים ציונים.
+
+### למי נשלח
+
+לכל מטלה באיחור — מייל ל:
+
+- **מנהלים** (תפקיד ADMIN + מנהלי-על)
+- **רכז שכבה** (מורה עם הרשאת `grades:write` לפי שכבה)
+- **מורה מקצועי** (מורה עם הרשאת `grades:write` למקצוע הרלוונטי)
+
+תזכורת נשלחת **ביום למחרת** תאריך היעד להזנה, בשעה **08:00** (שעון ישראל) — רק אם הציונים לא הוזנו עד תאריך היעד. כל מטלה שולחת תזכורת **פעם אחת** לכל נמען.
+
+### הגדרת תאריך יעד
+
+בעמוד **מקצועות וחובות** → עריכת מטלה → שדה **"תאריך אחרון להזנת ציונים"**.
+
+### ניהול והפעלה
+
+עמוד **תזכורות ציונים** (`/admin/settings`):
+
+- מתג הפעלה/כיבוי גלובלי
+- סטטוס ריצה אחרונה
+- סימולציה (dry run) ושליחה ידנית (force)
+- בדיקת SMTP
+
+בעמוד **צוות והרשאות** — כפתור opt-out פר משתמש ("תזכורות מייל").
+
+### משתני סביבה (Vercel)
+
+העתק מ-`.env.example`:
+
+| משתנה | תיאור |
+|--------|--------|
+| `SMTP_USER` | כתובת Gmail Workspace |
+| `SMTP_APP_PASSWORD` | App Password (16 תווים) |
+| `MAIL_FROM` | חייב להתאים ל-`SMTP_USER` |
+| `APP_URL` | כתובת האתר (לקישור במייל) |
+| `CRON_SECRET` | סוד לאימות cron ובדיקות |
+
+### הגדרת Gmail App Password
+
+1. ב-[Google Account](https://myaccount.google.com/) → **Security** → הפעל **2-Step Verification**
+2. **Security** → **App passwords** → צור סיסמה לאפליקציה "Mail"
+3. העתק את 16 התווים (ללא רווחים) ל-`SMTP_APP_PASSWORD` ב-Vercel
+4. הגדר `SMTP_USER` ו-`MAIL_FROM` לאותה כתובת Workspace
+5. ב-Vercel → Project → Settings → Environment Variables → הוסף את כל המשתנים
+6. **חשוב:** ודא ש-`CRON_SECRET` לא נחתך — השתמש במחרוזת ארוכה (32+ תווים)
+
+### Cron
+
+רץ **כל יום בשעה 08:00 שעון ישראל** (05:00 UTC בקיץ) — בודק מטלות שתאריך היעד שלהן היה אתמול — מוגדר ב-`vercel.json`.
+
+### בדיקות (curl)
+
+```bash
+# סימולציה — מי היה מקבל, בלי שליחה
+curl -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/grade-reminders?dryRun=1"
+
+# מייל בדיקה
+curl -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/test-email?to=your@email.com"
+
+# שליחה אמיתית (מתעלם מ-dedup)
+curl -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/grade-reminders?force=1"
+```
+
 ## מבנה Firestore
 
 | Collection | תיאור |
 |------------|--------|
 | `users` | פרופילי משתמשים מחוברים |
 | `students` | תלמידים (מקושרים לאימייל) |
-| `staff` | מורים מורשים |
+| `staff` | מורים מורשים (+ `gradeReminderOptOut`) |
 | `examPaths` | מסלולי היבחנות |
 | `classes` | כיתות |
 | `tracks` | מגמות |
-| `subjects` | מקצועות + חובות (מוטמע) |
+| `subjects` | מקצועות + חובות (מוטמע, כולל `gradeEntryDueDate`) |
 | `grades` | ציונים |
+| `settings/general` | הגדרות מערכת (תזכורות מייל) |
 
 ## ייבוא תוכנית לימודים
 

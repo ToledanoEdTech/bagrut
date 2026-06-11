@@ -105,6 +105,16 @@ export async function getStaffByEmail(email: string): Promise<StaffRecord | null
   return { id: doc.id, ...doc.data() } as StaffRecord;
 }
 
+export async function listStaff(): Promise<StaffRecord[]> {
+  const snap = await adminDb.collection("staff").orderBy("email").get();
+  return docsData<StaffRecord>(snap);
+}
+
+export async function listAllGrades(): Promise<Grade[]> {
+  const snap = await adminDb.collection("grades").get();
+  return docsData<Grade>(snap);
+}
+
 /** מורים קיימים ללא שדה permissions מקבלים גישה מלאה (תאימות לאחור) */
 export function resolveStaffPermissions(staff: StaffRecord | null): StaffPermission[] | undefined {
   if (!staff) return undefined;

@@ -1,0 +1,359 @@
+import { resolveObligationGradeScore, obligationDisplayLabel } from "@/lib/grade-components";
+import { LEGACY_TEACHER_PERMISSIONS } from "@/lib/permissions";
+import { ADMIN_EMAILS } from "@/lib/roles";
+import type {
+  Class,
+  ExamPath,
+  Grade,
+  Obligation,
+  StaffPermission,
+  StaffRecord,
+  Student,
+  Subject,
+  Track,
+} from "@/lib/types";
+import { resolveRelevantSubjects, type StudentWithRelations } from "@/lib/student-subjects";
+
+export const GRADE_REMINDER_TIMEZONE = "Asia/Jerusalem";
+export const DEFAULT_MIN_THRESHOLD = 1;
+export const MAX_ITEMS_IN_EMAIL = 5;
+
+export interface GradeReminderSettings {
+  enabled?: boolean;
+  minThreshold?: number;
+  lastRunAt?: string;
+  lastRunSummary?: GradeReminderRunSummary;
+  lastSentByRecipient?: Record<string, string>;
+}
+
+export interface GradeReminderRunSummary {
+  sent: number;
+  skipped: number;
+  errors: number;
+  dryRun?: boolean;
+  at?: string;
+}
+
+export interface ReminderRecipient {
+  id: string;
+  name: string;
+  email: string;
+  active: boolean;
+  gradeReminderOptOut?: boolean;
+}
+
+export interface OverdueGradeItem {
+  obligationId: string;
+  subjectId: string;
+  subjectName: string;
+  obligationLabel: string;
+  examEvent: string | null;
+  gradeYear: string | null;
+  gradeEntryDueDate: string;
+  missingStudentCount: number;
+  classNames: string[];
+  affectedClassIds: string[];
+  affectedGradeYears: string[];
+}
+
+export interface RecipientReminderPlan {
+  recipient: ReminderRecipient;
+  items: OverdueGradeItem[];
+}
+
+export type ReminderSkipReason =
+  | "inactive"
+  | "opt_out"
+  | "no_email"
+  | "already_sent"
+  | "below_threshold"
+  | "no_items";
+
+export interface RecipientRunResult {
+  recipientId: string;
+  email: string;
+  name: string;
+  status: "sent" | "skipped" | "error" | "dry_run";
+  reason?: ReminderSkipReason;
+  itemCount?: number;
+  error?: string;
+}
+
+export function getIsraelYmd(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: GRADE_REMINDER_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function parseYmd(ymd: string): { y: number; m: number; d: number } {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return { y: y!, m: m!, d: d! };
+}
+
+function addDaysYmd(ymd: string, days: number): string {
+  const { y, m, d } = parseYmd(ymd);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return dt.toISOString().slice(0, 10);
+}
+
+/** תאריך הריצה הנוכחי (ישראל) — לתצוגה ולוגים */
+export function getPeriodKey(date: Date = new Date()): string {
+  return getIsraelYmd(date);
+}
+
+/** יום שליחת התזכורת = יום למחרת תאריך היעד */
+export function getReminderSendDate(dueDate: string): string {
+  return addDaysYmd(dueDate, 1);
+}
+
+export function isReminderSendDay(dueDate: string, today: string): boolean {
+  return getReminderSendDate(dueDate) === today;
+}
+
+export function reminderDedupKey(
+  recipientId: string,
+  obligationId: string,
+  dueDate: string
+): string {
+  return `${recipientId}::${obligationId}::${dueDate}`;
+}
+
+export function filterUnsentReminderItems(
+  recipientId: string,
+  items: OverdueGradeItem[],
+  lastSentByRecipient: Record<string, string> | undefined,
+  force?: boolean
+): OverdueGradeItem[] {
+  if (force) return items;
+  return items.filter(
+    (item) =>
+      !lastSentByRecipient?.[
+        reminderDedupKey(recipientId, item.obligationId, item.gradeEntryDueDate)
+      ]
+  );
+}
+
+export function isGradeEntryIncomplete(
+  obligation: Pick<Obligation, "components" | "subItems">,
+  grade: Grade | undefined
+): boolean {
+  if (!grade) return true;
+  if (grade.status === "EXEMPT") return false;
+  if (grade.status === "NOT_STARTED" || grade.status === "IN_PROGRESS") return true;
+  const score = resolveObligationGradeScore(obligation, grade);
+  return score == null;
+}
+
+export interface GradeReminderDataInput {
+  today?: string;
+  subjects: Subject[];
+  students: Student[];
+  classes: Class[];
+  examPaths: ExamPath[];
+  tracks: Track[];
+  grades: Grade[];
+}
+
+function withClass(student: Student, cls: Class): StudentWithRelations {
+  return {
+    ...student,
+    class: {
+      examPathId: cls.examPathId,
+      name: cls.name,
+      gradeYear: cls.gradeYear,
+    },
+  };
+}
+
+function getStaffPermissions(staff: StaffRecord): StaffPermission[] {
+  if (staff.role === "ADMIN") return LEGACY_TEACHER_PERMISSIONS;
+  if (staff.permissions === undefined) return LEGACY_TEACHER_PERMISSIONS;
+  return staff.permissions;
+}
+
+function buildClassMaps(classes: Class[]) {
+  const byId = new Map(classes.map((c) => [c.id, c]));
+  return { byId };
+}
+
+function buildGradeMap(grades: Grade[]): Map<string, Grade> {
+  const map = new Map<string, Grade>();
+  for (const g of grades) {
+    map.set(`${g.studentId}::${g.obligationId}`, g);
+  }
+  return map;
+}
+
+export function collectOverdueGradeItems(input: GradeReminderDataInput): OverdueGradeItem[] {
+  const today = input.today ?? getIsraelYmd();
+  const { byId: classById } = buildClassMaps(input.classes);
+  const examPathById = new Map(input.examPaths.map((p) => [p.id, p]));
+  const tracksById = new Map(input.tracks.map((t) => [t.id, t]));
+  const gradeMap = buildGradeMap(input.grades);
+  const overdue: OverdueGradeItem[] = [];
+
+  for (const subject of input.subjects) {
+    for (const obligation of subject.obligations) {
+      const dueDate = obligation.gradeEntryDueDate;
+      if (!dueDate || !isReminderSendDay(dueDate, today)) continue;
+
+      const missingByClass = new Map<string, { name: string; gradeYear: string | null; count: number }>();
+      let missingTotal = 0;
+
+      for (const student of input.students) {
+        const cls = classById.get(student.classId);
+        if (!cls) continue;
+
+        const examPath = examPathById.get(cls.examPathId) ?? null;
+        const withRelations = withClass(student, cls);
+        const relevant = resolveRelevantSubjects(
+          withRelations,
+          input.subjects,
+          examPath,
+          tracksById
+        );
+        const matchedSubject = relevant.find((s) => s.id === subject.id);
+        if (!matchedSubject?.obligations.some((o) => o.id === obligation.id)) continue;
+
+        const grade = gradeMap.get(`${student.id}::${obligation.id}`);
+        if (!isGradeEntryIncomplete(obligation, grade)) continue;
+
+        missingTotal += 1;
+        const entry = missingByClass.get(cls.id) ?? {
+          name: cls.name,
+          gradeYear: cls.gradeYear,
+          count: 0,
+        };
+        entry.count += 1;
+        missingByClass.set(cls.id, entry);
+      }
+
+      if (missingTotal === 0) continue;
+
+      const affectedClassIds = [...missingByClass.keys()];
+      const affectedGradeYears = [
+        ...new Set(
+          [...missingByClass.values()]
+            .map((c) => c.gradeYear)
+            .filter((y): y is string => !!y)
+        ),
+      ];
+      const obligationGradeYear = obligation.gradeYear ?? affectedGradeYears[0] ?? null;
+
+      overdue.push({
+        obligationId: obligation.id,
+        subjectId: subject.id,
+        subjectName: subject.name,
+        obligationLabel: obligationDisplayLabel(obligation),
+        examEvent: obligation.examEvent,
+        gradeYear: obligationGradeYear,
+        gradeEntryDueDate: dueDate,
+        missingStudentCount: missingTotal,
+        classNames: [...missingByClass.values()].map((c) => c.name),
+        affectedClassIds,
+        affectedGradeYears,
+      });
+    }
+  }
+
+  overdue.sort((a, b) => a.gradeEntryDueDate.localeCompare(b.gradeEntryDueDate));
+  return overdue;
+}
+
+function matchesGradesWriteScope(
+  perm: StaffPermission,
+  item: OverdueGradeItem
+): boolean {
+  if (perm.action !== "grades:write") return false;
+  if (perm.scope === "all") return true;
+  if (perm.scope === "subject" && perm.subjectId === item.subjectId) return true;
+  if (perm.scope === "class" && item.affectedClassIds.includes(perm.classId)) return true;
+  if (perm.scope === "gradeYear") {
+    if (item.gradeYear && perm.gradeYear === item.gradeYear) return true;
+    if (item.affectedGradeYears.includes(perm.gradeYear)) return true;
+  }
+  return false;
+}
+
+export function staffShouldReceiveItem(staff: StaffRecord, item: OverdueGradeItem): boolean {
+  if (staff.role === "ADMIN") return true;
+  return getStaffPermissions(staff).some((p) => matchesGradesWriteScope(p, item));
+}
+
+export function buildReminderRecipients(staff: StaffRecord[]): ReminderRecipient[] {
+  const byEmail = new Map<string, ReminderRecipient>();
+
+  for (const member of staff) {
+    byEmail.set(member.email.toLowerCase(), {
+      id: member.id,
+      name: member.name,
+      email: member.email.toLowerCase(),
+      active: true,
+      gradeReminderOptOut: member.gradeReminderOptOut,
+    });
+  }
+
+  for (const email of ADMIN_EMAILS) {
+    const normalized = email.toLowerCase();
+    if (!byEmail.has(normalized)) {
+      byEmail.set(normalized, {
+        id: `admin:${normalized}`,
+        name: normalized.split("@")[0] ?? normalized,
+        email: normalized,
+        active: true,
+      });
+    }
+  }
+
+  return [...byEmail.values()];
+}
+
+export function buildReminderPlans(
+  recipients: ReminderRecipient[],
+  staff: StaffRecord[],
+  overdueItems: OverdueGradeItem[]
+): RecipientReminderPlan[] {
+  const staffById = new Map(staff.map((s) => [s.id, s]));
+  const staffByEmail = new Map(staff.map((s) => [s.email.toLowerCase(), s]));
+
+  const plans: RecipientReminderPlan[] = [];
+
+  for (const recipient of recipients) {
+    const staffMember =
+      staffById.get(recipient.id) ?? staffByEmail.get(recipient.email.toLowerCase());
+    const items = overdueItems.filter((item) => {
+      if (staffMember) return staffShouldReceiveItem(staffMember, item);
+      if (recipient.id.startsWith("admin:")) return true;
+      return false;
+    });
+    if (items.length > 0) {
+      plans.push({ recipient, items });
+    }
+  }
+
+  return plans;
+}
+
+export function shouldSendToRecipient(options: {
+  recipient: ReminderRecipient;
+  itemCount: number;
+  minThreshold: number;
+}): { send: boolean; reason?: ReminderSkipReason } {
+  const { recipient, itemCount, minThreshold } = options;
+
+  if (!recipient.active) return { send: false, reason: "inactive" };
+  if (recipient.gradeReminderOptOut) return { send: false, reason: "opt_out" };
+  if (!recipient.email?.trim()) return { send: false, reason: "no_email" };
+  if (itemCount < minThreshold) return { send: false, reason: "below_threshold" };
+  if (itemCount === 0) return { send: false, reason: "no_items" };
+
+  return { send: true };
+}
+
+export function formatDueDateHe(dueDate: string): string {
+  const [y, m, d] = dueDate.split("-");
+  return `${d}/${m}/${y}`;
+}

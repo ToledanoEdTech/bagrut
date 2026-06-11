@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
     studyMaterial: body.studyMaterial ?? null,
     examEvent: body.examEvent ?? null,
     gradeYear: body.gradeYear ?? null,
+    gradeEntryDueDate: body.gradeEntryDueDate ?? null,
     sortOrder: body.sortOrder ?? 0,
     components: (body.components ?? []).map(
       (c: { name: string; weightPercent: number }, i: number) => ({

@@ -13,6 +13,7 @@ export type ObligationDraft = {
   studyMaterial: string;
   examEvent: string;
   gradeYear: string;
+  gradeEntryDueDate: string;
   components: WeightedItem[];
   subItems: WeightedItem[];
 };
@@ -25,6 +26,7 @@ export const EMPTY_OBLIGATION: ObligationDraft = {
   studyMaterial: "",
   examEvent: "",
   gradeYear: "",
+  gradeEntryDueDate: "",
   components: [{ name: "ציון פנימי", weightPercent: 100 }],
   subItems: [],
 };
@@ -190,6 +192,19 @@ export function ObligationEditor({
             value={draft.examEvent}
             onChange={(e) => onChange({ ...draft, examEvent: e.target.value })}
           />
+        </div>
+        <div>
+          <label className="label">תאריך אחרון להזנת ציונים</label>
+          <input
+            type="date"
+            className="input"
+            dir="ltr"
+            value={draft.gradeEntryDueDate}
+            onChange={(e) => onChange({ ...draft, gradeEntryDueDate: e.target.value })}
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            לאחר תאריך זה תישלח תזכורת למורה, רכז השכבה ולמנהל
+          </p>
         </div>
         <div className="sm:col-span-2 lg:col-span-3">
           <label className="label">חומר לימוד</label>

@@ -33,6 +33,7 @@ type StaffMember = {
   name: string;
   role: StaffRole;
   permissions?: StaffPermission[];
+  gradeReminderOptOut?: boolean;
 };
 
 type ClassItem = { id: string; name: string; gradeYear: string | null };
@@ -380,6 +381,28 @@ export default function StaffPage() {
     }
   }
 
+  async function toggleReminderOptOut(member: StaffMember) {
+    const res = await fetch("/api/staff", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: member.id,
+        gradeReminderOptOut: !member.gradeReminderOptOut,
+      }),
+    });
+    if (res.ok) {
+      toast.success(
+        member.gradeReminderOptOut
+          ? "תזכורות הופעלו למשתמש"
+          : "תזכורות הושבתו למשתמש"
+      );
+      load();
+    } else {
+      const data = await res.json();
+      toast.error(data.error);
+    }
+  }
+
   async function remove(id: string) {
     const ok = await confirm({
       title: "הסרת משתמש צוות",
@@ -490,6 +513,7 @@ export default function StaffPage() {
                   <th className="px-4 py-3 text-right font-medium">אימייל</th>
                   <th className="px-4 py-3 text-right font-medium">תפקיד</th>
                   <th className="px-4 py-3 text-right font-medium">הרשאות</th>
+                  <th className="px-4 py-3 text-right font-medium">תזכורות מייל</th>
                   <th className="px-4 py-3 text-right font-medium">פעולות</th>
                 </tr>
               </thead>
@@ -505,6 +529,19 @@ export default function StaffPage() {
                     </td>
                     <td className="px-4 py-3 text-slate-600">
                       {formatPermissionSummary(s, simpleClasses, simpleSubjects)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => toggleReminderOptOut(s)}
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                          s.gradeReminderOptOut
+                            ? "bg-slate-100 text-slate-500"
+                            : "bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        {s.gradeReminderOptOut ? "מושבת" : "פעיל"}
+                      </button>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">

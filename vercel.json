@@ -1,5 +1,16 @@
 {
   "framework": "nextjs",
   "buildCommand": "npm run build",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "crons": [
+    {
+      "path": "/api/cron/grade-reminders",
+      "schedule": "0 5 * * *"
+    }
+  ],
+  "functions": {
+    "src/app/api/cron/grade-reminders/route.ts": {
+      "maxDuration": 60
+    }
+  }
 }

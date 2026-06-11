@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
         studyMaterial?: string;
         examEvent?: string;
         gradeYear?: string;
+        gradeEntryDueDate?: string;
         components?: Array<{ name: string; weightPercent: number }>;
         subItems?: Array<{ name: string; weightPercent: number }>;
       },
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
       studyMaterial: o.studyMaterial ?? null,
       examEvent: o.examEvent ?? null,
       gradeYear: o.gradeYear ?? null,
+      gradeEntryDueDate: o.gradeEntryDueDate ?? null,
       sortOrder: i,
       components: (o.components ?? []).map((c, j) => ({ ...c, sortOrder: j })),
       subItems: (o.subItems ?? []).map((si, j) => ({ ...si, sortOrder: j })),

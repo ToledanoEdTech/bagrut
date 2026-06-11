@@ -88,7 +88,7 @@ export async function PATCH(req: NextRequest) {
   const { error, session } = await requireAdmin();
   if (error || !session) return error;
 
-  const { id, name, role, permissions } = await req.json();
+  const { id, name, role, permissions, gradeReminderOptOut } = await req.json();
   if (!id) {
     return NextResponse.json({ error: "חסר מזהה" }, { status: 400 });
   }
@@ -136,6 +136,9 @@ export async function PATCH(req: NextRequest) {
 
   if (name !== undefined) updates.name = name;
   if (newRole) updates.role = newRole;
+  if (typeof gradeReminderOptOut === "boolean") {
+    updates.gradeReminderOptOut = gradeReminderOptOut;
+  }
 
   if (newRole === "ADMIN") {
     updates.permissions = FieldValue.delete();

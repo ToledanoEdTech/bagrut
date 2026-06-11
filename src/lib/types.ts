@@ -21,6 +21,8 @@ export interface StaffRecord {
   name: string;
   role: StaffRole;
   permissions?: StaffPermission[];
+  /** חסר = מקבל תזכורות. true = opt-out מתזכורות הזנת ציונים */
+  gradeReminderOptOut?: boolean;
   createdAt: string;
   updatedAt?: string;
 }
@@ -57,6 +59,8 @@ export interface Obligation {
   studyMaterial: string | null;
   examEvent: string | null;
   gradeYear: string | null;
+  /** תאריך אחרון להזנת ציונים (YYYY-MM-DD, אזור זמן ישראל) */
+  gradeEntryDueDate?: string | null;
   sortOrder: number;
   components: ObligationComponent[];
   subItems: ObligationSubItem[];

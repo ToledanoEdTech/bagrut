@@ -35,6 +35,7 @@ type Obligation = {
   studyMaterial: string | null;
   examEvent: string | null;
   gradeYear: string | null;
+  gradeEntryDueDate?: string | null;
   sortOrder: number;
   components: WeightedItem[];
   subItems: WeightedItem[];
@@ -77,6 +78,7 @@ function obligationToDraft(o?: Obligation): ObligationDraft {
     studyMaterial: o.studyMaterial ?? "",
     examEvent: o.examEvent ?? "",
     gradeYear: o.gradeYear ?? "",
+    gradeEntryDueDate: o.gradeEntryDueDate ?? "",
     components: o.components.map(({ name, weightPercent }) => ({ name, weightPercent })),
     subItems: o.subItems.map(({ name, weightPercent }) => ({ name, weightPercent })),
   };
@@ -92,6 +94,7 @@ function draftToPayload(draft: ObligationDraft, subjectId: string, sortOrder: nu
     studyMaterial: draft.studyMaterial || null,
     examEvent: draft.examEvent || null,
     gradeYear: draft.gradeYear || null,
+    gradeEntryDueDate: draft.gradeEntryDueDate || null,
     sortOrder,
     components: draft.components,
     subItems: draft.subItems,
@@ -183,6 +186,7 @@ export default function SubjectsPage() {
           studyMaterial: o.studyMaterial || null,
           examEvent: o.examEvent || null,
           gradeYear: o.gradeYear || null,
+          gradeEntryDueDate: o.gradeEntryDueDate || null,
           components: o.components,
           subItems: o.subItems,
         })),
