@@ -1,9 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle } from "lucide-react";
+import { FileSpreadsheet, Download, CheckCircle2 } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Alert } from "@/components/ui/Alert";
+import { FileUpload } from "@/components/ui/FileUpload";
+import { useToast } from "@/components/ui/Toast";
 
 export default function ImportPage() {
+  const toast = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
@@ -27,12 +34,15 @@ export default function ImportPage() {
     const data = await res.json();
     setResult(data);
     setLoading(false);
+
+    if (res.ok && data.created > 0) {
+      toast.success(`${data.created} תלמידים יובאו בהצלחה`);
+    }
   }
 
   function downloadTemplate() {
     const headers = "שם,אימייל,כיתה,מגמה,מתמטיקה,אנגלית\n";
-    const sample =
-      'ישראל ישראלי,israel@student.local,י"א1,ביולוגיה,4,4\n';
+    const sample = 'ישראל ישראלי,israel@student.local,י"א1,ביולוגיה,4,4\n';
     const blob = new Blob(["\ufeff" + headers + sample], {
       type: "text/csv;charset=utf-8",
     });
@@ -46,51 +56,61 @@ export default function ImportPage() {
 
   return (
     <>
-      <header className="-mx-8 -mt-8 border-b border-slate-200 bg-white px-8 py-6">
-        <h1 className="text-2xl font-bold text-slate-900">ייבוא תלמידים</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          העלאת קובץ אקסל/CSV עם רשימת תלמידים
-        </p>
-      </header>
+      <PageHeader
+        title="ייבוא תלמידים"
+        subtitle="העלאת קובץ אקסל/CSV עם רשימת תלמידים"
+      />
+
+      <div className="mt-6 flex flex-wrap items-center gap-3 text-sm text-slate-500">
+        <span className="flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1 font-medium text-primary-700">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-xs text-white">
+            1
+          </span>
+          הורד תבנית
+        </span>
+        <span className="text-slate-300">›</span>
+        <span className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-400 text-xs text-white">
+            2
+          </span>
+          העלה קובץ
+        </span>
+        <span className="text-slate-300">›</span>
+        <span className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-400 text-xs text-white">
+            3
+          </span>
+          תוצאות
+        </span>
+      </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <div className="card p-6">
-          <h2 className="text-lg font-semibold">העלאת קובץ</h2>
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold">שלב 1–2: תבנית והעלאה</h2>
           <p className="mt-2 text-sm text-slate-500">
             הקובץ צריך לכלול: שם, אימייל, כיתה, מגמה (אופציונלי), מתמטיקה, אנגלית
           </p>
 
-          <div className="mt-6">
-            <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-10 transition hover:border-primary-400 hover:bg-primary-50/30">
-              <Upload className="h-10 w-10 text-slate-400" />
-              <span className="mt-3 text-sm font-medium text-slate-600">
-                {file ? file.name : "לחץ לבחירת קובץ או גרור לכאן"}
-              </span>
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
+          <div className="mt-4">
+            <Button variant="secondary" onClick={downloadTemplate}>
+              <Download className="h-4 w-4" />
+              הורדת תבנית
+            </Button>
           </div>
 
-          <div className="mt-6 flex gap-3">
-            <button
-              onClick={handleImport}
-              disabled={!file || loading}
-              className="btn-primary"
-            >
+          <div className="mt-6">
+            <FileUpload file={file} onFileChange={setFile} />
+          </div>
+
+          <div className="mt-6">
+            <Button onClick={handleImport} disabled={!file || loading}>
               <FileSpreadsheet className="h-4 w-4" />
               {loading ? "מייבא..." : "ייבוא"}
-            </button>
-            <button onClick={downloadTemplate} className="btn-secondary">
-              הורדת תבנית
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card>
 
-        <div className="card p-6">
+        <Card className="p-6">
           <h2 className="text-lg font-semibold">הוראות</h2>
           <ul className="mt-4 space-y-3 text-sm text-slate-600">
             <li className="flex gap-2">
@@ -112,29 +132,25 @@ export default function ImportPage() {
           </ul>
 
           {result && (
-            <div className="mt-6 rounded-xl bg-slate-50 p-4">
-              <div className="flex items-center gap-2 text-emerald-600">
-                <CheckCircle className="h-5 w-5" />
-                <span className="font-medium">
+            <div className="mt-6 space-y-3">
+              <Alert variant="success" title="הייבוא הושלם">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
                   {result.created} תלמידים נוצרו, {result.skipped} דולגו
                 </span>
-              </div>
+              </Alert>
               {result.errors.length > 0 && (
-                <div className="mt-3">
-                  <div className="flex items-center gap-2 text-red-500">
-                    <AlertCircle className="h-4 w-4" />
-                    <span className="text-sm font-medium">שגיאות:</span>
-                  </div>
-                  <ul className="mt-2 space-y-1 text-xs text-red-500">
+                <Alert variant="error" title="שגיאות בייבוא">
+                  <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs">
                     {result.errors.map((e, i) => (
                       <li key={i}>{e}</li>
                     ))}
                   </ul>
-                </div>
+                </Alert>
               )}
             </div>
           )}
-        </div>
+        </Card>
       </div>
     </>
   );

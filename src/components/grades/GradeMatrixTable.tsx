@@ -52,21 +52,15 @@ export function GradeMatrixTable({ rows, components = [], onChange }: Props) {
       <table className="w-full text-base">
         <thead className="sticky top-0 z-10">
           <tr className="border-b border-slate-200 bg-slate-50 text-right">
-            <th className="px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
-              #
-            </th>
-            <th className="px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
-              שם תלמיד
-            </th>
-            <th className="px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
-              סטטוס
-            </th>
+            <th className="px-4 py-3 text-sm font-semibold text-slate-600">#</th>
+            <th className="px-4 py-3 text-sm font-semibold text-slate-600">שם תלמיד</th>
+            <th className="px-4 py-3 text-sm font-semibold text-slate-600">סטטוס</th>
             {multiComponent ? (
               <>
                 {components.map((c) => (
                   <th
                     key={c.sortOrder}
-                    className="px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-600"
+                    className="px-4 py-3 text-sm font-semibold text-slate-600"
                   >
                     {c.name}
                     <span className="block text-xs font-normal normal-case text-slate-400">
@@ -74,12 +68,12 @@ export function GradeMatrixTable({ rows, components = [], onChange }: Props) {
                     </span>
                   </th>
                 ))}
-                <th className="px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
+                <th className="px-4 py-3 text-sm font-semibold text-slate-600">
                   ציון משוקלל
                 </th>
               </>
             ) : (
-              <th className="px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-600">
+              <th className="px-4 py-3 text-sm font-semibold text-slate-600">
                 {components[0]?.name ?? "ציון"}
               </th>
             )}

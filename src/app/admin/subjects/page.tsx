@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Trash2, ChevronDown, ChevronUp, Pencil } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, ChevronsDown, ChevronsUp } from "lucide-react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
+import { Alert } from "@/components/ui/Alert";
+import { Card } from "@/components/ui/Card";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -95,8 +99,10 @@ function draftToPayload(draft: ObligationDraft, subjectId: string, sortOrder: nu
 }
 
 export default function SubjectsPage() {
+  const confirm = useConfirm();
+  const toast = useToast();
   const { data: subjects = [], loading, mutate: refreshSubjects } = useApi<Subject[]>("/api/subjects");
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -190,6 +196,7 @@ export default function SubjectsPage() {
     setShowNew(false);
     setNewSubjectMeta({ name: "", units: 5, category: "MANDATORY" });
     setNewSubjectObligations([{ ...EMPTY_OBLIGATION, weightPercent: 100 }]);
+    toast.success("המקצוע נוצר בהצלחה");
     load();
   }
 
@@ -204,6 +211,7 @@ export default function SubjectsPage() {
     if (err) setError(err);
     else {
       setEditingSubject(null);
+      toast.success("נשמר בהצלחה");
       load();
     }
   }
@@ -251,24 +259,60 @@ export default function SubjectsPage() {
       setEditingObligation(null);
       setAddingObligation(null);
     }
+    toast.success("המטלה נשמרה");
     load();
   }
 
   async function deleteObligation(subjectId: string, id: string) {
-    if (!confirm("למחוק מטלה זו?")) return;
+    const ok = await confirm({
+      title: "מחיקת מטלה",
+      description: "למחוק מטלה זו?",
+      confirmLabel: "מחק",
+      variant: "danger",
+    });
+    if (!ok) return;
     const { error: err } = await apiJson(
       `/api/obligations?id=${id}&subjectId=${subjectId}`,
       { method: "DELETE" }
     );
     if (err) setError(err);
-    else load();
+    else {
+      toast.success("המטלה נמחקה");
+      load();
+    }
   }
 
   async function deleteSubject(id: string) {
-    if (!confirm("למחוק מקצוע זה וכל המטלות שלו?")) return;
+    const ok = await confirm({
+      title: "מחיקת מקצוע",
+      description: "למחוק מקצוע זה וכל המטלות שלו?",
+      confirmLabel: "מחק",
+      variant: "danger",
+    });
+    if (!ok) return;
     const { error: err } = await apiJson(`/api/subjects?id=${id}`, { method: "DELETE" });
     if (err) setError(err);
-    else load();
+    else {
+      toast.success("המקצוע נמחק");
+      load();
+    }
+  }
+
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function expandAll() {
+    setExpandedIds(new Set(filtered.map((s) => s.id)));
+  }
+
+  function collapseAll() {
+    setExpandedIds(new Set());
   }
 
   return (
@@ -287,43 +331,48 @@ export default function SubjectsPage() {
       </PageHeader>
 
       {error && (
-        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <Alert variant="error" className="mt-4" onClose={() => setError(null)}>
           {error}
-          <button
-            type="button"
-            className="mr-3 underline"
-            onClick={() => setError(null)}
-          >
-            סגור
-          </button>
-        </div>
+        </Alert>
       )}
 
-      <div className="mt-6 flex flex-wrap items-center gap-4">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="חיפוש לפי שם מקצוע או מטלה..."
-          className="max-w-md flex-1"
-        />
-        <div className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
-        {[
-          { key: "all", label: "הכל" },
-          ...Object.entries(categories).map(([k, v]) => ({ key: k, label: v })),
-        ].map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            onClick={() => setFilter(f.key)}
-            className={`rounded-lg px-4 py-2.5 text-base font-medium transition ${
-              filter === f.key
-                ? "bg-white text-primary-700 shadow-sm"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+      <div className="sticky top-0 z-20 -mx-4 mt-6 border-b border-slate-200/70 bg-white/90 px-4 py-4 backdrop-blur-md lg:-mx-8 lg:px-8">
+        <div className="flex flex-wrap items-center gap-4">
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="חיפוש לפי שם מקצוע או מטלה..."
+            className="max-w-md flex-1"
+          />
+          <div className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
+            {[
+              { key: "all", label: "הכל" },
+              ...Object.entries(categories).map(([k, v]) => ({ key: k, label: v })),
+            ].map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilter(f.key)}
+                className={`rounded-lg px-4 py-2.5 text-base font-medium transition ${
+                  filter === f.key
+                    ? "bg-white text-primary-700 shadow-sm"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={expandAll}>
+              <ChevronsDown className="h-4 w-4" />
+              הרחב הכל
+            </Button>
+            <Button type="button" variant="secondary" size="sm" onClick={collapseAll}>
+              <ChevronsUp className="h-4 w-4" />
+              כווץ הכל
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -427,14 +476,15 @@ export default function SubjectsPage() {
         )}
         {filtered.map((subject) => {
           const totalWeight = subject.obligations.reduce((s, o) => s + o.weightPercent, 0);
-          const isOpen = expanded === subject.id;
+          const isOpen = expandedIds.has(subject.id);
+          const weightOk = totalWeight === 100;
 
           return (
-            <div key={subject.id} className="card overflow-hidden">
+            <Card key={subject.id} variant="flat" className="overflow-hidden">
               <div className="flex items-center gap-3 p-5">
                 <button
                   type="button"
-                  onClick={() => setExpanded(isOpen ? null : subject.id)}
+                  onClick={() => toggleExpanded(subject.id)}
                   className="shrink-0 rounded-lg p-1 hover:bg-slate-100"
                   aria-label={isOpen ? "סגור" : "פתח"}
                 >
@@ -446,7 +496,7 @@ export default function SubjectsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setExpanded(isOpen ? null : subject.id)}
+                  onClick={() => toggleExpanded(subject.id)}
                   className="min-w-0 flex-1 text-right"
                 >
                   <div className="flex flex-wrap items-center justify-start gap-2">
@@ -454,12 +504,20 @@ export default function SubjectsPage() {
                     {subject.units != null && (
                       <span className="badge-muted">{subject.units} יח&quot;ל</span>
                     )}
+                    <span
+                      className={
+                        weightOk ? "badge-success" : "badge-warning"
+                      }
+                    >
+                      משקל {totalWeight}%
+                    </span>
                     <h3 className="text-lg font-semibold">
                       {formatSubjectWithPathLinks(subject.name, subject.pathLinks)}
                     </h3>
                   </div>
                   <p className="mt-1 text-sm text-slate-500">
-                    {subject.obligations.length} מטלות • סה&quot;כ משקל: {totalWeight}%
+                    {subject.obligations.length} מטלות
+                    {!weightOk && " • יש לוודא שסה״כ המשקלים הוא 100%"}
                   </p>
                 </button>
               </div>
@@ -696,7 +754,7 @@ export default function SubjectsPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </Card>
           );
         })}
       </div>

@@ -24,14 +24,24 @@ import type { Role } from "@/lib/types";
 import { canImportStudents, canManageStructure } from "@/lib/roles";
 import { hasAnyGradeWrite, hasAnyStudentView } from "@/lib/permissions";
 
-const allStaffLinks = [
-  { href: "/admin", label: "דשבורד", icon: LayoutDashboard, adminOnly: false, exact: true },
-  { href: "/admin/students", label: "תלמידים", icon: Users, adminOnly: false },
-  { href: "/admin/classes", label: "כיתות ותוכניות", icon: School, adminOnly: true },
-  { href: "/admin/subjects", label: "מקצועות וחובות", icon: BookOpen, adminOnly: true },
-  { href: "/admin/grades", label: "הזנת ציונים", icon: ClipboardList, adminOnly: false },
-  { href: "/admin/import", label: "ייבוא תלמידים", icon: Upload, adminOnly: true },
-  { href: "/admin/staff", label: "צוות והרשאות", icon: UserCog, adminOnly: true },
+type NavLink = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  exact?: boolean;
+};
+
+const dailyWorkLinks: NavLink[] = [
+  { href: "/admin", label: "דשבורד", icon: LayoutDashboard, exact: true },
+  { href: "/admin/students", label: "תלמידים", icon: Users },
+  { href: "/admin/grades", label: "הזנת ציונים", icon: ClipboardList },
+];
+
+const managementLinks: NavLink[] = [
+  { href: "/admin/classes", label: "כיתות ותוכניות", icon: School },
+  { href: "/admin/subjects", label: "מקצועות וחובות", icon: BookOpen },
+  { href: "/admin/import", label: "ייבוא תלמידים", icon: Upload },
+  { href: "/admin/staff", label: "צוות והרשאות", icon: UserCog },
 ];
 
 function getInitials(name: string): string {
@@ -40,6 +50,68 @@ function getInitials(name: string): string {
     return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
   }
   return name.slice(0, 2).toUpperCase();
+}
+
+function NavSection({
+  title,
+  links,
+  pathname,
+}: {
+  title: string;
+  links: NavLink[];
+  pathname: string;
+}) {
+  if (links.length === 0) return null;
+
+  return (
+    <div className="space-y-1">
+      <p className="px-3 pb-1 pt-3 text-xs font-semibold text-slate-400">{title}</p>
+      {links.map((link) => {
+        const active =
+          link.exact
+            ? pathname === link.href
+            : pathname === link.href || pathname.startsWith(link.href + "/");
+        const Icon = link.icon;
+        return (
+          <Link
+            key={link.href}
+            href={link.href}
+            prefetch
+            onMouseEnter={() => prefetchRoute(link.href)}
+            onFocus={() => prefetchRoute(link.href)}
+            className={clsx(
+              "group relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-base font-medium transition-all duration-200",
+              active
+                ? "text-primary-700"
+                : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
+            )}
+          >
+            {active && (
+              <motion.div
+                layoutId="sidebarActive"
+                className="absolute inset-0 -z-10 rounded-xl bg-gradient-to-l from-primary-50 to-brand-50 ring-1 ring-inset ring-primary-100"
+                transition={{ type: "spring", stiffness: 400, damping: 32 }}
+              />
+            )}
+            {active && (
+              <span className="absolute inset-y-2 right-0 w-1 rounded-full bg-gradient-to-b from-primary-500 to-brand-600" />
+            )}
+            <span
+              className={clsx(
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
+                active
+                  ? "bg-white text-primary-600 shadow-soft"
+                  : "text-slate-400 group-hover:text-slate-600"
+              )}
+            >
+              <Icon className="h-5 w-5" />
+            </span>
+            <span className={clsx(active && "font-semibold")}>{link.label}</span>
+          </Link>
+        );
+      })}
+    </div>
+  );
 }
 
 export function Sidebar({
@@ -54,21 +126,29 @@ export function Sidebar({
   const pathname = usePathname();
   const { signOut, session } = useAuth();
 
-  const links =
+  const studentLinks: NavLink[] =
     role === "STUDENT"
       ? [{ href: "/student", label: "הדשבורד שלי", icon: GraduationCap, exact: true }]
-      : allStaffLinks.filter((l) => {
-          if (l.adminOnly && role === "TEACHER") return false;
-          if (l.href === "/admin/import" && !canImportStudents(role)) return false;
+      : [];
+
+  const filteredDaily =
+    role === "STUDENT"
+      ? []
+      : dailyWorkLinks.filter((l) => {
+          if (l.href === "/admin/grades" && session && !hasAnyGradeWrite(session)) return false;
+          if (l.href === "/admin/students" && session && !hasAnyStudentView(session)) return false;
+          return true;
+        });
+
+  const filteredManagement =
+    role === "STUDENT" || role === "TEACHER"
+      ? []
+      : managementLinks.filter((l) => {
+          if (l.href === "/admin/import" && session && !canImportStudents(role)) return false;
           if (
             (l.href === "/admin/classes" || l.href === "/admin/subjects") &&
             !canManageStructure(role)
           )
-            return false;
-          if (l.href === "/admin/grades" && session && !hasAnyGradeWrite(session)) return false;
-          if (l.href.startsWith("/admin/grades") && session && !hasAnyGradeWrite(session))
-            return false;
-          if (l.href === "/admin/students" && session && !hasAnyStudentView(session))
             return false;
           return true;
         });
@@ -92,7 +172,6 @@ export function Sidebar({
         mobileOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
       )}
     >
-      {/* Brand header */}
       <div className="relative flex items-center justify-between gap-3 overflow-hidden border-b border-slate-100 px-4 py-4">
         <div className="absolute inset-0 bg-gradient-to-l from-primary-50 via-white to-brand-50/60" />
         <SiteLogos size="header" className="relative min-w-0 flex-1" />
@@ -106,7 +185,6 @@ export function Sidebar({
         </button>
       </div>
 
-      {/* User card */}
       {session && (
         <div className="px-4 pt-4">
           <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-gradient-to-bl from-slate-50 to-white p-3 shadow-soft">
@@ -124,54 +202,17 @@ export function Sidebar({
         </div>
       )}
 
-      <nav className="flex-1 space-y-1 overflow-y-auto p-4">
-        <p className="px-3 pb-2 pt-1 text-xs font-bold uppercase tracking-wider text-slate-400">
-          תפריט
-        </p>
-        {links.map((link) => {
-          const active =
-            "exact" in link && link.exact
-              ? pathname === link.href
-              : pathname === link.href || pathname.startsWith(link.href + "/");
-          const Icon = link.icon;
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              prefetch
-              onMouseEnter={() => prefetchRoute(link.href)}
-              onFocus={() => prefetchRoute(link.href)}
-              className={clsx(
-                "group relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-base font-medium transition-all duration-200",
-                active
-                  ? "text-primary-700"
-                  : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
-              )}
-            >
-              {active && (
-                <motion.div
-                  layoutId="sidebarActive"
-                  className="absolute inset-0 -z-10 rounded-xl bg-gradient-to-l from-primary-50 to-brand-50 ring-1 ring-inset ring-primary-100"
-                  transition={{ type: "spring", stiffness: 400, damping: 32 }}
-                />
-              )}
-              {active && (
-                <span className="absolute inset-y-2 right-0 w-1 rounded-full bg-gradient-to-b from-primary-500 to-brand-600" />
-              )}
-              <span
-                className={clsx(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
-                  active
-                    ? "bg-white text-primary-600 shadow-soft"
-                    : "text-slate-400 group-hover:text-slate-600"
-                )}
-              >
-                <Icon className="h-5 w-5" />
-              </span>
-              <span className={clsx(active && "font-semibold")}>{link.label}</span>
-            </Link>
-          );
-        })}
+      <nav className="flex-1 overflow-y-auto p-4">
+        {role === "STUDENT" ? (
+          <NavSection title="תפריט" links={studentLinks} pathname={pathname} />
+        ) : (
+          <>
+            <NavSection title="עבודה יומית" links={filteredDaily} pathname={pathname} />
+            {filteredManagement.length > 0 && (
+              <NavSection title="ניהול" links={filteredManagement} pathname={pathname} />
+            )}
+          </>
+        )}
       </nav>
 
       <div className="border-t border-slate-100 p-4">

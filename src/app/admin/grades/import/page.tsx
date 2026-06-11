@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Download, Loader2 } from "lucide-react";
+import { FileSpreadsheet, Download, Loader2, CheckCircle2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
+import { Alert } from "@/components/ui/Alert";
+import { FileUpload } from "@/components/ui/FileUpload";
+import { useToast } from "@/components/ui/Toast";
 import {
   downloadGradesImportTemplate,
   exportTimestamp,
@@ -24,6 +30,7 @@ type TemplateData = {
 };
 
 export default function GradesImportPage() {
+  const toast = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +89,9 @@ export default function GradesImportPage() {
         return;
       }
       setResult(data);
+      if (data.updated > 0) {
+        toast.success(`${data.updated} ציונים עודכנו בהצלחה`);
+      }
     } catch {
       setError("שגיאת רשת בייבוא");
     } finally {
@@ -133,78 +143,65 @@ export default function GradesImportPage() {
   const studentCount = templateData?.classStudents?.length ?? 0;
 
   return (
-    <div className="mt-6 grid gap-6 lg:grid-cols-2">
-      <div className="card p-6">
-        <h2 className="text-lg font-semibold">העלאת קובץ ציונים</h2>
-        <p className="mt-2 text-sm text-slate-500">
-          הקובץ צריך לכלול: כיתה, מקצוע, מטלה, שם תלמיד, ציון, סטטוס
-        </p>
-
-        <div className="mt-6">
-          <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-10 transition hover:border-primary-400 hover:bg-primary-50/30">
-            <Upload className="h-10 w-10 text-slate-400" />
-            <span className="mt-3 text-sm font-medium text-slate-600">
-              {file ? file.name : "לחץ לבחירת קובץ או גרור לכאן"}
-            </span>
-            <input
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
-        </div>
-
-        <div className="mt-6 flex gap-3">
-          <button onClick={handleImport} disabled={!file || loading} className="btn-primary">
-            <FileSpreadsheet className="h-4 w-4" />
-            {loading ? "מייבא..." : "ייבוא"}
-          </button>
-        </div>
-
-        {error && (
-          <div className="mt-4 flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
-            <AlertCircle className="h-4 w-4" />
-            {error}
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-6">
-        <div className="card p-6">
-          <h2 className="text-lg font-semibold">הורדת תבנית</h2>
+    <>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold">העלאת קובץ ציונים</h2>
           <p className="mt-2 text-sm text-slate-500">
-            תבנית אקסל עם רשימות בחירה לכיתה, מקצוע, מטלה וסטטוס
+            הקובץ צריך לכלול: כיתה, מקצוע, מטלה, שם תלמיד, ציון, סטטוס
           </p>
 
-          <div className="mt-4">
-            <button
-              onClick={() => void downloadEmptyTemplate()}
-              disabled={!templateData || downloading !== null}
-              className="btn-secondary w-full sm:w-auto"
-            >
-              {downloading === "empty" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-              תבנית ריקה
-            </button>
+          <div className="mt-6">
+            <FileUpload file={file} onFileChange={setFile} />
           </div>
 
-          <div className="mt-6 border-t border-slate-100 pt-6">
-            <h3 className="text-sm font-semibold text-slate-700">
-              תבנית מוכנה עם תלמידי כיתה
-            </h3>
-            <p className="mt-1 text-sm text-slate-500">
-              הורידו קובץ עם שמות התלמידים כבר מולאו — נשאר רק להזין ציונים
+          <div className="mt-6">
+            <Button onClick={handleImport} disabled={!file || loading}>
+              <FileSpreadsheet className="h-4 w-4" />
+              {loading ? "מייבא..." : "ייבוא"}
+            </Button>
+          </div>
+
+          {error && (
+            <Alert variant="error" className="mt-4" onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          )}
+        </Card>
+
+        <div className="space-y-6">
+          <Card className="p-6">
+            <h2 className="text-lg font-semibold">הורדת תבנית</h2>
+            <p className="mt-2 text-sm text-slate-500">
+              תבנית אקסל עם רשימות בחירה לכיתה, מקצוע, מטלה וסטטוס
             </p>
 
-            <div className="mt-4 grid gap-3">
-              <div>
-                <label className="label">כיתה</label>
-                <select
-                  className="input"
+            <div className="mt-4">
+              <Button
+                variant="secondary"
+                onClick={() => void downloadEmptyTemplate()}
+                disabled={!templateData || downloading !== null}
+              >
+                {downloading === "empty" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                תבנית ריקה
+              </Button>
+            </div>
+
+            <div className="mt-6 border-t border-slate-100 pt-6">
+              <h3 className="text-sm font-semibold text-slate-700">
+                תבנית מוכנה עם תלמידי כיתה
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                הורידו קובץ עם שמות התלמידים כבר מולאו — נשאר רק להזין ציונים
+              </p>
+
+              <div className="mt-4 grid gap-3">
+                <Select
+                  label="כיתה"
                   value={classId}
                   onChange={(e) => setClassId(e.target.value)}
                 >
@@ -215,13 +212,10 @@ export default function GradesImportPage() {
                       {c.gradeYear ? ` (${c.gradeYear})` : ""}
                     </option>
                   ))}
-                </select>
-              </div>
+                </Select>
 
-              <div>
-                <label className="label">מקצוע (אופציונלי)</label>
-                <select
-                  className="input"
+                <Select
+                  label="מקצוע (אופציונלי)"
                   value={subjectId}
                   onChange={(e) => setSubjectId(e.target.value)}
                   disabled={!classId || templateLoading}
@@ -232,13 +226,10 @@ export default function GradesImportPage() {
                       {subject.name}
                     </option>
                   ))}
-                </select>
-              </div>
+                </Select>
 
-              <div>
-                <label className="label">מטלה (אופציונלי)</label>
-                <select
-                  className="input"
+                <Select
+                  label="מטלה (אופציונלי)"
                   value={obligationLabel}
                   onChange={(e) => setObligationLabel(e.target.value)}
                   disabled={!subjectId}
@@ -249,92 +240,73 @@ export default function GradesImportPage() {
                       {o.label}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
-            </div>
 
-            <button
-              onClick={() => void downloadFilledTemplate()}
-              disabled={
-                !classId ||
-                !templateData ||
-                studentCount === 0 ||
-                downloading !== null
-              }
-              className="btn-primary mt-4 w-full sm:w-auto"
-            >
-              {downloading === "filled" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-              {studentCount > 0
-                ? `הורדת תבנית (${studentCount} תלמידים)`
-                : "הורדת תבנית עם תלמידים"}
-            </button>
+              <Button
+                onClick={() => void downloadFilledTemplate()}
+                disabled={!classId || !templateData || studentCount === 0 || downloading !== null}
+                className="mt-4"
+              >
+                {downloading === "filled" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                {studentCount > 0
+                  ? `הורדת תבנית (${studentCount} תלמידים)`
+                  : "הורדת תבנית עם תלמידים"}
+              </Button>
 
-            {classId && !templateLoading && studentCount === 0 && (
-              <p className="mt-2 text-sm text-amber-600">אין תלמידים בכיתה זו</p>
-            )}
-
-            {subjectId && obligationLabel && (
-              <p className="mt-2 text-xs text-slate-500">
-                המקצוע והמטלה ימולאו אוטומטית בכל השורות
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="card p-6">
-          <h2 className="text-lg font-semibold">הוראות</h2>
-          <ul className="mt-4 space-y-3 text-sm text-slate-600">
-            <li className="flex gap-2">
-              <span className="font-bold text-primary-600">1.</span>
-              הורידו תבנית ריקה או תבנית עם תלמידי כיתה
-            </li>
-            <li className="flex gap-2">
-              <span className="font-bold text-primary-600">2.</span>
-              בחרו ערכים מרשימות הנפתחות בכיתה, מקצוע, מטלה וסטטוס
-            </li>
-            <li className="flex gap-2">
-              <span className="font-bold text-primary-600">3.</span>
-              ניתן להשתמש בעמודות בעברית או באנגלית
-            </li>
-            <li className="flex gap-2">
-              <span className="font-bold text-primary-600">4.</span>
-              סטטוסים: לא התחיל, בתהליך, הוגש, נבדק, פטור
-            </li>
-            <li className="flex gap-2">
-              <span className="font-bold text-primary-600">5.</span>
-              שורות עם שגיאות ידווחו — שאר השורות ייובאו
-            </li>
-          </ul>
-
-          {result && (
-            <div className="mt-6 rounded-xl bg-slate-50 p-4">
-              <div className="flex items-center gap-2 text-emerald-600">
-                <CheckCircle className="h-5 w-5" />
-                <span className="font-medium">
-                  {result.updated} ציונים עודכנו, {result.skipped} דולגו
-                </span>
-              </div>
-              {result.errors.length > 0 && (
-                <div className="mt-3">
-                  <div className="flex items-center gap-2 text-red-500">
-                    <AlertCircle className="h-4 w-4" />
-                    <span className="text-sm font-medium">שגיאות:</span>
-                  </div>
-                  <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs text-red-500">
-                    {result.errors.map((e, i) => (
-                      <li key={i}>{e}</li>
-                    ))}
-                  </ul>
-                </div>
+              {classId && !templateLoading && studentCount === 0 && (
+                <p className="mt-2 text-sm text-amber-600">אין תלמידים בכיתה זו</p>
               )}
             </div>
-          )}
+          </Card>
+
+          <Card className="p-6">
+            <h2 className="text-lg font-semibold">הוראות</h2>
+            <ul className="mt-4 space-y-3 text-sm text-slate-600">
+              <li className="flex gap-2">
+                <span className="font-bold text-primary-600">1.</span>
+                הורידו תבנית ריקה או תבנית עם תלמידי כיתה
+              </li>
+              <li className="flex gap-2">
+                <span className="font-bold text-primary-600">2.</span>
+                בחרו ערכים מרשימות הנפתחות בכיתה, מקצוע, מטלה וסטטוס
+              </li>
+              <li className="flex gap-2">
+                <span className="font-bold text-primary-600">3.</span>
+                ניתן להשתמש בעמודות בעברית או באנגלית
+              </li>
+              <li className="flex gap-2">
+                <span className="font-bold text-primary-600">4.</span>
+                שורות עם שגיאות ידווחו — שאר השורות ייובאו
+              </li>
+            </ul>
+
+            {result && (
+              <div className="mt-6 space-y-3">
+                <Alert variant="success" title="הייבוא הושלם">
+                  <span className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {result.updated} ציונים עודכנו, {result.skipped} דולגו
+                  </span>
+                </Alert>
+                {result.errors.length > 0 && (
+                  <Alert variant="error" title="שגיאות בייבוא">
+                    <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs">
+                      {result.errors.map((e, i) => (
+                        <li key={i}>{e}</li>
+                      ))}
+                    </ul>
+                  </Alert>
+                )}
+              </div>
+            )}
+          </Card>
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -1,11 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Trash2, UserCog, Pencil, X } from "lucide-react";
+import { Plus, Trash2, UserCog, Pencil } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ExportButton } from "@/components/ui/ExportButton";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/Modal";
+import { Alert } from "@/components/ui/Alert";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
 import {
   buildStaffSheet,
   downloadExcel,
@@ -246,6 +254,9 @@ function validatePermissionForm(form: PermissionForm): string | null {
 }
 
 export default function StaffPage() {
+  const confirm = useConfirm();
+  const toast = useToast();
+
   const { data: staff = [], loading, mutate: refreshStaff } = useApi<StaffMember[]>("/api/staff");
   const { data: classes = [] } = useApi<ClassItem[]>("/api/classes");
   const { data: subjects = [] } = useApi<SubjectItem[]>("/api/subjects");
@@ -254,11 +265,13 @@ export default function StaffPage() {
   const [name, setName] = useState("");
   const [role, setRole] = useState<StaffRole>("TEACHER");
   const [permForm, setPermForm] = useState<PermissionForm>(emptyPermissionForm());
+  const [formError, setFormError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState<StaffMember | null>(null);
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState<StaffRole>("TEACHER");
   const [editPermForm, setEditPermForm] = useState<PermissionForm>(emptyPermissionForm());
+  const [editError, setEditError] = useState<string | null>(null);
 
   const gradeYears = useMemo(() => {
     const years = new Set<string>();
@@ -291,7 +304,7 @@ export default function StaffPage() {
     const validationError =
       role === "TEACHER" ? validatePermissionForm(permForm) : null;
     if (validationError) {
-      alert(validationError);
+      setFormError(validationError);
       return;
     }
 
@@ -313,10 +326,12 @@ export default function StaffPage() {
       setName("");
       setRole("TEACHER");
       setPermForm(emptyPermissionForm());
+      setFormError(null);
+      toast.success("משתמש הצוות נוסף בהצלחה");
       load();
     } else {
       const data = await res.json();
-      alert(data.error);
+      setFormError(data.error);
     }
   }
 
@@ -325,6 +340,7 @@ export default function StaffPage() {
     setEditName(member.name);
     setEditRole(member.role);
     setEditPermForm(parsePermissionsToForm(member.permissions));
+    setEditError(null);
   }
 
   async function saveEdit() {
@@ -332,7 +348,7 @@ export default function StaffPage() {
     const validationError =
       editRole === "TEACHER" ? validatePermissionForm(editPermForm) : null;
     if (validationError) {
-      alert(validationError);
+      setEditError(validationError);
       return;
     }
 
@@ -351,21 +367,29 @@ export default function StaffPage() {
     });
     if (res.ok) {
       setEditing(null);
+      toast.success("נשמר בהצלחה");
       load();
     } else {
       const data = await res.json();
-      alert(data.error);
+      setEditError(data.error);
     }
   }
 
   async function remove(id: string) {
-    if (!confirm("להסיר משתמש צוות זה?")) return;
+    const ok = await confirm({
+      title: "הסרת משתמש צוות",
+      description: "להסיר משתמש צוות זה מהמערכת?",
+      confirmLabel: "הסר",
+      variant: "danger",
+    });
+    if (!ok) return;
     const res = await fetch(`/api/staff?id=${id}`, { method: "DELETE" });
     if (res.ok) {
+      toast.success("המשתמש הוסר");
       load();
     } else {
       const data = await res.json();
-      alert(data.error);
+      toast.error(data.error);
     }
   }
 
@@ -386,23 +410,22 @@ export default function StaffPage() {
         <ExportButton onExport={handleExport} disabled={staff.length === 0} />
       </PageHeader>
 
-      <div className="mt-8 card p-6">
+      <Card className="mt-8 p-6">
         <h2 className="font-semibold">הוספת משתמש צוות</h2>
+        {formError && (
+          <Alert variant="error" className="mt-4" onClose={() => setFormError(null)}>
+            {formError}
+          </Alert>
+        )}
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="label">אימייל Google</label>
-            <input
-              className="input"
-              dir="ltr"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="teacher@zvialod.com"
-            />
-          </div>
-          <div>
-            <label className="label">שם</label>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
+          <Input
+            label="אימייל Google"
+            dir="ltr"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="teacher@zvialod.com"
+          />
+          <Input label="שם" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
 
         <div className="mt-4">
@@ -437,138 +460,138 @@ export default function StaffPage() {
           />
         )}
 
-        <button onClick={addStaff} className="btn-primary mt-4">
+        <Button onClick={addStaff} className="mt-4">
           <Plus className="h-4 w-4" />
           הוספה
-        </button>
-      </div>
+        </Button>
+      </Card>
 
-      <div className="mt-6 card overflow-hidden">
+      <Card variant="flat" className="mt-6 overflow-hidden">
         {loading ? (
           <p className="p-6 text-slate-500">טוען...</p>
         ) : staff.length === 0 ? (
-          <p className="p-6 text-slate-500">אין משתמשי צוות מוגדרים</p>
+          <EmptyState
+            icon={UserCog}
+            title="אין משתמשי צוות"
+            description="הוסיפו מנהלים ומורים עם הרשאות מותאמות"
+            className="border-0 bg-transparent"
+          />
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-4 py-3 text-right font-medium">שם</th>
-                <th className="px-4 py-3 text-right font-medium">אימייל</th>
-                <th className="px-4 py-3 text-right font-medium">תפקיד</th>
-                <th className="px-4 py-3 text-right font-medium">הרשאות</th>
-                <th className="px-4 py-3 text-right font-medium">פעולות</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {staff.map((s) => (
-                <tr key={s.id}>
-                  <td className="px-4 py-3 font-medium">{s.name}</td>
-                  <td className="px-4 py-3 text-slate-500" dir="ltr">
-                    {s.email}
-                  </td>
-                  <td className="px-4 py-3">
-                    {s.role === "ADMIN" ? "מנהל" : "מורה"}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {formatPermissionSummary(s, simpleClasses, simpleSubjects)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => openEdit(s)}
-                        className="text-primary-600 hover:text-primary-700"
-                        title="עריכה"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => remove(s.id)}
-                        className="text-red-500 hover:text-red-600"
-                        title="הסרה"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead className="bg-slate-50 text-slate-600">
+                <tr>
+                  <th className="px-4 py-3 text-right font-medium">שם</th>
+                  <th className="px-4 py-3 text-right font-medium">אימייל</th>
+                  <th className="px-4 py-3 text-right font-medium">תפקיד</th>
+                  <th className="px-4 py-3 text-right font-medium">הרשאות</th>
+                  <th className="px-4 py-3 text-right font-medium">פעולות</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {staff.map((s) => (
+                  <tr key={s.id}>
+                    <td className="px-4 py-3 font-medium">{s.name}</td>
+                    <td className="px-4 py-3 text-slate-500" dir="ltr">
+                      {s.email}
+                    </td>
+                    <td className="px-4 py-3">
+                      {s.role === "ADMIN" ? "מנהל" : "מורה"}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {formatPermissionSummary(s, simpleClasses, simpleSubjects)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openEdit(s)}
+                          aria-label="עריכה"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => remove(s.id)}
+                          className="text-red-500 hover:bg-red-50 hover:text-red-600"
+                          aria-label="הסרה"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
+      </Card>
 
-      {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="card max-h-[90vh] w-full max-w-lg overflow-y-auto p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">עריכת משתמש צוות</h2>
-              <button onClick={() => setEditing(null)} className="text-slate-400 hover:text-slate-600">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+      <Modal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        title="עריכת משתמש צוות"
+        size="lg"
+      >
+        {editError && (
+          <Alert variant="error" className="mb-4" onClose={() => setEditError(null)}>
+            {editError}
+          </Alert>
+        )}
+        <Input
+          label="שם"
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+        />
 
-            <div className="mt-4">
-              <label className="label">שם</label>
+        <div className="mt-4">
+          <label className="label">תפקיד</label>
+          <div className="mt-2 flex gap-4">
+            <label className="flex items-center gap-2 text-sm">
               <input
-                className="input mt-1"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
+                type="radio"
+                checked={editRole === "ADMIN"}
+                onChange={() => setEditRole("ADMIN")}
               />
-            </div>
-
-            <div className="mt-4">
-              <label className="label">תפקיד</label>
-              <div className="mt-2 flex gap-4">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    checked={editRole === "ADMIN"}
-                    onChange={() => setEditRole("ADMIN")}
-                  />
-                  מנהל
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    checked={editRole === "TEACHER"}
-                    onChange={() => setEditRole("TEACHER")}
-                  />
-                  מורה
-                </label>
-              </div>
-            </div>
-
-            {editRole === "TEACHER" && (
-              <PermissionFields
-                form={editPermForm}
-                setForm={setEditPermForm}
-                classes={simpleClasses}
-                subjects={simpleSubjects}
-                gradeYears={gradeYears}
+              מנהל
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                checked={editRole === "TEACHER"}
+                onChange={() => setEditRole("TEACHER")}
               />
-            )}
-
-            <div className="mt-6 flex gap-3">
-              <button onClick={saveEdit} className="btn-primary">
-                שמירה
-              </button>
-              <button onClick={() => setEditing(null)} className="btn-secondary">
-                ביטול
-              </button>
-            </div>
+              מורה
+            </label>
           </div>
         </div>
-      )}
 
-      <div className="mt-6 rounded-xl bg-primary-50 p-4 text-sm text-primary-800">
-        <div className="flex items-center gap-2 font-medium">
-          <UserCog className="h-4 w-4" />
-          מנהלי-על (לא ניתנים לעריכה מהאתר)
+        {editRole === "TEACHER" && (
+          <PermissionFields
+            form={editPermForm}
+            setForm={setEditPermForm}
+            classes={simpleClasses}
+            subjects={simpleSubjects}
+            gradeYears={gradeYears}
+          />
+        )}
+
+        <div className="mt-6 flex gap-3">
+          <Button onClick={saveEdit}>שמירה</Button>
+          <Button variant="secondary" onClick={() => setEditing(null)}>
+            ביטול
+          </Button>
         </div>
-        <p className="mt-1 text-primary-600">
+      </Modal>
+
+      <Alert variant="info" className="mt-6" title="מנהלי-על (לא ניתנים לעריכה מהאתר)">
+        <p>
           yossitole@gmail.com, yosseftole@zvialod.com — מוגדרים בקוד עם הרשאות מנהל מלאות
         </p>
-      </div>
+      </Alert>
     </>
   );
 }

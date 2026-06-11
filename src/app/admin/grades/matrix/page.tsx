@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Save, Loader2, AlertCircle } from "lucide-react";
+import { Save, Loader2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Select } from "@/components/ui/Select";
+import { Input } from "@/components/ui/Input";
+import { Alert } from "@/components/ui/Alert";
 import { ExportButton } from "@/components/ui/ExportButton";
+import { useToast } from "@/components/ui/Toast";
 import { GradeMatrixTable, type MatrixRow } from "@/components/grades/GradeMatrixTable";
 import { invalidateCache } from "@/lib/api-cache";
 import {
@@ -80,6 +86,7 @@ type MatrixData = {
 type RowState = Record<string, { score: number | null; status: SubmissionStatus }>;
 
 export default function GradesMatrixPage() {
+  const toast = useToast();
   const { data: classes = [], loading: classesLoading } = useApi<ClassItem[]>("/api/classes/list");
   const [classId, setClassId] = useState("");
   const [subjectId, setSubjectId] = useState("");
@@ -227,6 +234,7 @@ export default function GradesMatrixPage() {
         return;
       }
       setSavedSnapshot(JSON.stringify(rowState));
+      toast.success("נשמר בהצלחה");
       invalidateCache("/api/grades");
       await refreshMatrix();
     } catch {
@@ -269,64 +277,55 @@ export default function GradesMatrixPage() {
 
   return (
     <>
-      <div className="mt-6 card p-6">
+      <Card className="p-6">
         <div className="grid gap-4 sm:grid-cols-3">
-          <div>
-            <label className="label">כיתה</label>
-            <select
-              className="input"
-              value={classId}
-              onChange={(e) => setClassId(e.target.value)}
-            >
-              <option value="">— בחר כיתה —</option>
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.gradeYear ? ` (${c.gradeYear})` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="כיתה"
+            value={classId}
+            onChange={(e) => setClassId(e.target.value)}
+          >
+            <option value="">— בחר כיתה —</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {c.gradeYear ? ` (${c.gradeYear})` : ""}
+              </option>
+            ))}
+          </Select>
 
-          <div>
-            <label className="label">מקצוע</label>
-            <select
-              className="input"
-              value={subjectId}
-              onChange={(e) => setSubjectId(e.target.value)}
-              disabled={!classId || optionsLoading}
-            >
-              <option value="">— בחר מקצוע —</option>
-              {(options?.subjects ?? []).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.displayName ?? s.name}
-                  {s.units ? ` (${s.units} יח"ל)` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="מקצוע"
+            value={subjectId}
+            onChange={(e) => setSubjectId(e.target.value)}
+            disabled={!classId || optionsLoading}
+          >
+            <option value="">— בחר מקצוע —</option>
+            {(options?.subjects ?? []).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.displayName ?? s.name}
+                {s.units ? ` (${s.units} יח"ל)` : ""}
+              </option>
+            ))}
+          </Select>
 
-          <div>
-            <label className="label">מטלה</label>
-            <select
-              className="input"
-              value={taskKey}
-              onChange={(e) => setTaskKey(e.target.value)}
-              disabled={!subjectId}
-            >
-              <option value="">— בחר מטלה —</option>
-              {tasks.map((t) => (
-                <option
-                  key={makeMatrixTaskKey(t.id, t.taskKind, t.sortOrder)}
-                  value={makeMatrixTaskKey(t.id, t.taskKind, t.sortOrder)}
-                >
-                  {t.label} ({t.relevantStudentCount} תלמידים)
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="מטלה"
+            value={taskKey}
+            onChange={(e) => setTaskKey(e.target.value)}
+            disabled={!subjectId}
+          >
+            <option value="">— בחר מטלה —</option>
+            {tasks.map((t) => (
+              <option
+                key={makeMatrixTaskKey(t.id, t.taskKind, t.sortOrder)}
+                value={makeMatrixTaskKey(t.id, t.taskKind, t.sortOrder)}
+              >
+                {t.label} ({t.relevantStudentCount} תלמידים)
+              </option>
+            ))}
+          </Select>
         </div>
-      </div>
+      </Card>
 
       {matrixLoading && taskKey && (
         <div className="mt-8">
@@ -336,7 +335,7 @@ export default function GradesMatrixPage() {
 
       {!matrixLoading && matrixData && taskKey && (
         <>
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="mt-6 flex flex-wrap items-end justify-between gap-3">
             <div className="text-sm text-slate-600">
               <span className="font-medium">{matrixData.rows.length} תלמידים</span>
               {matrixData.notRelevantCount > 0 && (
@@ -354,42 +353,42 @@ export default function GradesMatrixPage() {
 
             <div className="flex flex-wrap items-center gap-2">
               {isDirty && <span className="badge-warning">שינויים לא שמורים</span>}
-              <ExportButton
-                onExport={handleExport}
-                disabled={tableRows.length === 0}
-                label="ייצוא לאקסל"
-                size="sm"
-              />
               <div className="flex items-center gap-2">
-                <input
+                <Input
                   type="number"
                   min={0}
                   max={100}
-                  className="input w-20 py-1.5 text-xs"
+                  inputMode="decimal"
+                  className="w-20 py-1.5 text-xs"
                   placeholder="ציון"
                   value={bulkScore}
                   onChange={(e) => setBulkScore(e.target.value)}
                 />
-                <button type="button" onClick={applyBulkScore} className="btn-secondary text-xs">
+                <Button type="button" variant="secondary" size="sm" onClick={applyBulkScore}>
                   החל לכל הריקים
-                </button>
+                </Button>
               </div>
-              <button onClick={saveGrades} className="btn-primary" disabled={saving || !isDirty}>
+              <Button onClick={saveGrades} disabled={saving || !isDirty} size="sm">
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Save className="h-4 w-4" />
                 )}
-                שמירת ציונים
-              </button>
+                שמירה
+              </Button>
+              <ExportButton
+                onExport={handleExport}
+                disabled={tableRows.length === 0}
+                label="ייצוא"
+                size="sm"
+              />
             </div>
           </div>
 
           {saveError && (
-            <div className="mt-4 flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
-              <AlertCircle className="h-4 w-4 shrink-0" />
+            <Alert variant="error" className="mt-4" onClose={() => setSaveError(null)}>
               {saveError}
-            </div>
+            </Alert>
           )}
 
           <div className="mt-4">

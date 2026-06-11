@@ -1,5 +1,9 @@
+"use client";
+
 import clsx from "clsx";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { usePageMeta } from "@/components/layout/PageMetaContext";
+import { Breadcrumb, type BreadcrumbItem } from "./Breadcrumb";
 
 type PageHeaderProps = {
   title: string;
@@ -7,6 +11,7 @@ type PageHeaderProps = {
   children?: ReactNode;
   variant?: "default" | "gradient";
   className?: string;
+  breadcrumb?: BreadcrumbItem[];
 };
 
 export function PageHeader({
@@ -15,7 +20,15 @@ export function PageHeader({
   children,
   variant = "default",
   className,
+  breadcrumb,
 }: PageHeaderProps) {
+  const { setMeta } = usePageMeta();
+
+  useEffect(() => {
+    setMeta({ title, subtitle });
+    return () => setMeta({});
+  }, [title, subtitle, setMeta]);
+
   if (variant === "gradient") {
     return (
       <header
@@ -35,35 +48,45 @@ export function PageHeader({
             backgroundSize: "40px 40px",
           }}
         />
-        <div className="relative flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-4xl font-extrabold tracking-tight text-white drop-shadow-sm">
-              {title}
-            </h1>
-            {subtitle && (
-              <p className="mt-2 max-w-2xl text-base text-primary-100/90">{subtitle}</p>
-            )}
+        <div className="relative">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h1 className="text-4xl font-extrabold tracking-tight text-white drop-shadow-sm">
+                {title}
+              </h1>
+              {subtitle && (
+                <p className="mt-2 max-w-2xl text-base text-primary-100/90">{subtitle}</p>
+              )}
+            </div>
+            {children}
           </div>
-          {children}
+          {breadcrumb && breadcrumb.length > 0 && (
+            <div className="mt-4">
+              <Breadcrumb items={breadcrumb} variant="light" />
+            </div>
+          )}
         </div>
       </header>
     );
   }
 
   return (
-    <header
-      className={clsx(
-        "-mx-4 -mt-4 mb-2 border-b border-slate-200/70 bg-white/70 px-6 py-6 backdrop-blur-sm lg:-mx-8 lg:-mt-8 lg:px-8",
-        className
-      )}
-    >
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-h1 text-slate-900">{title}</h1>
-          {subtitle && <p className="mt-1.5 text-base text-slate-500">{subtitle}</p>}
+    <>
+      <header
+        className={clsx(
+          "-mx-4 -mt-4 mb-2 border-b border-slate-200/70 bg-white/70 px-6 py-6 backdrop-blur-sm lg:-mx-8 lg:-mt-8 lg:px-8",
+          className
+        )}
+      >
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-h1 text-slate-900">{title}</h1>
+            {subtitle && <p className="mt-1.5 text-base text-slate-500">{subtitle}</p>}
+          </div>
+          {children}
         </div>
-        {children}
-      </div>
-    </header>
+      </header>
+      {breadcrumb && breadcrumb.length > 0 && <Breadcrumb items={breadcrumb} />}
+    </>
   );
 }

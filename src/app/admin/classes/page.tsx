@@ -10,6 +10,8 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ExportButton } from "@/components/ui/ExportButton";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { useToast } from "@/components/ui/Toast";
 import { StudentCardView } from "@/components/students/StudentCardView";
 import {
   buildClassStudentsSheet,
@@ -40,6 +42,7 @@ type Student = {
 type View = "classes" | "students" | "detail";
 
 export default function ClassesPage() {
+  const toast = useToast();
   const [view, setView] = useState<View>("classes");
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
@@ -78,6 +81,7 @@ export default function ClassesPage() {
     });
     setShowNew(false);
     setForm({ name: "", gradeYear: "", examPathId: paths[0]?.id ?? "" });
+    toast.success("הכיתה נוצרה בהצלחה");
     load();
   }
 
@@ -88,14 +92,18 @@ export default function ClassesPage() {
       body: JSON.stringify({ id, ...form }),
     });
     setEditing(null);
+    toast.success("נשמר בהצלחה");
     load();
   }
 
   async function remove(id: string) {
     const res = await fetch(`/api/classes?id=${id}`, { method: "DELETE" });
     const data = await res.json();
-    if (!res.ok) alert(data.error);
-    else load();
+    if (!res.ok) toast.error(data.error);
+    else {
+      toast.success("הכיתה נמחקה");
+      load();
+    }
   }
 
   function openClass(classId: string) {
@@ -225,10 +233,11 @@ export default function ClassesPage() {
             {studentsLoading && classStudents.length === 0 ? (
               <PageLoader variant="table" />
             ) : classStudents.length === 0 ? (
-              <Card className="p-8 text-center text-base text-slate-500">
-                <Users className="mx-auto h-10 w-10 text-slate-300" />
-                <p className="mt-3">אין תלמידים בכיתה זו</p>
-              </Card>
+              <EmptyState
+                icon={Users}
+                title="אין תלמידים בכיתה זו"
+                description="הוסיפו תלמידים לכיתה או ייבאו מקובץ אקסל"
+              />
             ) : (
               <Card variant="flat" className="divide-y divide-slate-100 overflow-hidden">
                 {classStudents.map((student) => {
@@ -313,12 +322,10 @@ export default function ClassesPage() {
             </div>
           </div>
           <div className="mt-4 flex gap-3">
-            <button onClick={saveNew} className="btn-primary">
-              שמירה
-            </button>
-            <button onClick={() => setShowNew(false)} className="btn-secondary">
+            <Button onClick={saveNew}>שמירה</Button>
+            <Button variant="secondary" onClick={() => setShowNew(false)}>
               ביטול
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -355,12 +362,12 @@ export default function ClassesPage() {
                   ))}
                 </select>
                 <div className="flex gap-2">
-                  <button onClick={() => saveEdit(c.id)} className="btn-primary flex-1">
+                  <Button onClick={() => saveEdit(c.id)} className="flex-1">
                     <Save className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => setEditing(null)} className="btn-secondary">
+                  </Button>
+                  <Button variant="secondary" onClick={() => setEditing(null)}>
                     <X className="h-4 w-4" />
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
@@ -375,7 +382,9 @@ export default function ClassesPage() {
                     <p className="mt-1 text-base text-slate-500">{c.gradeYear}</p>
                   </button>
                   <div className="flex gap-1">
-                    <button
+                    <Button
+                      size="sm"
+                      variant="ghost"
                       onClick={() => {
                         setEditing(c.id);
                         setForm({
@@ -384,16 +393,19 @@ export default function ClassesPage() {
                           examPathId: c.examPath.id,
                         });
                       }}
-                      className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-primary-600"
+                      aria-label="עריכה"
                     >
                       <Pencil className="h-4 w-4" />
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
                       onClick={() => remove(c.id)}
-                      className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                      className="text-red-500 hover:bg-red-50 hover:text-red-600"
+                      aria-label="מחיקה"
                     >
                       <Trash2 className="h-4 w-4" />
-                    </button>
+                    </Button>
                   </div>
                 </div>
                 <button

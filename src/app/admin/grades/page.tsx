@@ -10,7 +10,14 @@ import type { SubmissionStatus } from "@/lib/types";
 import { Save, Loader2, ChevronRight, ChevronLeft, ArrowLeft, AlertCircle, Check } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Select } from "@/components/ui/Select";
+import { Alert } from "@/components/ui/Alert";
 import { ExportButton } from "@/components/ui/ExportButton";
+import { UnsavedChangesBanner } from "@/components/ui/UnsavedChangesBanner";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
 import {
   buildStudentGradesSheet,
   downloadExcel,
@@ -66,9 +73,12 @@ type GradeRow = {
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 export default function GradesPage() {
+  const confirm = useConfirm();
+  const toast = useToast();
   const { data: students = [], loading: studentsLoading } = useApi<Student[]>("/api/students");
   const [classFilter, setClassFilter] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  const [jumpSubjectId, setJumpSubjectId] = useState("");
   const [grades, setGrades] = useState<Grade[]>([]);
   const [savedSnapshot, setSavedSnapshot] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -144,6 +154,7 @@ export default function GradesPage() {
       }
       setSavedSnapshot(JSON.stringify(grades));
       setSaveState("saved");
+      toast.success("נשמר בהצלחה");
       invalidateCache(`/api/grades?studentId=${selectedId}`);
       await Promise.all([refreshGrades(), refreshSubjects()]);
       return true;
@@ -152,7 +163,7 @@ export default function GradesPage() {
       setSaveError("שגיאת רשת בשמירה");
       return false;
     }
-  }, [selectedId, grades, refreshGrades, refreshSubjects]);
+  }, [selectedId, grades, refreshGrades, refreshSubjects, toast]);
 
   useEffect(() => {
     if (!selectedId || !isDirty) return;
@@ -265,11 +276,39 @@ export default function GradesPage() {
     if (nextIndex < 0 || nextIndex >= filteredStudents.length) return;
 
     if (isDirty) {
-      const ok = window.confirm("יש שינויים לא שמורים. לעבור לתלמיד הבא בכל זאת?");
+      const ok = await confirm({
+        title: "שינויים לא שמורים",
+        description: "לעבור לתלמיד אחר בכל זאת? השינויים שלא נשמרו עלולים להיאבד.",
+        confirmLabel: "עבור בכל זאת",
+        variant: "danger",
+      });
       if (!ok) return;
     }
 
     setSelectedId(filteredStudents[nextIndex]!.id);
+  }
+
+  async function selectStudent(id: string) {
+    if (id === selectedId) return;
+    if (isDirty) {
+      const ok = await confirm({
+        title: "שינויים לא שמורים",
+        description: "לעבור לתלמיד אחר בכל זאת? השינויים שלא נשמרו עלולים להיאבד.",
+        confirmLabel: "עבור בכל זאת",
+        variant: "danger",
+      });
+      if (!ok) return;
+    }
+    setSelectedId(id);
+  }
+
+  function jumpToSubject(subjectId: string) {
+    if (!subjectId) return;
+    document.getElementById(`subject-${subjectId}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    setJumpSubjectId(subjectId);
   }
 
   const selectedStudent = students.find((s) => s.id === selectedId);
@@ -295,92 +334,118 @@ export default function GradesPage() {
 
   return (
     <>
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <Link href="/admin/grades/matrix" className="btn-primary">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <ExportButton
+          onExport={handleExport}
+          disabled={!selectedId || subjects.length === 0}
+          label="ייצוא ציונים"
+        />
+        <Link href="/admin/grades/matrix" className="btn-secondary">
           <ArrowLeft className="h-4 w-4" />
           הזנה מהירה לפי מטלה
         </Link>
-        <div className="flex flex-wrap items-center gap-2">
-          <ExportButton
-            onExport={handleExport}
-            disabled={!selectedId || subjects.length === 0}
-            label="ייצוא ציונים"
-          />
-          <div className="flex items-center gap-2 text-sm">
-          {saveState === "saving" && (
-            <span className="flex items-center gap-1 text-slate-500">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              שומר...
-            </span>
-          )}
-          {saveState === "saved" && !isDirty && (
-            <span className="flex items-center gap-1 text-emerald-600">
-              <Check className="h-3 w-3" />
-              נשמר
-            </span>
-          )}
-          {saveState === "error" && (
-            <span className="flex items-center gap-1 text-red-600">
-              <AlertCircle className="h-3 w-3" />
-              שגיאה
-            </span>
-          )}
-          {isDirty && saveState !== "saving" && (
-            <span className="badge-warning">שינויים לא שמורים</span>
-          )}
-          </div>
-        </div>
       </div>
 
+      <UnsavedChangesBanner visible={isDirty && saveState !== "saving"}>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => void saveGrades()}
+          disabled={saveState === "saving"}
+        >
+          <Save className="h-3.5 w-3.5" />
+          שמור עכשיו
+        </Button>
+      </UnsavedChangesBanner>
+
       {saveError && (
-        <div className="mt-4 flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
-          <AlertCircle className="h-4 w-4 shrink-0" />
+        <Alert variant="error" className="mt-4" onClose={() => setSaveError(null)}>
           {saveError}
+        </Alert>
+      )}
+
+      {selectedStudent && (
+        <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-slate-200/70 bg-white/95 px-4 py-3 backdrop-blur-md lg:-mx-8 lg:px-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-lg font-bold text-slate-900">
+                {selectedStudent.user.name}
+              </p>
+              <p className="text-sm text-slate-500">
+                {selectedStudent.class.name}
+                {" · "}מתמטיקה {selectedStudent.mathUnits}
+                {" · "}אנגלית {selectedStudent.englishUnits}
+                {selectedStudent.track && ` · ${selectedStudent.track.name}`}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 text-sm">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={currentIndex <= 0}
+                  onClick={() => navigateStudent(-1)}
+                  aria-label="תלמיד קודם"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={currentIndex < 0 || currentIndex >= filteredStudents.length - 1}
+                  onClick={() => navigateStudent(1)}
+                  aria-label="תלמיד הבא"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+              </div>
+              {saveState === "saving" && (
+                <span className="flex items-center gap-1 text-sm text-slate-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  שומר...
+                </span>
+              )}
+              {saveState === "saved" && !isDirty && (
+                <span className="badge-success flex items-center gap-1">
+                  <Check className="h-3 w-3" />
+                  נשמר
+                </span>
+              )}
+              {saveState === "error" && (
+                <span className="badge-danger flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  שגיאה
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
-      <div className="mt-4 card p-6">
+      <Card className="mt-4 p-6">
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="label">סנן לפי כיתה</label>
-            <select
-              className="input"
-              value={classFilter}
-              onChange={(e) => {
-                setClassFilter(e.target.value);
-                setSelectedId("");
-              }}
-            >
-              <option value="">כל הכיתות</option>
-              {classOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="סנן לפי כיתה"
+            value={classFilter}
+            onChange={(e) => {
+              setClassFilter(e.target.value);
+              setSelectedId("");
+            }}
+          >
+            <option value="">כל הכיתות</option>
+            {classOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
           <div>
             <label className="label">בחר תלמיד</label>
             <div className="flex gap-2">
-              <button
-                type="button"
-                className="btn-secondary shrink-0 px-3"
-                disabled={currentIndex <= 0}
-                onClick={() => navigateStudent(-1)}
-                title="תלמיד קודם"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
               <select
                 className="input min-w-0 flex-1"
                 value={selectedId}
-                onChange={(e) => {
-                  if (isDirty) {
-                    const ok = window.confirm("יש שינויים לא שמורים. לעבור לתלמיד אחר בכל זאת?");
-                    if (!ok) return;
-                  }
-                  setSelectedId(e.target.value);
-                }}
+                onChange={(e) => void selectStudent(e.target.value)}
               >
                 <option value="">— בחר תלמיד —</option>
                 {filteredStudents.map((s) => (
@@ -389,27 +454,27 @@ export default function GradesPage() {
                   </option>
                 ))}
               </select>
-              <button
-                type="button"
-                className="btn-secondary shrink-0 px-3"
-                disabled={currentIndex < 0 || currentIndex >= filteredStudents.length - 1}
-                onClick={() => navigateStudent(1)}
-                title="תלמיד הבא"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
             </div>
           </div>
         </div>
 
-        {selectedStudent && (
-          <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-500">
-            <span>מתמטיקה: {selectedStudent.mathUnits} יח&quot;ל</span>
-            <span>אנגלית: {selectedStudent.englishUnits} יח&quot;ל</span>
-            {selectedStudent.track && <span>מגמה: {selectedStudent.track.name}</span>}
+        {subjects.length > 0 && (
+          <div className="mt-4 max-w-md">
+            <Select
+              label="קפיצה למקצוע"
+              value={jumpSubjectId}
+              onChange={(e) => jumpToSubject(e.target.value)}
+            >
+              <option value="">— בחר מקצוע —</option>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.displayName ?? s.name}
+                </option>
+              ))}
+            </Select>
           </div>
         )}
-      </div>
+      </Card>
 
       {loading && (
         <div className="mt-8 flex justify-center">
@@ -418,23 +483,7 @@ export default function GradesPage() {
       )}
 
       {!loading && selectedId && subjects.length > 0 && (
-        <>
-          <div className="mt-6 flex justify-start">
-            <button
-              onClick={() => void saveGrades()}
-              className="btn-primary"
-              disabled={saveState === "saving" || !isDirty}
-            >
-              {saveState === "saving" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              שמירת ציונים
-            </button>
-          </div>
-
-          <div className="mt-4 space-y-4">
+        <div className="mt-4 space-y-4">
             {subjects.map((subject) => {
               const subjectGrades = grades
                 .filter((g) => subject.obligations.some((o) => o.id === g.obligationId))
@@ -449,21 +498,21 @@ export default function GradesPage() {
               const progress = calcSubjectProgress(subject.obligations, subjectGrades);
 
               return (
-                <SubjectCard
-                  key={subject.id}
-                  name={subject.name}
-                  pathLabels={subject.pathLabels}
-                  units={subject.units}
-                  obligations={subject.obligations}
-                  grades={subjectGrades}
-                  progress={progress}
-                  readOnly={false}
-                  onGradeChange={handleGradeChange}
-                />
+                <div key={subject.id} id={`subject-${subject.id}`} className="scroll-mt-28">
+                  <SubjectCard
+                    name={subject.name}
+                    pathLabels={subject.pathLabels}
+                    units={subject.units}
+                    obligations={subject.obligations}
+                    grades={subjectGrades}
+                    progress={progress}
+                    readOnly={false}
+                    onGradeChange={handleGradeChange}
+                  />
+                </div>
               );
             })}
-          </div>
-        </>
+        </div>
       )}
     </>
   );
