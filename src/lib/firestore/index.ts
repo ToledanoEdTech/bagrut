@@ -6,6 +6,8 @@ import type {
   Grade,
   Obligation,
   Role,
+  StaffPermission,
+  StaffRecord,
   Student,
   Subject,
   SubmissionStatus,
@@ -13,6 +15,7 @@ import type {
   UserProfile,
 } from "@/lib/types";
 import { isAdminEmail } from "@/lib/roles";
+import { LEGACY_TEACHER_PERMISSIONS } from "@/lib/permissions";
 import { FieldValue } from "firebase-admin/firestore";
 
 // ─── helpers ───────────────────────────────────────────────────────────────
@@ -87,17 +90,35 @@ function normalizeStudent(student: Student): Student {
 // ─── users ─────────────────────────────────────────────────────────────────
 
 export async function isStaffEmail(email: string): Promise<boolean> {
+  const staff = await getStaffByEmail(email);
+  return staff !== null;
+}
+
+export async function getStaffByEmail(email: string): Promise<StaffRecord | null> {
   const snap = await adminDb
     .collection("staff")
     .where("email", "==", email.toLowerCase().trim())
     .limit(1)
     .get();
-  return !snap.empty;
+  if (snap.empty) return null;
+  const doc = snap.docs[0]!;
+  return { id: doc.id, ...doc.data() } as StaffRecord;
+}
+
+/** מורים קיימים ללא שדה permissions מקבלים גישה מלאה (תאימות לאחור) */
+export function resolveStaffPermissions(staff: StaffRecord | null): StaffPermission[] | undefined {
+  if (!staff) return undefined;
+  if (staff.role === "ADMIN") return undefined;
+  if (staff.permissions === undefined) {
+    return LEGACY_TEACHER_PERMISSIONS;
+  }
+  return staff.permissions;
 }
 
 export async function resolveUserRole(email: string): Promise<{
   role: Role | null;
   studentId: string | null;
+  permissions?: StaffPermission[];
 }> {
   const normalized = email.toLowerCase().trim();
   if (isAdminEmail(normalized)) return { role: "ADMIN", studentId: null };
@@ -105,7 +126,17 @@ export async function resolveUserRole(email: string): Promise<{
   const student = await getStudentByEmail(normalized);
   if (student) return { role: "STUDENT", studentId: student.id };
 
-  if (await isStaffEmail(normalized)) return { role: "TEACHER", studentId: null };
+  const staff = await getStaffByEmail(normalized);
+  if (staff) {
+    if (staff.role === "ADMIN") {
+      return { role: "ADMIN", studentId: null };
+    }
+    return {
+      role: "TEACHER",
+      studentId: null,
+      permissions: resolveStaffPermissions(staff),
+    };
+  }
 
   return { role: null, studentId: null };
 }

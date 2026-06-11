@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { adminAuth } from "@/lib/firebase/admin";
-import { getUserProfile } from "@/lib/firestore";
+import { getStaffByEmail, getUserProfile, resolveStaffPermissions } from "@/lib/firestore";
 import type { AuthSession } from "@/lib/types";
 import { isAdminEmail } from "@/lib/roles";
 
@@ -47,6 +47,12 @@ export async function getAuthSession(): Promise<AuthSession | null> {
       return null;
     }
 
+    let permissions: AuthSession["permissions"];
+    if (role === "TEACHER") {
+      const staff = await getStaffByEmail(email);
+      permissions = resolveStaffPermissions(staff);
+    }
+
     const session: AuthSession = {
       uid: decoded.uid,
       email,
@@ -54,6 +60,7 @@ export async function getAuthSession(): Promise<AuthSession | null> {
       role,
       studentId: profile.studentId,
       photoURL: profile.photoURL ?? decoded.picture ?? null,
+      ...(permissions !== undefined && { permissions }),
     };
     authSessionCache.set(sessionCookie, { session, ts: Date.now() });
     return session;

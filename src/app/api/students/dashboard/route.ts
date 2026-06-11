@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkPermission, requireStaff } from "@/lib/api-auth";
+import { checkPermission, requireStaff, requireStudentView } from "@/lib/api-auth";
 import { buildStudentDashboard } from "@/lib/student-dashboard";
 
 export async function GET(req: NextRequest) {
@@ -13,6 +13,9 @@ export async function GET(req: NextRequest) {
   if (!studentId) {
     return NextResponse.json({ error: "חסר מזהה תלמיד" }, { status: 400 });
   }
+
+  const viewError = await requireStudentView(session, { studentId });
+  if (viewError) return viewError;
 
   const dashboard = await buildStudentDashboard(studentId);
   if (!dashboard) {

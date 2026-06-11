@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listClassesSimple, listStudents, listSubjects } from "@/lib/firestore";
+import { listClassesSimple, listExamPaths, listStudents, listSubjects } from "@/lib/firestore";
 import { obligationDisplayLabel } from "@/lib/grade-components";
 import { STATUS_LABELS, SUBMISSION_STATUSES } from "@/lib/grade-status";
-import { checkPermission, requireStaff } from "@/lib/api-auth";
+import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
+import { getAllowedClassIds, getAllowedSubjectIds } from "@/lib/permissions";
+import { attachPathLabels, buildPathLabelsBySubjectId } from "@/lib/subject-display";
 
 export async function GET(req: NextRequest) {
   const { error, session } = await requireStaff();
@@ -14,23 +16,43 @@ export async function GET(req: NextRequest) {
 
   const classId = new URL(req.url).searchParams.get("classId");
 
-  const [classes, subjects, students] = await Promise.all([
+  const [allClasses, subjects, students, examPaths] = await Promise.all([
     listClassesSimple(),
     listSubjects(),
     listStudents(),
+    listExamPaths(),
   ]);
+  const pathLabelsBySubjectId = buildPathLabelsBySubjectId(examPaths);
+  const subjectsWithPaths = attachPathLabels(subjects, pathLabelsBySubjectId);
+
+  const allowedClassIds = getAllowedClassIds(session, allClasses);
+  const classes =
+    allowedClassIds === null
+      ? allClasses
+      : allClasses.filter((c) => allowedClassIds.includes(c.id));
+
+  const allowedSubjectIds = getAllowedSubjectIds(session);
+  const filteredSubjects =
+    allowedSubjectIds === null
+      ? subjectsWithPaths
+      : subjectsWithPaths.filter((s) => allowedSubjectIds.includes(s.id));
+
+  if (classId) {
+    const accessError = await requireGradeWrite(session, { classId });
+    if (accessError) return accessError;
+  }
 
   const classNames = classes
     .map((c) => c.name)
     .sort((a, b) => a.localeCompare(b, "he"));
 
-  const subjectNames = Array.from(new Set(subjects.map((s) => s.name))).sort((a, b) =>
-    a.localeCompare(b, "he")
+  const subjectNames = Array.from(new Set(filteredSubjects.map((s) => s.displayName))).sort(
+    (a, b) => a.localeCompare(b, "he")
   );
 
   const obligationLabels = Array.from(
     new Set(
-      subjects.flatMap((s) =>
+      filteredSubjects.flatMap((s) =>
         s.obligations.map((o) => obligationDisplayLabel(o))
       )
     )
@@ -38,10 +60,10 @@ export async function GET(req: NextRequest) {
 
   const statuses = SUBMISSION_STATUSES.map((s) => STATUS_LABELS[s].label);
 
-  const subjectOptions = subjects
+  const subjectOptions = filteredSubjects
     .map((s) => ({
       id: s.id,
-      name: s.name,
+      name: s.displayName,
       obligations: s.obligations
         .map((o) => ({
           id: o.id,

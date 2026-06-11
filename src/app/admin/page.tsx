@@ -9,6 +9,7 @@ import clsx from "clsx";
 import { useAuth } from "@/components/AuthProvider";
 import { useApi } from "@/hooks/useApi";
 import { canImportStudents, canManageStructure } from "@/lib/roles";
+import { hasAnyGradeWrite, hasAnyStudentEdit, hasAnyStudentView } from "@/lib/permissions";
 
 type DashboardData = {
   counts: {
@@ -36,6 +37,9 @@ export default function AdminDashboard() {
 
   const { counts, paths } = data;
   const isAdmin = session?.role === "ADMIN";
+  const canGrades = session ? hasAnyGradeWrite(session) : false;
+  const canStudents = session ? hasAnyStudentView(session) : false;
+  const canEditStudents = session ? hasAnyStudentEdit(session) : false;
 
   return (
     <>
@@ -112,26 +116,32 @@ export default function AdminDashboard() {
                 ייבוא תלמידים מאקסל
               </Link>
             )}
-            <Link href="/admin/grades" className="btn-secondary px-5 py-3 text-base">
-              <ClipboardList className="h-5 w-5" />
-              הזנת ציונים
-            </Link>
+            {canGrades && (
+              <Link href="/admin/grades" className="btn-secondary px-5 py-3 text-base">
+                <ClipboardList className="h-5 w-5" />
+                הזנת ציונים
+              </Link>
+            )}
             {isAdmin && session && canManageStructure(session.role) ? (
               <>
                 <Link href="/admin/subjects" className="btn-secondary px-5 py-3 text-base">
                   <BookOpen className="h-5 w-5" />
                   מקצועות וחובות
                 </Link>
-                <Link href="/admin/students" className="btn-secondary px-5 py-3 text-base">
-                  <Users className="h-5 w-5" />
-                  עריכת תלמידים
-                </Link>
+                {canStudents && (
+                  <Link href="/admin/students" className="btn-secondary px-5 py-3 text-base">
+                    <Users className="h-5 w-5" />
+                    {canEditStudents ? "עריכת תלמידים" : "תלמידים"}
+                  </Link>
+                )}
               </>
             ) : (
-              <Link href="/admin/students" className="btn-secondary px-5 py-3 text-base">
-                <Users className="h-5 w-5" />
-                צפייה בתלמידים
-              </Link>
+              canStudents && (
+                <Link href="/admin/students" className="btn-secondary px-5 py-3 text-base">
+                  <Users className="h-5 w-5" />
+                  צפייה בתלמידים
+                </Link>
+              )
             )}
           </div>
         </div>

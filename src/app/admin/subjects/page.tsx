@@ -13,6 +13,7 @@ import {
   downloadExcel,
   exportTimestamp,
 } from "@/lib/excel-export";
+import { formatSubjectWithPathLinks } from "@/lib/subject-display";
 import {
   ObligationEditor,
   EMPTY_OBLIGATION,
@@ -453,13 +454,12 @@ export default function SubjectsPage() {
                     {subject.units != null && (
                       <span className="badge-muted">{subject.units} יח&quot;ל</span>
                     )}
-                    <h3 className="text-lg font-semibold">{subject.name}</h3>
+                    <h3 className="text-lg font-semibold">
+                      {formatSubjectWithPathLinks(subject.name, subject.pathLinks)}
+                    </h3>
                   </div>
                   <p className="mt-1 text-sm text-slate-500">
                     {subject.obligations.length} מטלות • סה&quot;כ משקל: {totalWeight}%
-                    {subject.pathLinks.length > 0 && (
-                      <> • {subject.pathLinks.map((pl) => pl.path.label).join(", ")}</>
-                    )}
                   </p>
                 </button>
               </div>

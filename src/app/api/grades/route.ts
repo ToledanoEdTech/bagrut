@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGradesByStudent, upsertGrades } from "@/lib/firestore";
-import { checkPermission, requireAuth, requireStaff } from "@/lib/api-auth";
+import { checkPermission, requireAuth, requireGradeWrite, requireStaff, requireStudentView } from "@/lib/api-auth";
 import { validateComponentScores, validateSubItemScores } from "@/lib/grade-components";
 import { isValidSubmissionStatus, validateScore } from "@/lib/grade-status";
 import type { SubmissionStatus } from "@/lib/types";
@@ -27,6 +27,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "חסר מזהה תלמיד" }, { status: 400 });
   }
 
+  const viewError = await requireStudentView(session, { studentId });
+  if (viewError) return viewError;
+
   return NextResponse.json(await getGradesByStudent(studentId));
 }
 
@@ -51,7 +54,17 @@ export async function PUT(req: NextRequest) {
     }>;
   };
 
+  if (!studentId) {
+    return NextResponse.json({ error: "חסר מזהה תלמיד" }, { status: 400 });
+  }
+
   for (const g of grades) {
+    const writeError = await requireGradeWrite(session, {
+      studentId,
+      obligationId: g.obligationId,
+    });
+    if (writeError) return writeError;
+
     if (!isValidSubmissionStatus(g.status)) {
       return NextResponse.json({ error: "סטטוס לא חוקי" }, { status: 400 });
     }

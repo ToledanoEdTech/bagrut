@@ -14,6 +14,9 @@ import {
   downloadExcel,
   exportTimestamp,
 } from "@/lib/excel-export";
+import { formatSubjectWithPathLinks } from "@/lib/subject-display";
+import { useAuth } from "@/components/AuthProvider";
+import { hasAnyStudentEdit } from "@/lib/permissions";
 
 type Student = {
   id: string;
@@ -66,6 +69,8 @@ type ClassGroup = {
 };
 
 export default function StudentsPage() {
+  const { session } = useAuth();
+  const canEdit = session ? hasAnyStudentEdit(session) : false;
   const { data: students = [], loading: studentsLoading, mutate: refreshStudents } =
     useApi<Student[]>("/api/students");
   const { data: classesRaw = [], mutate: refreshClasses } = useApi<ClassItem[]>("/api/classes");
@@ -386,7 +391,7 @@ export default function StudentsPage() {
                     onChange={() => toggleMandatorySubject(s.id, target, pathMandatory)}
                     className="rounded"
                   />
-                  {s.name}
+                  {formatSubjectWithPathLinks(s.name, s.pathLinks)}
                 </label>
               ))}
             </div>
@@ -408,12 +413,7 @@ export default function StudentsPage() {
                     onChange={() => toggleMandatorySubject(s.id, target, pathMandatory)}
                     className="rounded"
                   />
-                  <span>{s.name}</span>
-                  {s.pathLinks && s.pathLinks.length > 0 && (
-                    <span className="text-slate-400">
-                      ({s.pathLinks.map((l) => l.path.label).join(", ")})
-                    </span>
-                  )}
+                  <span>{formatSubjectWithPathLinks(s.name, s.pathLinks)}</span>
                 </label>
               ))}
             </div>
@@ -565,23 +565,25 @@ export default function StudentsPage() {
         <td className="px-4 py-3 text-center tabular-nums text-slate-700">{s.mathUnits}</td>
         <td className="px-4 py-3 text-center tabular-nums text-slate-700">{s.englishUnits}</td>
         <td className="px-4 py-3">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => startEdit(s)}
-              disabled={!s.class}
-              aria-label="עריכה"
-              className="rounded-lg p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700 disabled:opacity-40 disabled:hover:bg-transparent"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => remove(s.id)}
-              aria-label="מחיקה"
-              className="rounded-lg p-1.5 text-red-500 transition hover:bg-red-50 hover:text-red-600"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
+          {canEdit && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => startEdit(s)}
+                disabled={!s.class}
+                aria-label="עריכה"
+                className="rounded-lg p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => remove(s.id)}
+                aria-label="מחיקה"
+                className="rounded-lg p-1.5 text-red-500 transition hover:bg-red-50 hover:text-red-600"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </td>
       </tr>
     );
@@ -591,8 +593,12 @@ export default function StudentsPage() {
     return (
       <>
         <PageHeader
-          title="ניהול תלמידים"
-          subtitle="הוספה ידנית, עריכת שיוכים, מגמות, מקצועות חובה, רמות יחידות (מתמטיקה/אנגלית) וכיתות"
+          title={canEdit ? "ניהול תלמידים" : "תלמידים"}
+          subtitle={
+            canEdit
+              ? "הוספה ידנית, עריכת שיוכים, מגמות, מקצועות חובה, רמות יחידות (מתמטיקה/אנגלית) וכיתות"
+              : "צפייה בתלמידים לפי ההרשאות שהוגדרו"
+          }
         />
         <div className="mt-8">
           <PageLoader variant="table" />
@@ -604,23 +610,29 @@ export default function StudentsPage() {
   return (
     <>
       <PageHeader
-        title="ניהול תלמידים"
-        subtitle="הוספה ידנית, עריכת שיוכים, מגמות, מקצועות חובה, רמות יחידות (מתמטיקה/אנגלית) וכיתות"
+        title={canEdit ? "ניהול תלמידים" : "תלמידים"}
+        subtitle={
+          canEdit
+            ? "הוספה ידנית, עריכת שיוכים, מגמות, מקצועות חובה, רמות יחידות (מתמטיקה/אנגלית) וכיתות"
+            : "צפייה בתלמידים לפי ההרשאות שהוגדרו"
+        }
       >
         <div className="flex flex-wrap items-center gap-2">
           <ExportButton
             onExport={handleExport}
             disabled={exportStudents.length === 0}
           />
-          <Button
-            onClick={openNewForm}
-            disabled={classes.length === 0}
-            className="shrink-0"
-            title={classes.length === 0 ? "יש ליצור כיתה לפני הוספת תלמיד" : undefined}
-          >
-            <Plus className="h-4 w-4" />
-            תלמיד חדש
-          </Button>
+          {canEdit && (
+            <Button
+              onClick={openNewForm}
+              disabled={classes.length === 0}
+              className="shrink-0"
+              title={classes.length === 0 ? "יש ליצור כיתה לפני הוספת תלמיד" : undefined}
+            >
+              <Plus className="h-4 w-4" />
+              תלמיד חדש
+            </Button>
+          )}
         </div>
       </PageHeader>
 

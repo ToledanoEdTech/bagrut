@@ -18,7 +18,7 @@ import {
   type MatrixTaskKind,
 } from "@/lib/grade-components";
 import { isValidSubmissionStatus, validateScore } from "@/lib/grade-status";
-import { checkPermission, requireStaff } from "@/lib/api-auth";
+import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
 import type { SubmissionStatus } from "@/lib/types";
 
 function parseTaskKind(value: string | null): MatrixTaskKind | undefined {
@@ -45,6 +45,9 @@ export async function GET(req: NextRequest) {
   if (!classId || !obligationId) {
     return NextResponse.json({ error: "חסרים פרמטרים" }, { status: 400 });
   }
+
+  const readError = await requireGradeWrite(session, { classId, obligationId });
+  if (readError) return readError;
 
   try {
     return NextResponse.json(
@@ -130,6 +133,13 @@ export async function PUT(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    const entryWriteError = await requireGradeWrite(session, {
+      classId: student.classId,
+      obligationId,
+      subjectId: found.subject.id,
+    });
+    if (entryWriteError) return entryWriteError;
 
     if (!isValidSubmissionStatus(entry.status)) {
       return NextResponse.json({ error: "סטטוס לא חוקי" }, { status: 400 });

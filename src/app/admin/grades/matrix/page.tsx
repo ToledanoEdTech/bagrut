@@ -37,6 +37,8 @@ type MatrixOptions = {
   subjects: Array<{
     id: string;
     name: string;
+    displayName?: string;
+    pathLabels?: string[];
     units: number | null;
     tasks: MatrixTask[];
   }>;
@@ -44,7 +46,13 @@ type MatrixOptions = {
 
 type MatrixData = {
   class: { id: string; name: string; gradeYear: string | null };
-  subject: { id: string; name: string; units: number | null };
+  subject: {
+    id: string;
+    name: string;
+    displayName?: string;
+    pathLabels?: string[];
+    units: number | null;
+  };
   obligation: {
     id: string;
     name: string | null;
@@ -244,7 +252,7 @@ export default function GradesMatrixPage() {
     await downloadExcel(`ציונים_${safeName}_${exportTimestamp()}.xlsx`, [
       buildMatrixSheet({
         className: matrixData.class.name,
-        subjectName: matrixData.subject.name,
+        subjectName: matrixData.subject.displayName ?? matrixData.subject.name,
         taskLabel: taskHeaderLabel,
         rows: tableRows.map((r) => ({
           studentName: r.studentName,
@@ -291,7 +299,7 @@ export default function GradesMatrixPage() {
               <option value="">— בחר מקצוע —</option>
               {(options?.subjects ?? []).map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name}
+                  {s.displayName ?? s.name}
                   {s.units ? ` (${s.units} יח"ל)` : ""}
                 </option>
               ))}
@@ -337,7 +345,7 @@ export default function GradesMatrixPage() {
                 </span>
               )}
               <span className="block text-slate-500">
-                {matrixData.subject.name}
+                {matrixData.subject.displayName ?? matrixData.subject.name}
                 {matrixData.subject.units ? ` (${matrixData.subject.units} יח"ל)` : ""}
                 {" — "}
                 {taskHeaderLabel}

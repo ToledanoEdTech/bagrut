@@ -30,6 +30,8 @@ type Student = {
 type Subject = {
   id: string;
   name: string;
+  pathLabels?: string[];
+  displayName?: string;
   units: number | null;
   obligations: Array<{
     id: string;
@@ -450,6 +452,7 @@ export default function GradesPage() {
                 <SubjectCard
                   key={subject.id}
                   name={subject.name}
+                  pathLabels={subject.pathLabels}
                   units={subject.units}
                   obligations={subject.obligations}
                   grades={subjectGrades}

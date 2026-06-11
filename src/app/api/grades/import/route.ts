@@ -2,16 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import {
   listClassesSimple,
+  listExamPaths,
   listStudents,
   listSubjects,
   upsertGradesBulk,
 } from "@/lib/firestore";
 import {
+  buildPathLabelsBySubjectId,
+  formatSubjectDisplayName,
+} from "@/lib/subject-display";
+import {
   buildStudentWithRelations,
   getRelevantSubjects,
 } from "@/lib/student-subjects";
 import { parseStatusInput, validateScore } from "@/lib/grade-status";
-import { checkPermission, requireStaff } from "@/lib/api-auth";
+import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
 import type { SubmissionStatus, Subject } from "@/lib/types";
 
 type ImportRow = {
@@ -76,16 +81,24 @@ export async function POST(req: NextRequest) {
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rawRows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet);
 
-  const [classes, students, subjects] = await Promise.all([
+  const [classes, students, subjects, examPaths] = await Promise.all([
     listClassesSimple(),
     listStudents(),
     listSubjects(),
+    listExamPaths(),
   ]);
 
   const classByName = new Map(classes.map((c) => [c.name.trim(), c]));
-  const subjectByName = new Map(
-    subjects.map((s) => [s.name.trim().toLowerCase(), s])
-  );
+  const pathLabelsBySubjectId = buildPathLabelsBySubjectId(examPaths);
+  const subjectByName = new Map<string, Subject>();
+  for (const subject of subjects) {
+    const pathLabels = pathLabelsBySubjectId.get(subject.id) ?? [];
+    subjectByName.set(subject.name.trim().toLowerCase(), subject);
+    subjectByName.set(
+      formatSubjectDisplayName(subject.name, pathLabels).trim().toLowerCase(),
+      subject
+    );
+  }
 
   const parsedRows: Array<{ rowNum: number; data: ImportRow | null; error?: string }> = [];
 
@@ -189,6 +202,18 @@ export async function POST(req: NextRequest) {
     );
     if (!isRelevant) {
       errors.push(`שורה ${rowNum}: המטלה לא רלוונטית לתלמיד ${data.studentName}`);
+      skipped++;
+      continue;
+    }
+
+    const writeError = await requireGradeWrite(session, {
+      classId: cls.id,
+      subjectId: subject.id,
+      obligationId: obligation.id,
+    });
+    if (writeError) {
+      const errBody = await writeError.json();
+      errors.push(`שורה ${rowNum}: ${errBody.error ?? "אין הרשאה"}`);
       skipped++;
       continue;
     }

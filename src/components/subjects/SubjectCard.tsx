@@ -13,6 +13,7 @@ import {
   resolveObligationGradeScore,
 } from "@/lib/grade-components";
 import { STATUS_LABELS, isValidSubmissionStatus } from "@/lib/grade-status";
+import { formatSubjectDisplayName } from "@/lib/subject-display";
 
 type Obligation = {
   id: string;
@@ -38,6 +39,7 @@ type Grade = {
 
 export function SubjectCard({
   name,
+  pathLabels,
   units,
   obligations,
   grades,
@@ -46,6 +48,7 @@ export function SubjectCard({
   onGradeChange,
 }: {
   name: string;
+  pathLabels?: string[];
   units?: number | null;
   obligations: Obligation[];
   grades: Grade[];
@@ -55,6 +58,7 @@ export function SubjectCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const gradeMap = new Map(grades.map((g) => [g.obligationId, g]));
+  const displayName = formatSubjectDisplayName(name, pathLabels);
 
   const estGrade = progress.estimatedGrade;
   const gradeTone =
@@ -81,7 +85,7 @@ export function SubjectCard({
               </span>
               <div className="min-w-0">
                 <h3 className="text-xl font-bold text-slate-900">
-                  {name}
+                  {displayName}
                   {units && (
                     <span className="me-2 text-base font-normal text-slate-500">
                       ({units} יח&quot;ל)

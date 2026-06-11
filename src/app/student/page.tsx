@@ -22,6 +22,7 @@ type DashboardData = {
   subjects: Array<{
     id: string;
     name: string;
+    pathLabels?: string[];
     units: number | null;
     obligations: Array<{
       id: string;
@@ -179,6 +180,7 @@ export default function StudentDashboard() {
             <StaggerItem key={subject.id}>
               <SubjectCard
                 name={subject.name}
+                pathLabels={subject.pathLabels}
                 units={subject.units}
                 obligations={subject.obligations}
                 grades={subject.grades}

@@ -1,6 +1,10 @@
 import ExcelJS from "exceljs";
 import { obligationDisplayLabel } from "@/lib/grade-components";
 import { STATUS_LABELS, SUBMISSION_STATUSES } from "@/lib/grade-status";
+import {
+  formatSubjectDisplayName,
+  formatSubjectWithPathLinks,
+} from "@/lib/subject-display";
 import type { SubmissionStatus } from "@/lib/types";
 
 type DataValidationRule = {
@@ -233,7 +237,7 @@ export function buildSubjectsSheets(subjects: SubjectExportRow[]): ExportSheet[]
       { header: "מסלולים", key: "paths" },
     ],
     rows: sorted.map((s) => ({
-      name: s.name,
+      name: formatSubjectWithPathLinks(s.name, s.pathLinks),
       category: SUBJECT_CATEGORIES[s.category] ?? s.category,
       units: s.units ?? "—",
       obligationCount: s.obligations.length,
@@ -259,7 +263,7 @@ export function buildSubjectsSheets(subjects: SubjectExportRow[]): ExportSheet[]
     ],
     rows: sorted.flatMap((s) =>
       s.obligations.map((o) => ({
-        subject: s.name,
+        subject: formatSubjectWithPathLinks(s.name, s.pathLinks),
         taskName: o.name ?? o.examEvent ?? "—",
         questionnaire: o.questionnaireNumber ?? "—",
         weight: `${o.weightPercent}%`,
@@ -333,6 +337,8 @@ export function buildStaffSheet(staff: StaffExportRow[]): ExportSheet {
 
 type GradeSubjectExport = {
   name: string;
+  displayName?: string;
+  pathLabels?: string[];
   units: number | null;
   obligations: Array<{
     id: string;
@@ -361,7 +367,7 @@ export function buildStudentGradesSheet(
     subject.obligations.map((o) => {
       const grade = gradeMap.get(o.id);
       return {
-        subject: subject.name,
+        subject: subject.displayName ?? formatSubjectDisplayName(subject.name, subject.pathLabels),
         units: subject.units ?? "—",
         task: o.name ?? "—",
         questionnaire: o.questionnaireNumber ?? "—",

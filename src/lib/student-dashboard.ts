@@ -8,7 +8,9 @@ import {
   getStudentById,
   getStudentTrackIds,
   getTrackById,
+  listExamPaths,
 } from "@/lib/firestore";
+import { attachPathLabels, buildPathLabelsBySubjectId } from "@/lib/subject-display";
 
 export async function buildStudentDashboard(studentId: string) {
   const student = await getStudentById(studentId);
@@ -22,9 +24,14 @@ export async function buildStudentDashboard(studentId: string) {
       items.filter(Boolean)
     ),
   ]);
-  const subjects = await getRelevantSubjects(studentWithRelations);
+  const [subjects, examPaths] = await Promise.all([
+    getRelevantSubjects(studentWithRelations),
+    listExamPaths(),
+  ]);
+  const pathLabelsBySubjectId = buildPathLabelsBySubjectId(examPaths);
+  const subjectsWithPaths = attachPathLabels(subjects, pathLabelsBySubjectId);
 
-  const subjectsWithProgress = subjects.map((subject) => {
+  const subjectsWithProgress = subjectsWithPaths.map((subject) => {
     const subjectGrades = grades.filter((g) =>
       subject.obligations.some((o) => o.id === g.obligationId)
     );

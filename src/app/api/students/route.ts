@@ -11,7 +11,12 @@ import {
   updateStudent,
 } from "@/lib/firestore";
 import { resolveMandatorySubjectIdsForClass } from "@/lib/student-subjects";
-import { checkPermission, requireStaff, requireAdmin } from "@/lib/api-auth";
+import {
+  checkPermission,
+  requireStaff,
+  requireStudentEdit,
+} from "@/lib/api-auth";
+import { filterStudentsForSession } from "@/lib/permission-students";
 
 export async function GET() {
   const { error, session } = await requireStaff();
@@ -21,12 +26,15 @@ export async function GET() {
   }
 
   const students = await listStudentsEnriched();
-  return NextResponse.json(students);
+  return NextResponse.json(await filterStudentsForSession(session, students));
 }
 
 export async function POST(req: NextRequest) {
-  const { error } = await requireAdmin();
-  if (error) return error;
+  const { error, session } = await requireStaff();
+  if (error || !session) return error;
+  if (!checkPermission(session, "students:edit")) {
+    return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
+  }
 
   const body = await req.json();
   const { name, email, classId, trackIds, trackId, mathUnits, englishUnits, mandatorySubjectIds } =
@@ -46,6 +54,12 @@ export async function POST(req: NextRequest) {
   if (!cls) {
     return NextResponse.json({ error: "כיתה לא נמצאה" }, { status: 400 });
   }
+
+  const editError = await requireStudentEdit(session, {
+    classId,
+    gradeYear: cls.gradeYear,
+  });
+  if (editError) return editError;
 
   const normalizedEmail = email.toLowerCase().trim();
   const existing = await getStudentByEmail(normalizedEmail);
@@ -90,8 +104,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const { error, session } = await requireAdmin();
+  const { error, session } = await requireStaff();
   if (error || !session) return error;
+  if (!checkPermission(session, "students:edit")) {
+    return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
+  }
 
   const body = await req.json();
   const {
@@ -124,6 +141,13 @@ export async function PATCH(req: NextRequest) {
     }
 
     const targetClassId = classId ?? existing.classId;
+    const targetCls = await getClassById(targetClassId);
+    const editError = await requireStudentEdit(session, {
+      classId: targetClassId,
+      gradeYear: targetCls?.gradeYear ?? null,
+      studentId: id,
+    });
+    if (editError) return editError;
     let resolvedMandatorySubjectIds: string[] | undefined | null = undefined;
     if (mandatorySubjectIds !== undefined) {
       resolvedMandatorySubjectIds = await resolveMandatorySubjectIdsForClass(
@@ -163,12 +187,27 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const { error } = await requireAdmin();
-  if (error) return error;
+  const { error, session } = await requireStaff();
+  if (error || !session) return error;
+  if (!checkPermission(session, "students:edit")) {
+    return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "חסר מזהה" }, { status: 400 });
+
+  const existing = await getStudentById(id);
+  if (!existing) {
+    return NextResponse.json({ error: "לא נמצא" }, { status: 404 });
+  }
+  const cls = await getClassById(existing.classId);
+  const editError = await requireStudentEdit(session, {
+    classId: existing.classId,
+    gradeYear: cls?.gradeYear ?? null,
+    studentId: id,
+  });
+  if (editError) return editError;
 
   await deleteStudent(id);
   return NextResponse.json({ success: true });

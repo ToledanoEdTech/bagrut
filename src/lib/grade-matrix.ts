@@ -3,8 +3,14 @@ import {
   getClassById,
   getExamPathById,
   getGradesByStudentsAndObligation,
+  listExamPaths,
   listStudents,
 } from "@/lib/firestore";
+import {
+  attachPathLabels,
+  buildPathLabelsBySubjectId,
+  formatSubjectDisplayName,
+} from "@/lib/subject-display";
 import {
   buildStudentWithRelations,
   loadSubjectContext,
@@ -74,6 +80,7 @@ export async function getMatrixOptions(classId: string) {
   if (!classContext) throw new Error("כיתה לא נמצאה");
 
   const { cls, examPath, ctx, students } = classContext;
+  const pathLabelsBySubjectId = buildPathLabelsBySubjectId(await listExamPaths());
   const subjectsMap = new Map<
     string,
     {
@@ -121,14 +128,17 @@ export async function getMatrixOptions(classId: string) {
   }
 
   return {
-    subjects: Array.from(subjectsMap.values()).map((s) => ({
-      id: s.id,
-      name: s.name,
-      units: s.units,
-      tasks: Array.from(s.obligations.values()).flatMap(({ obligation, relevantStudentCount }) =>
-        expandObligationMatrixTasks(obligation, relevantStudentCount)
-      ),
-    })),
+    subjects: attachPathLabels(
+      Array.from(subjectsMap.values()).map((s) => ({
+        id: s.id,
+        name: s.name,
+        units: s.units,
+        tasks: Array.from(s.obligations.values()).flatMap(({ obligation, relevantStudentCount }) =>
+          expandObligationMatrixTasks(obligation, relevantStudentCount)
+        ),
+      })),
+      pathLabelsBySubjectId
+    ),
   };
 }
 
@@ -220,11 +230,16 @@ export async function getMatrixData(
     tableComponents = [{ name: "ציון", weightPercent: 100, sortOrder: 0 }];
   }
 
+  const pathLabelsBySubjectId = buildPathLabelsBySubjectId(await listExamPaths());
+  const subjectPathLabels = pathLabelsBySubjectId.get(found.subject.id) ?? [];
+
   return {
     class: { id: cls.id, name: cls.name, gradeYear: cls.gradeYear },
     subject: {
       id: found.subject.id,
       name: found.subject.name,
+      displayName: formatSubjectDisplayName(found.subject.name, subjectPathLabels),
+      pathLabels: subjectPathLabels,
       units: found.subject.units,
     },
     obligation: {

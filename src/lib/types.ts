@@ -1,5 +1,30 @@
 export type Role = "ADMIN" | "TEACHER" | "STUDENT";
 
+export type StaffRole = "ADMIN" | "TEACHER";
+
+export type StaffPermission =
+  | { action: "grades:write"; scope: "all" }
+  | { action: "grades:write"; scope: "gradeYear"; gradeYear: string }
+  | { action: "grades:write"; scope: "class"; classId: string }
+  | { action: "grades:write"; scope: "subject"; subjectId: string }
+  | { action: "students:view"; scope: "all" }
+  | { action: "students:view"; scope: "gradeYear"; gradeYear: string }
+  | { action: "students:view"; scope: "class"; classId: string }
+  | { action: "students:view"; scope: "subject"; subjectId: string }
+  | { action: "students:edit"; scope: "all" }
+  | { action: "students:edit"; scope: "gradeYear"; gradeYear: string }
+  | { action: "students:edit"; scope: "class"; classId: string };
+
+export interface StaffRecord {
+  id: string;
+  email: string;
+  name: string;
+  role: StaffRole;
+  permissions?: StaffPermission[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export type ExamPathType = "REGULAR" | "BEIT_MIDRASH" | "MEUBAR_HINUCH";
 
 export type SubjectCategory = "MANDATORY" | "MATH" | "ENGLISH" | "TRACK" | "EXTENSION";
@@ -111,4 +136,6 @@ export interface AuthSession {
   role: Role;
   studentId: string | null;
   photoURL: string | null;
+  /** undefined = הרשאות מלאות (מנהל). רק לצוות TEACHER */
+  permissions?: StaffPermission[];
 }

@@ -22,6 +22,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { SiteLogos } from "@/components/ui/SiteLogos";
 import type { Role } from "@/lib/types";
 import { canImportStudents, canManageStructure } from "@/lib/roles";
+import { hasAnyGradeWrite, hasAnyStudentView } from "@/lib/permissions";
 
 const allStaffLinks = [
   { href: "/admin", label: "דשבורד", icon: LayoutDashboard, adminOnly: false, exact: true },
@@ -30,7 +31,7 @@ const allStaffLinks = [
   { href: "/admin/subjects", label: "מקצועות וחובות", icon: BookOpen, adminOnly: true },
   { href: "/admin/grades", label: "הזנת ציונים", icon: ClipboardList, adminOnly: false },
   { href: "/admin/import", label: "ייבוא תלמידים", icon: Upload, adminOnly: true },
-  { href: "/admin/staff", label: "צוות מורים", icon: UserCog, adminOnly: true },
+  { href: "/admin/staff", label: "צוות והרשאות", icon: UserCog, adminOnly: true },
 ];
 
 function getInitials(name: string): string {
@@ -63,6 +64,11 @@ export function Sidebar({
             (l.href === "/admin/classes" || l.href === "/admin/subjects") &&
             !canManageStructure(role)
           )
+            return false;
+          if (l.href === "/admin/grades" && session && !hasAnyGradeWrite(session)) return false;
+          if (l.href.startsWith("/admin/grades") && session && !hasAnyGradeWrite(session))
+            return false;
+          if (l.href === "/admin/students" && session && !hasAnyStudentView(session))
             return false;
           return true;
         });
