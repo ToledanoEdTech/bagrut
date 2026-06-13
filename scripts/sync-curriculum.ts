@@ -117,61 +117,119 @@ function mapObligations(
   });
 }
 
+type SubjectEntry = {
+  ref: FirebaseFirestore.DocumentReference;
+  data: { name: string; units: number | null; category: SubjectCategory } & Record<
+    string,
+    unknown
+  >;
+};
+
 async function main() {
   const dataPath = path.join(process.cwd(), "data", "curriculum_parsed.json");
   const data: ParsedCurriculum = JSON.parse(readFileSync(dataPath, "utf-8"));
 
-  const parsedByKey = new Map<
-    string,
-    ParsedCurriculum["paths"][0]["subjects"][0]
-  >();
+  const pathsSnap = await adminDb.collection("examPaths").get();
+  const examPathByKey = new Map(
+    pathsSnap.docs.map((d) => [d.data().key as string, d.data()])
+  );
 
+  const subjSnap = await adminDb.collection("subjects").get();
+  const subjById = new Map<string, SubjectEntry>(
+    subjSnap.docs.map((d) => [
+      d.id,
+      { ref: d.ref, data: d.data() as SubjectEntry["data"] },
+    ])
+  );
+
+  let updated = 0;
+  let created = 0;
+  let skipped = 0;
+  const usedSubjectIds = new Set<string>();
+
+  async function syncSubject(
+    target: SubjectEntry,
+    s: ParsedCurriculum["paths"][0]["subjects"][0]
+  ) {
+    usedSubjectIds.add(target.ref.id);
+    const obligations = mapObligations(
+      s.obligations,
+      (target.data.obligations as Array<{ id: string } & Record<string, unknown>>) ?? []
+    );
+    await target.ref.update({ obligations });
+    updated++;
+  }
+
+  // Mandatory subjects: match each parsed subject within its own exam path so that
+  // subjects sharing name+units+category across paths (e.g. ספרות ומחשבת ישראל in
+  // רגילה vs בית מדרש) are not confused with one another.
   for (const p of data.paths) {
+    if (ELECTIVE_SOURCE_KEYS.has(p.key)) continue;
+
+    const examPath = examPathByKey.get(p.key);
+    const pathSubjectIds: string[] = (examPath?.subjectIds as string[]) ?? [];
+
+    const docsByKey = new Map<string, SubjectEntry[]>();
+    for (const sid of pathSubjectIds) {
+      const entry = subjById.get(sid);
+      if (!entry) continue;
+      const k = subjectKey(entry.data.name, entry.data.units ?? null, entry.data.category);
+      const arr = docsByKey.get(k) ?? [];
+      arr.push(entry);
+      docsByKey.set(k, arr);
+    }
+
     for (const s of p.subjects) {
       const cat = categoryForPath(p.key, s.name);
-      parsedByKey.set(subjectKey(s.name, s.units, cat), s);
+      const k = subjectKey(s.name, s.units, cat);
+      const target = (docsByKey.get(k) ?? []).find((c) => !usedSubjectIds.has(c.ref.id));
+      if (!target) {
+        skipped++;
+        continue;
+      }
+      await syncSubject(target, s);
     }
   }
 
-  const snap = await adminDb.collection("subjects").get();
-  let updated = 0;
-  let created = 0;
+  // Elective subjects (flexible electives) are shared across paths and not attached
+  // to a single exam path, so match them globally and create any that are missing.
+  for (const p of data.paths) {
+    if (!ELECTIVE_SOURCE_KEYS.has(p.key)) continue;
 
-  for (const doc of snap.docs) {
-    const subject = doc.data();
-    const key = subjectKey(subject.name, subject.units ?? null, subject.category);
-    const parsed = parsedByKey.get(key);
-    if (!parsed) continue;
+    for (const s of p.subjects) {
+      const cat = categoryForPath(p.key, s.name);
+      const k = subjectKey(s.name, s.units, cat);
 
-    const obligations = mapObligations(
-      parsed.obligations,
-      (subject.obligations as Array<{ id: string } & Record<string, unknown>>) ?? []
-    );
+      let target: SubjectEntry | undefined;
+      for (const [id, entry] of subjById) {
+        if (usedSubjectIds.has(id)) continue;
+        if (subjectKey(entry.data.name, entry.data.units ?? null, entry.data.category) === k) {
+          target = entry;
+          break;
+        }
+      }
 
-    await doc.ref.update({ obligations });
-    updated++;
-    parsedByKey.delete(key);
+      if (target) {
+        await syncSubject(target, s);
+      } else {
+        const id = newId();
+        const obligations = mapObligations(s.obligations);
+        await adminDb.collection("subjects").doc(id).set({
+          id,
+          name: s.name,
+          units: s.units,
+          category: cat,
+          trackId: null,
+          obligations,
+        });
+        created++;
+      }
+    }
   }
 
-  // Create subjects that exist in curriculum but not in Firestore (flexible electives)
-  for (const [key, s] of parsedByKey) {
-    const [category, name, unitsStr] = key.split("|");
-    const units = parseInt(unitsStr) || null;
-    const id = newId();
-    const obligations = mapObligations(s.obligations);
-
-    await adminDb.collection("subjects").doc(id).set({
-      id,
-      name,
-      units,
-      category,
-      trackId: null,
-      obligations,
-    });
-    created++;
-  }
-
-  console.log(`Sync complete: ${updated} subjects updated, ${created} created.`);
+  console.log(
+    `Sync complete: ${updated} subjects updated, ${created} created, ${skipped} skipped.`
+  );
 }
 
 main().catch((e) => {
