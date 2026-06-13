@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { SubjectCard } from "@/components/subjects/SubjectCard";
 import { calcWeightedComponentScore, calcWeightedSubItemScore, normalizeComponents, normalizeSubItems, resolveObligationGradeScore } from "@/lib/grade-components";
-import { calcSubjectProgress } from "@/lib/progress";
+import { calcSubjectProgressForObligations } from "@/lib/progress";
 import { autoStatusOnScore } from "@/lib/grade-status";
 import type { SubmissionStatus } from "@/lib/types";
 import { Save, Loader2, ChevronRight, ChevronLeft, ArrowLeft, AlertCircle, Check } from "lucide-react";
@@ -13,6 +13,7 @@ import { PageLoader } from "@/components/ui/PageLoader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
+import { StudentCombobox } from "@/components/students/StudentCombobox";
 import { Alert } from "@/components/ui/Alert";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { UnsavedChangesBanner } from "@/components/ui/UnsavedChangesBanner";
@@ -99,8 +100,12 @@ export default function GradesPage() {
   const AUTOSAVE_DELAY_MS = 2500;
 
   const filteredStudents = useMemo(() => {
-    if (!classFilter) return students;
-    return students.filter((s) => s.class?.id === classFilter);
+    const list = classFilter
+      ? students.filter((s) => s.class?.id === classFilter)
+      : students;
+    return [...list].sort((a, b) =>
+      a.user.name.localeCompare(b.user.name, "he")
+    );
   }, [students, classFilter]);
 
   const classOptions = useMemo(() => {
@@ -495,7 +500,7 @@ export default function GradesPage() {
       )}
 
       <Card className="mt-4 p-6">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,16rem)_1fr]">
           <Select
             label="סנן לפי כיתה"
             value={classFilter}
@@ -513,20 +518,11 @@ export default function GradesPage() {
           </Select>
           <div>
             <label className="label">בחר תלמיד</label>
-            <div className="flex gap-2">
-              <select
-                className="input min-w-0 flex-1"
-                value={selectedId}
-                onChange={(e) => void selectStudent(e.target.value)}
-              >
-                <option value="">— בחר תלמיד —</option>
-                {filteredStudents.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.user.name} ({s.class.name})
-                  </option>
-                ))}
-              </select>
-            </div>
+            <StudentCombobox
+              students={filteredStudents}
+              selectedId={selectedId}
+              onSelect={(id) => void selectStudent(id)}
+            />
           </div>
         </div>
 
@@ -567,7 +563,7 @@ export default function GradesPage() {
                     score: resolveObligationGradeScore(obligation, g),
                   };
                 });
-              const progress = calcSubjectProgress(subject.obligations, subjectGrades);
+              const progress = calcSubjectProgressForObligations(subject.obligations, subjectGrades);
 
               return (
                 <div key={subject.id} id={`subject-${subject.id}`} className="scroll-mt-28">

@@ -30,7 +30,7 @@ import {
   OUTSTANDING_BAGRUT_MIN_AVERAGE,
   type OutstandingBagrutResult,
 } from "@/lib/outstanding-bagrut";
-import { calcSubjectProgress } from "@/lib/progress";
+import { calcSubjectProgressForObligations } from "@/lib/progress";
 import { resolveRelevantSubjects, type StudentWithRelations } from "@/lib/student-subjects";
 import type {
   AuthSession,
@@ -339,7 +339,7 @@ function computeSchoolProgress(data: ScopedData): SchoolProgress {
         .map((o) => gradeMap.get(`${student.id}::${o.id}`))
         .filter((g): g is Grade => !!g);
 
-      const progress = calcSubjectProgress(subject.obligations, subjectGrades);
+      const progress = calcSubjectProgressForObligations(subject.obligations, subjectGrades);
       if (progress.estimatedGrade != null) {
         estimatedGrades.push(progress.estimatedGrade);
       }

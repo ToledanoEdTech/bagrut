@@ -1,4 +1,4 @@
-import { calcSubjectProgress } from "@/lib/progress";
+import { calcSubjectProgressForObligations } from "@/lib/progress";
 import {
   loadSubjectContext,
   resolveRelevantSubjects,
@@ -115,7 +115,7 @@ function buildSubjectsWithProgress(
     const subjectGrades = grades.filter((g) =>
       subject.obligations.some((o) => o.id === g.obligationId)
     );
-    return { progress: calcSubjectProgress(subject.obligations, subjectGrades) };
+    return { progress: calcSubjectProgressForObligations(subject.obligations, subjectGrades) };
   });
 }
 

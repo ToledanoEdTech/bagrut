@@ -88,7 +88,7 @@ export function StudentDashboardContent({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h2 className="text-display text-white">{data.student.user.name}</h2>
           {data.outstandingBagrut?.isCandidate && (
-            <OutstandingBagrutBadge className="border-white/20 bg-white/15 text-white ring-white/20" />
+            <OutstandingBagrutBadge variant="onDark" />
           )}
         </div>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-base text-primary-100">

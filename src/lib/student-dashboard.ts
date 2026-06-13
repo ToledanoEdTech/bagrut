@@ -1,4 +1,4 @@
-import { calcSubjectProgress } from "@/lib/progress";
+import { calcSubjectProgressForObligations } from "@/lib/progress";
 import {
   buildStudentWithRelations,
   getRelevantSubjects,
@@ -36,7 +36,7 @@ export async function buildStudentDashboard(studentId: string) {
     const subjectGrades = grades.filter((g) =>
       subject.obligations.some((o) => o.id === g.obligationId)
     );
-    const progress = calcSubjectProgress(subject.obligations, subjectGrades);
+    const progress = calcSubjectProgressForObligations(subject.obligations, subjectGrades);
     return { ...subject, progress, grades: subjectGrades };
   });
 
