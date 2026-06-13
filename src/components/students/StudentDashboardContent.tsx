@@ -1,10 +1,12 @@
 "use client";
 
 import { SubjectCard } from "@/components/subjects/SubjectCard";
+import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatCardGrid } from "@/components/ui/StatCardGrid";
 import { StaggerChildren, StaggerItem } from "@/components/motion/StaggerChildren";
+import type { OutstandingBagrutResult } from "@/lib/outstanding-bagrut";
 import { BookOpen } from "lucide-react";
 
 export type StudentDashboardData = {
@@ -38,6 +40,7 @@ export type StudentDashboardData = {
     grades: Array<{ obligationId: string; score: number | null; status: string }>;
   }>;
   overallProgress: number;
+  outstandingBagrut?: OutstandingBagrutResult;
 };
 
 type StudentDashboardContentProps = {
@@ -82,7 +85,12 @@ export function StudentDashboardContent({
   const defaultHero = (
     <div className="card overflow-hidden">
       <div className="bg-gradient-to-l from-primary-600 to-primary-700 px-6 py-6 text-white">
-        <h2 className="text-display text-white">{data.student.user.name}</h2>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h2 className="text-display text-white">{data.student.user.name}</h2>
+          {data.outstandingBagrut?.isCandidate && (
+            <OutstandingBagrutBadge className="border-white/20 bg-white/15 text-white ring-white/20" />
+          )}
+        </div>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-base text-primary-100">
           <span>כיתה {data.student.class.name}</span>
           {data.student.class.gradeYear && <span>{data.student.class.gradeYear}</span>}
@@ -123,6 +131,20 @@ export function StudentDashboardContent({
               icon: "award",
               color: "success",
             },
+            ...(data.outstandingBagrut?.isCandidate
+              ? [
+                  {
+                    title: "בגרות מצטיינת",
+                    value: "מועמד",
+                    subtitle:
+                      data.outstandingBagrut.average != null
+                        ? `ממוצע ${data.outstandingBagrut.average.toFixed(1)}`
+                        : undefined,
+                    icon: "award" as const,
+                    color: "warning" as const,
+                  },
+                ]
+              : []),
           ]}
         />
       </div>

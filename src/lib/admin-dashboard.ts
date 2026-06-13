@@ -1,0 +1,563 @@
+import {
+  collectOverdueGradeItems,
+  collectUpcomingGradeItems,
+  buildReminderPlans,
+  buildReminderRecipients,
+  getIsraelYmd,
+  isGradeEntryIncomplete,
+  type GradeReminderSettings,
+} from "@/lib/grade-reminders";
+import {
+  listAllGrades,
+  listClasses,
+  listExamPaths,
+  listStaff,
+  listStudents,
+  listSubjects,
+  listTracks,
+} from "@/lib/firestore";
+import { getGradeReminderSettings } from "@/lib/firestore/settings";
+import { cached } from "@/lib/server-cache";
+import {
+  canViewOutstandingBagrut,
+  getAllowedClassIds,
+  getAllowedSubjectIds,
+  hasAnyGradeWrite,
+  isFullAdmin,
+} from "@/lib/permissions";
+import {
+  computeOutstandingBagrutForStudents,
+  OUTSTANDING_BAGRUT_MIN_AVERAGE,
+  type OutstandingBagrutResult,
+} from "@/lib/outstanding-bagrut";
+import { calcSubjectProgress } from "@/lib/progress";
+import { resolveRelevantSubjects, type StudentWithRelations } from "@/lib/student-subjects";
+import type {
+  AuthSession,
+  Class,
+  ExamPath,
+  Grade,
+  Student,
+  Subject,
+  Track,
+} from "@/lib/types";
+
+export type GradeGaps = {
+  totalMissing: number;
+  overdueCount: number;
+  upcomingCount: number;
+  topMissingSubjects: Array<{ subjectId: string; subjectName: string; missingCount: number }>;
+  byClass: Array<{
+    classId: string;
+    className: string;
+    studentCount: number;
+    missingCount: number;
+    completionPercent: number;
+  }>;
+};
+
+export type SchoolProgress = {
+  overallCompletionPercent: number;
+  estimatedAverage: number | null;
+  gradedObligationsCount: number;
+  totalRelevantObligationsCount: number;
+};
+
+export type OutstandingBagrutPreview = {
+  candidateCount: number;
+  nearMissCount: number;
+  topCandidates: Array<{
+    studentId: string;
+    name: string;
+    className: string;
+    average: number;
+  }>;
+};
+
+export type GradeRemindersSummary = {
+  enabled: boolean;
+  overdueCount: number;
+  wouldNotifyCount: number;
+  lastRunAt: string | null;
+};
+
+export type DataQualityAlerts = {
+  studentsWithoutClass: number;
+  classesWithoutStudents: number;
+  subjectsWithoutObligations: number;
+  obligationsWithoutDueDate: number;
+};
+
+export type AdminDashboardCounts = {
+  students: number;
+  classes: number;
+  subjects: number;
+  paths: number;
+  obligations: number;
+  gradedCount: number;
+};
+
+export type AdminDashboardResponse = {
+  counts: AdminDashboardCounts;
+  paths: Array<{ id: string; label: string; key: string }>;
+  gradeGaps: GradeGaps | null;
+  schoolProgress: SchoolProgress | null;
+  outstandingBagrutPreview: OutstandingBagrutPreview | null;
+  gradeRemindersSummary: GradeRemindersSummary | null;
+  dataQualityAlerts: DataQualityAlerts | null;
+};
+
+type RawData = {
+  subjects: Subject[];
+  students: Student[];
+  classes: Class[];
+  examPaths: ExamPath[];
+  tracks: Track[];
+  grades: Grade[];
+  reminderSettings: GradeReminderSettings;
+  staff: import("@/lib/types").StaffRecord[];
+};
+
+type ScopedData = RawData & {
+  scopedStudents: Student[];
+  scopedSubjects: Subject[];
+  allowedSubjectIds: string[] | null;
+};
+
+function withClass(student: Student, cls: Class): StudentWithRelations {
+  return {
+    ...student,
+    class: {
+      examPathId: cls.examPathId,
+      name: cls.name,
+      gradeYear: cls.gradeYear,
+    },
+  };
+}
+
+function buildScopeCacheKey(session: AuthSession): string {
+  const perms = session.permissions?.map((p) => JSON.stringify(p)).join("|") ?? "legacy";
+  return `${session.email}:${session.role}:${perms}`;
+}
+
+function filterStudentsForScope(
+  session: AuthSession,
+  students: Student[],
+  classes: Class[],
+  subjects: Subject[],
+  examPaths: ExamPath[],
+  tracks: Track[]
+): Student[] {
+  if (isFullAdmin(session)) return students;
+
+  const classById = new Map(classes.map((c) => [c.id, c]));
+  const examPathById = new Map(examPaths.map((p) => [p.id, p]));
+  const tracksById = new Map(tracks.map((t) => [t.id, t]));
+
+  const allowedSubjectIds = getAllowedSubjectIds(session);
+  if (allowedSubjectIds !== null) {
+    const allowed = new Set(allowedSubjectIds);
+    return students.filter((student) => {
+      const cls = classById.get(student.classId);
+      if (!cls) return false;
+      const relevant = resolveRelevantSubjects(
+        withClass(student, cls),
+        subjects,
+        examPathById.get(cls.examPathId) ?? null,
+        tracksById
+      );
+      return relevant.some((s) => allowed.has(s.id));
+    });
+  }
+
+  const allowedClassIds = getAllowedClassIds(session, classes);
+  if (allowedClassIds === null) return students;
+
+  const allowed = new Set(allowedClassIds);
+  return students.filter((s) => allowed.has(s.classId));
+}
+
+function filterSubjectsForScope(session: AuthSession, subjects: Subject[]): Subject[] {
+  const allowedSubjectIds = getAllowedSubjectIds(session);
+  if (allowedSubjectIds === null) return subjects;
+  const allowed = new Set(allowedSubjectIds);
+  return subjects.filter((s) => allowed.has(s.id));
+}
+
+function buildGradeMap(grades: Grade[]): Map<string, Grade> {
+  const map = new Map<string, Grade>();
+  for (const g of grades) {
+    map.set(`${g.studentId}::${g.obligationId}`, g);
+  }
+  return map;
+}
+
+function isNearMiss(result: OutstandingBagrutResult): boolean {
+  if (result.isCandidate) return false;
+  if (
+    result.average != null &&
+    result.average >= OUTSTANDING_BAGRUT_MIN_AVERAGE - 2 &&
+    result.average < OUTSTANDING_BAGRUT_MIN_AVERAGE
+  ) {
+    return true;
+  }
+  const met = [result.meetsEnglishUnits, result.meetsMathUnits, result.meetsAverage].filter(
+    Boolean
+  ).length;
+  return met === 2;
+}
+
+function computeGradeGaps(data: ScopedData): GradeGaps {
+  const classById = new Map(data.classes.map((c) => [c.id, c]));
+  const examPathById = new Map(data.examPaths.map((p) => [p.id, p]));
+  const tracksById = new Map(data.tracks.map((t) => [t.id, t]));
+  const gradeMap = buildGradeMap(data.grades);
+  const allowedSubjects =
+    data.allowedSubjectIds === null ? null : new Set(data.allowedSubjectIds);
+
+  let totalMissing = 0;
+  const missingBySubject = new Map<string, { name: string; count: number }>();
+  const classStats = new Map<
+    string,
+    { name: string; studentCount: number; missing: number; total: number; completed: number }
+  >();
+
+  for (const student of data.scopedStudents) {
+    const cls = classById.get(student.classId);
+    if (!cls) continue;
+
+    const withRelations = withClass(student, cls);
+    const relevant = resolveRelevantSubjects(
+      withRelations,
+      data.subjects,
+      examPathById.get(cls.examPathId) ?? null,
+      tracksById
+    );
+
+    const classEntry = classStats.get(cls.id) ?? {
+      name: cls.name,
+      studentCount: 0,
+      missing: 0,
+      total: 0,
+      completed: 0,
+    };
+    classEntry.studentCount += 1;
+
+    for (const subject of relevant) {
+      if (allowedSubjects && !allowedSubjects.has(subject.id)) continue;
+
+      for (const obligation of subject.obligations) {
+        classEntry.total += 1;
+        const grade = gradeMap.get(`${student.id}::${obligation.id}`);
+        if (isGradeEntryIncomplete(obligation, grade)) {
+          totalMissing += 1;
+          classEntry.missing += 1;
+          const sub = missingBySubject.get(subject.id) ?? { name: subject.name, count: 0 };
+          sub.count += 1;
+          missingBySubject.set(subject.id, sub);
+        } else {
+          classEntry.completed += 1;
+        }
+      }
+    }
+
+    classStats.set(cls.id, classEntry);
+  }
+
+  const today = getIsraelYmd();
+  const reminderInput = {
+    today,
+    subjects: data.scopedSubjects,
+    students: data.scopedStudents,
+    classes: data.classes,
+    examPaths: data.examPaths,
+    tracks: data.tracks,
+    grades: data.grades,
+  };
+
+  const overdueItems = collectOverdueGradeItems(reminderInput);
+  const upcomingItems = collectUpcomingGradeItems(reminderInput);
+
+  const topMissingSubjects = [...missingBySubject.entries()]
+    .map(([subjectId, { name, count }]) => ({
+      subjectId,
+      subjectName: name,
+      missingCount: count,
+    }))
+    .sort((a, b) => b.missingCount - a.missingCount)
+    .slice(0, 5);
+
+  const byClass = [...classStats.entries()]
+    .map(([classId, stats]) => ({
+      classId,
+      className: stats.name,
+      studentCount: stats.studentCount,
+      missingCount: stats.missing,
+      completionPercent:
+        stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 100,
+    }))
+    .sort((a, b) => b.missingCount - a.missingCount)
+    .slice(0, 10);
+
+  return {
+    totalMissing,
+    overdueCount: overdueItems.length,
+    upcomingCount: upcomingItems.length,
+    topMissingSubjects,
+    byClass,
+  };
+}
+
+function computeSchoolProgress(data: ScopedData): SchoolProgress {
+  const classById = new Map(data.classes.map((c) => [c.id, c]));
+  const examPathById = new Map(data.examPaths.map((p) => [p.id, p]));
+  const tracksById = new Map(data.tracks.map((t) => [t.id, t]));
+  const gradeMap = buildGradeMap(data.grades);
+  const allowedSubjects =
+    data.allowedSubjectIds === null ? null : new Set(data.allowedSubjectIds);
+
+  let totalRelevant = 0;
+  let gradedCount = 0;
+  const estimatedGrades: number[] = [];
+
+  for (const student of data.scopedStudents) {
+    const cls = classById.get(student.classId);
+    if (!cls) continue;
+
+    const withRelations = withClass(student, cls);
+    const relevant = resolveRelevantSubjects(
+      withRelations,
+      data.subjects,
+      examPathById.get(cls.examPathId) ?? null,
+      tracksById
+    );
+
+    for (const subject of relevant) {
+      if (allowedSubjects && !allowedSubjects.has(subject.id)) continue;
+
+      const subjectGrades = subject.obligations
+        .map((o) => gradeMap.get(`${student.id}::${o.id}`))
+        .filter((g): g is Grade => !!g);
+
+      const progress = calcSubjectProgress(subject.obligations, subjectGrades);
+      if (progress.estimatedGrade != null) {
+        estimatedGrades.push(progress.estimatedGrade);
+      }
+
+      for (const obligation of subject.obligations) {
+        totalRelevant += 1;
+        const grade = gradeMap.get(`${student.id}::${obligation.id}`);
+        if (!isGradeEntryIncomplete(obligation, grade)) {
+          gradedCount += 1;
+        }
+      }
+    }
+  }
+
+  const estimatedAverage =
+    estimatedGrades.length > 0
+      ? estimatedGrades.reduce((s, v) => s + v, 0) / estimatedGrades.length
+      : null;
+
+  return {
+    overallCompletionPercent:
+      totalRelevant > 0 ? Math.round((gradedCount / totalRelevant) * 100) : 0,
+    estimatedAverage,
+    gradedObligationsCount: gradedCount,
+    totalRelevantObligationsCount: totalRelevant,
+  };
+}
+
+function computeCounts(
+  session: AuthSession,
+  data: ScopedData,
+  schoolProgress: SchoolProgress | null
+): AdminDashboardCounts {
+  const classById = new Map(data.classes.map((c) => [c.id, c]));
+  const scopedClassIds = new Set(data.scopedStudents.map((s) => s.classId));
+  const relevantPaths = new Set(
+    data.scopedStudents
+      .map((s) => classById.get(s.classId)?.examPathId)
+      .filter((id): id is string => !!id)
+  );
+
+  const obligations = data.scopedSubjects.reduce(
+    (sum, s) => sum + s.obligations.length,
+    0
+  );
+
+  return {
+    students: data.scopedStudents.length,
+    classes: scopedClassIds.size,
+    subjects: data.scopedSubjects.length,
+    paths: isFullAdmin(session) ? data.examPaths.length : relevantPaths.size,
+    obligations,
+    gradedCount: schoolProgress?.gradedObligationsCount ?? 0,
+  };
+}
+
+function computeDataQualityAlerts(data: RawData): DataQualityAlerts {
+  const classById = new Map(data.classes.map((c) => [c.id, c]));
+  const studentsByClass = new Map<string, number>();
+  let studentsWithoutClass = 0;
+
+  for (const student of data.students) {
+    if (!classById.has(student.classId)) {
+      studentsWithoutClass += 1;
+    } else {
+      studentsByClass.set(student.classId, (studentsByClass.get(student.classId) ?? 0) + 1);
+    }
+  }
+
+  const classesWithoutStudents = data.classes.filter(
+    (c) => (studentsByClass.get(c.id) ?? 0) === 0
+  ).length;
+
+  const subjectsWithoutObligations = data.subjects.filter(
+    (s) => s.obligations.length === 0
+  ).length;
+
+  let obligationsWithoutDueDate = 0;
+  for (const subject of data.subjects) {
+    for (const obligation of subject.obligations) {
+      if (!obligation.gradeEntryDueDate) {
+        obligationsWithoutDueDate += 1;
+      }
+    }
+  }
+
+  return {
+    studentsWithoutClass,
+    classesWithoutStudents,
+    subjectsWithoutObligations,
+    obligationsWithoutDueDate,
+  };
+}
+
+async function loadRawData(): Promise<RawData> {
+  const [subjects, students, classes, examPaths, tracks, grades, reminderSettings, staff] =
+    await Promise.all([
+      listSubjects(),
+      listStudents(),
+      listClasses(),
+      listExamPaths(),
+      listTracks(),
+      listAllGrades(),
+      getGradeReminderSettings(),
+      listStaff(),
+    ]);
+
+  return {
+    subjects,
+    students,
+    classes,
+    examPaths,
+    tracks,
+    grades,
+    reminderSettings,
+    staff,
+  };
+}
+
+function scopeData(session: AuthSession, raw: RawData): ScopedData {
+  const scopedStudents = filterStudentsForScope(
+    session,
+    raw.students,
+    raw.classes,
+    raw.subjects,
+    raw.examPaths,
+    raw.tracks
+  );
+  const scopedSubjects = filterSubjectsForScope(session, raw.subjects);
+
+  return {
+    ...raw,
+    scopedStudents,
+    scopedSubjects,
+    allowedSubjectIds: getAllowedSubjectIds(session),
+  };
+}
+
+async function computeDashboard(session: AuthSession): Promise<AdminDashboardResponse> {
+  const raw = await loadRawData();
+  const scoped = scopeData(session, raw);
+
+  const paths = raw.examPaths.map((p) => ({
+    id: p.id,
+    label: p.label,
+    key: p.key,
+  }));
+
+  const canGrades = hasAnyGradeWrite(session);
+  const gradeGaps = canGrades ? computeGradeGaps(scoped) : null;
+  const schoolProgress = canGrades ? computeSchoolProgress(scoped) : null;
+
+  let outstandingBagrutPreview: OutstandingBagrutPreview | null = null;
+  if (canViewOutstandingBagrut(session)) {
+    const classMap = new Map(raw.classes.map((c) => [c.id, c]));
+    const results = await computeOutstandingBagrutForStudents(
+      scoped.scopedStudents,
+      classMap
+    );
+    const candidates = results.filter((r) => r.outstandingBagrut.isCandidate);
+    const nearMiss = results.filter((r) => isNearMiss(r.outstandingBagrut));
+
+    outstandingBagrutPreview = {
+      candidateCount: candidates.length,
+      nearMissCount: nearMiss.length,
+      topCandidates: candidates
+        .filter((c) => c.outstandingBagrut.average != null)
+        .sort((a, b) => (b.outstandingBagrut.average ?? 0) - (a.outstandingBagrut.average ?? 0))
+        .slice(0, 5)
+        .map((c) => ({
+          studentId: c.studentId,
+          name: c.name,
+          className: c.className,
+          average: c.outstandingBagrut.average!,
+        })),
+    };
+  }
+
+  let gradeRemindersSummary: GradeRemindersSummary | null = null;
+  if (isFullAdmin(session)) {
+    const overdueItems = collectOverdueGradeItems({
+      today: getIsraelYmd(),
+      subjects: raw.subjects,
+      students: raw.students,
+      classes: raw.classes,
+      examPaths: raw.examPaths,
+      tracks: raw.tracks,
+      grades: raw.grades,
+    });
+    const recipients = buildReminderRecipients(raw.staff);
+    const plans = buildReminderPlans(recipients, raw.staff, overdueItems);
+
+    gradeRemindersSummary = {
+      enabled: raw.reminderSettings.enabled ?? false,
+      overdueCount: overdueItems.length,
+      wouldNotifyCount: plans.length,
+      lastRunAt: raw.reminderSettings.lastRunAt ?? null,
+    };
+  }
+
+  const dataQualityAlerts = isFullAdmin(session) ? computeDataQualityAlerts(raw) : null;
+
+  const counts = computeCounts(session, scoped, schoolProgress);
+
+  return {
+    counts,
+    paths,
+    gradeGaps,
+    schoolProgress,
+    outstandingBagrutPreview,
+    gradeRemindersSummary,
+    dataQualityAlerts,
+  };
+}
+
+export async function getAdminDashboardForSession(
+  session: AuthSession
+): Promise<AdminDashboardResponse> {
+  const cacheKey = `admin:dashboard:${buildScopeCacheKey(session)}`;
+  return cached(cacheKey, 45_000, () => computeDashboard(session));
+}

@@ -125,6 +125,24 @@ export function hasAnyStudentEdit(session: AuthSession): boolean {
   return getEffectivePermissions(session).some((p) => p.action === "students:edit");
 }
 
+/** מנהלים ורכזי שכבות/כיתות — לא מורים מקצועיים (הרשאת מקצוע בלבד) */
+export function canViewOutstandingBagrut(session: AuthSession): boolean {
+  if (isFullAdmin(session)) return true;
+  if (session.role !== "TEACHER") return false;
+
+  const perms = getEffectivePermissions(session);
+  const relevant = perms.filter(
+    (p) =>
+      p.action === "grades:write" ||
+      p.action === "students:view" ||
+      p.action === "students:edit"
+  );
+
+  return relevant.some(
+    (p) => p.scope === "all" || p.scope === "gradeYear" || p.scope === "class"
+  );
+}
+
 type ClassRef = { id: string; gradeYear: string | null };
 
 export function getAllowedClassIds(

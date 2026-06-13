@@ -6,6 +6,7 @@ import { useRegisterPageMeta } from "@/components/layout/PageMetaContext";
 import { StudentDashboardContent } from "@/components/students/StudentDashboardContent";
 import { useApi } from "@/hooks/useApi";
 import type { StudentDashboardData } from "@/components/students/StudentDashboardContent";
+import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
 
 export default function StudentDashboard() {
   const { data, loading } = useApi<StudentDashboardData>("/api/student/dashboard");
@@ -37,9 +38,14 @@ export default function StudentDashboard() {
 
       <div className="relative">
         <p className="text-base text-primary-100/90">שלום,</p>
-        <h1 className="mt-0.5 text-4xl font-extrabold tracking-tight text-white drop-shadow-sm">
-          {data.student.user.name}
-        </h1>
+        <div className="mt-0.5 flex flex-wrap items-center gap-3">
+          <h1 className="text-4xl font-extrabold tracking-tight text-white drop-shadow-sm">
+            {data.student.user.name}
+          </h1>
+          {data.outstandingBagrut?.isCandidate && (
+            <OutstandingBagrutBadge className="border-white/20 bg-white/15 text-white ring-white/20" />
+          )}
+        </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
           {[

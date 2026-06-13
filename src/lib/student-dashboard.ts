@@ -10,6 +10,7 @@ import {
   getTrackById,
   listExamPaths,
 } from "@/lib/firestore";
+import { evaluateOutstandingBagrut } from "@/lib/outstanding-bagrut";
 import { attachPathLabels, buildPathLabelsBySubjectId } from "@/lib/subject-display";
 
 export async function buildStudentDashboard(studentId: string) {
@@ -45,6 +46,8 @@ export async function buildStudentDashboard(studentId: string) {
         subjectsWithProgress.length
       : 0;
 
+  const outstandingBagrut = evaluateOutstandingBagrut(student, subjectsWithProgress);
+
   return {
     student: {
       ...studentWithRelations,
@@ -55,5 +58,6 @@ export async function buildStudentDashboard(studentId: string) {
     },
     subjects: subjectsWithProgress,
     overallProgress,
+    outstandingBagrut,
   };
 }

@@ -18,12 +18,13 @@ import {
   UserCog,
   Bell,
   X,
+  Award,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { SiteLogos } from "@/components/ui/SiteLogos";
 import type { Role } from "@/lib/types";
 import { canImportStudents, canManageStructure } from "@/lib/roles";
-import { hasAnyGradeWrite, hasAnyStudentView } from "@/lib/permissions";
+import { hasAnyGradeWrite, hasAnyStudentView, canViewOutstandingBagrut } from "@/lib/permissions";
 
 type NavLink = {
   href: string;
@@ -35,6 +36,7 @@ type NavLink = {
 const dailyWorkLinks: NavLink[] = [
   { href: "/admin", label: "דשבורד", icon: LayoutDashboard, exact: true },
   { href: "/admin/students", label: "תלמידים", icon: Users },
+  { href: "/admin/outstanding-bagrut", label: "בגרות מצטיינת", icon: Award },
   { href: "/admin/grades", label: "הזנת ציונים", icon: ClipboardList },
 ];
 
@@ -138,7 +140,18 @@ export function Sidebar({
       ? []
       : dailyWorkLinks.filter((l) => {
           if (l.href === "/admin/grades" && session && !hasAnyGradeWrite(session)) return false;
-          if (l.href === "/admin/students" && session && !hasAnyStudentView(session)) return false;
+          if (
+            (l.href === "/admin/students" || l.href === "/admin/outstanding-bagrut") &&
+            session &&
+            !hasAnyStudentView(session)
+          )
+            return false;
+          if (
+            l.href === "/admin/outstanding-bagrut" &&
+            session &&
+            !canViewOutstandingBagrut(session)
+          )
+            return false;
           return true;
         });
 

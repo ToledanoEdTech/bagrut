@@ -17,7 +17,6 @@ import { Alert } from "@/components/ui/Alert";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { UnsavedChangesBanner } from "@/components/ui/UnsavedChangesBanner";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { useToast } from "@/components/ui/Toast";
 import {
   buildStudentGradesSheet,
   downloadExcel,
@@ -75,7 +74,6 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 
 export default function GradesPage() {
   const confirm = useConfirm();
-  const toast = useToast();
   const { data: students = [], loading: studentsLoading } = useApi<Student[]>("/api/students");
   const [classFilter, setClassFilter] = useState("");
   const [selectedId, setSelectedId] = useState("");
@@ -85,6 +83,20 @@ export default function GradesPage() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Refs mirroring the latest state, used by flush handlers (navigation / unmount / tab close)
+  // so we always save the most recent values without re-creating the handlers.
+  const gradesRef = useRef<Grade[]>([]);
+  const savedSnapshotRef = useRef("");
+  const selectedIdRef = useRef("");
+  const savingRef = useRef(false);
+  const isDirtyRef = useRef(false);
+  // Tracks which student is currently loaded into the editor, so a background
+  // refetch of the same student does not clobber edits that are in progress.
+  const hydratedStudentRef = useRef<string | null>(null);
+
+  // How long to wait after the last keystroke before auto-saving. Long enough that
+  // typing a full multi-digit grade does not trigger a mid-entry save.
+  const AUTOSAVE_DELAY_MS = 2500;
 
   const filteredStudents = useMemo(() => {
     if (!classFilter) return students;
@@ -106,11 +118,24 @@ export default function GradesPage() {
   const gradesKey = selectedId ? `/api/grades?studentId=${selectedId}` : null;
   const subjectsKey = selectedId ? `/api/students/subjects?studentId=${selectedId}` : null;
 
-  const { data: gradesData, loading: gradesLoading, mutate: refreshGrades } = useApi<GradeRow[]>(gradesKey);
-  const { data: subjects = [], loading: subjectsLoading, mutate: refreshSubjects } = useApi<Subject[]>(subjectsKey);
+  const { data: gradesData, loading: gradesLoading } = useApi<GradeRow[]>(gradesKey);
+  const { data: subjects = [], loading: subjectsLoading } = useApi<Subject[]>(subjectsKey);
 
   const loading = !!selectedId && (gradesLoading || subjectsLoading) && grades.length === 0 && subjects.length === 0;
   const isDirty = savedSnapshot !== "" && JSON.stringify(grades) !== savedSnapshot;
+
+  useEffect(() => {
+    gradesRef.current = grades;
+  }, [grades]);
+  useEffect(() => {
+    savedSnapshotRef.current = savedSnapshot;
+  }, [savedSnapshot]);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  }, [isDirty]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -119,11 +144,18 @@ export default function GradesPage() {
   }, [selectedId]);
 
   useEffect(() => {
-    if (!gradesData) {
+    if (!selectedId) {
       setGrades([]);
       setSavedSnapshot("");
+      hydratedStudentRef.current = null;
       return;
     }
+    if (!gradesData) return;
+    // Once this student's data is loaded, never overwrite the editor from a
+    // background refetch while there are unsaved edits — that was clobbering
+    // grades the user was still typing.
+    if (hydratedStudentRef.current === selectedId && isDirtyRef.current) return;
+
     const initial = gradesData.map((g) => ({
       obligationId: g.obligationId,
       score: g.score,
@@ -135,17 +167,23 @@ export default function GradesPage() {
     setSavedSnapshot(JSON.stringify(initial));
     setSaveState("idle");
     setSaveError(null);
-  }, [gradesData]);
+    hydratedStudentRef.current = selectedId;
+  }, [gradesData, selectedId]);
 
   const saveGrades = useCallback(async () => {
     if (!selectedId) return false;
+    // Snapshot the exact payload we send so the "saved" marker matches what was
+    // persisted, even if the user keeps typing while the request is in flight.
+    const payload = gradesRef.current;
+    const payloadSnapshot = JSON.stringify(payload);
+    savingRef.current = true;
     setSaveState("saving");
     setSaveError(null);
     try {
       const res = await fetch("/api/grades", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId: selectedId, grades }),
+        body: JSON.stringify({ studentId: selectedId, grades: payload }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -153,29 +191,65 @@ export default function GradesPage() {
         setSaveError((data as { error?: string }).error ?? "שגיאה בשמירה");
         return false;
       }
-      setSavedSnapshot(JSON.stringify(grades));
+      setSavedSnapshot(payloadSnapshot);
       setSaveState("saved");
-      toast.success("נשמר בהצלחה");
+      // Invalidate so other views (dashboards, matrix) refetch fresh data, but do
+      // NOT force-refetch into this editor — that would overwrite live edits.
       invalidateCache(`/api/grades?studentId=${selectedId}`);
-      await Promise.all([refreshGrades(), refreshSubjects()]);
       return true;
     } catch {
       setSaveState("error");
       setSaveError("שגיאת רשת בשמירה");
       return false;
+    } finally {
+      savingRef.current = false;
     }
-  }, [selectedId, grades, refreshGrades, refreshSubjects, toast]);
+  }, [selectedId]);
 
   useEffect(() => {
     if (!selectedId || !isDirty) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       void saveGrades();
-    }, 800);
+    }, AUTOSAVE_DELAY_MS);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, [grades, selectedId, isDirty, saveGrades]);
+
+  // Flush any pending edits when leaving the page or closing the tab, so a grade
+  // typed just before navigating away is not lost. Uses keepalive so the request
+  // survives the page teardown.
+  useEffect(() => {
+    function flushOnExit() {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      const studentId = selectedIdRef.current;
+      if (!studentId || !isDirtyRef.current || savingRef.current) return;
+      try {
+        fetch("/api/grades", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ studentId, grades: gradesRef.current }),
+          keepalive: true,
+        }).catch(() => {});
+      } catch {
+        // best-effort only
+      }
+    }
+
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (!isDirtyRef.current) return;
+      flushOnExit();
+      e.preventDefault();
+      e.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      flushOnExit();
+    };
+  }, []);
 
   function handleGradeChange(obligationId: string, field: string, value: string | number | null) {
     setGrades((prev) => {
@@ -272,34 +346,31 @@ export default function GradesPage() {
     setSaveState("idle");
   }
 
+  // Save any pending edits before switching students. Returns false only if the
+  // save failed and the user chose not to proceed (to avoid silent data loss).
+  async function flushBeforeLeaving(): Promise<boolean> {
+    if (!isDirty) return true;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    const ok = await saveGrades();
+    if (ok) return true;
+    return confirm({
+      title: "השמירה נכשלה",
+      description: "לא הצלחנו לשמור את השינויים. לעבור לתלמיד אחר בכל זאת? השינויים שלא נשמרו ייאבדו.",
+      confirmLabel: "עבור בכל זאת",
+      variant: "danger",
+    });
+  }
+
   async function navigateStudent(direction: -1 | 1) {
     const nextIndex = currentIndex + direction;
     if (nextIndex < 0 || nextIndex >= filteredStudents.length) return;
-
-    if (isDirty) {
-      const ok = await confirm({
-        title: "שינויים לא שמורים",
-        description: "לעבור לתלמיד אחר בכל זאת? השינויים שלא נשמרו עלולים להיאבד.",
-        confirmLabel: "עבור בכל זאת",
-        variant: "danger",
-      });
-      if (!ok) return;
-    }
-
+    if (!(await flushBeforeLeaving())) return;
     setSelectedId(filteredStudents[nextIndex]!.id);
   }
 
   async function selectStudent(id: string) {
     if (id === selectedId) return;
-    if (isDirty) {
-      const ok = await confirm({
-        title: "שינויים לא שמורים",
-        description: "לעבור לתלמיד אחר בכל זאת? השינויים שלא נשמרו עלולים להיאבד.",
-        confirmLabel: "עבור בכל זאת",
-        variant: "danger",
-      });
-      if (!ok) return;
-    }
+    if (!(await flushBeforeLeaving())) return;
     setSelectedId(id);
   }
 

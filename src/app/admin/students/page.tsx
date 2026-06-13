@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Users, Info } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, Info, Award, ChevronLeft } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -18,13 +19,20 @@ import {
   StudentForm,
   type StudentFormData,
 } from "@/components/students/StudentForm";
+import { StudentCardView } from "@/components/students/StudentCardView";
 import {
   buildStudentsSheet,
   downloadExcel,
   exportTimestamp,
 } from "@/lib/excel-export";
 import { useAuth } from "@/components/AuthProvider";
-import { hasAnyStudentEdit } from "@/lib/permissions";
+import { hasAnyStudentEdit, canViewOutstandingBagrut } from "@/lib/permissions";
+import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
+import type { OutstandingBagrutResult } from "@/lib/outstanding-bagrut";
+
+type OutstandingBagrutApiData = {
+  byStudentId: Record<string, OutstandingBagrutResult>;
+};
 
 type Student = {
   id: string;
@@ -69,6 +77,7 @@ type ClassGroup = {
 export default function StudentsPage() {
   const { session } = useAuth();
   const canEdit = session ? hasAnyStudentEdit(session) : false;
+  const canOutstandingBagrut = session ? canViewOutstandingBagrut(session) : false;
   const confirm = useConfirm();
   const toast = useToast();
 
@@ -77,6 +86,9 @@ export default function StudentsPage() {
   const { data: classesRaw = [], mutate: refreshClasses } = useApi<ClassItem[]>("/api/classes");
   const { data: tracks = [], mutate: refreshTracks } = useApi<TrackOption[]>("/api/tracks");
   const { data: allSubjects = [] } = useApi<SubjectOption[]>("/api/subjects");
+  const { data: outstandingData } = useApi<OutstandingBagrutApiData>(
+    canOutstandingBagrut ? "/api/students/outstanding-bagrut" : null
+  );
   const classes: ClassOption[] = classesRaw.map((c) => ({ id: c.id, name: c.name }));
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -89,6 +101,22 @@ export default function StudentsPage() {
   const [editExamPathId, setEditExamPathId] = useState<string | null>(null);
   const [newExamPathId, setNewExamPathId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [showCandidatesOnly, setShowCandidatesOnly] = useState(false);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+
+  const outstandingByStudentId = outstandingData?.byStudentId ?? {};
+  const selectedStudent = students.find((s) => s.id === selectedStudentId);
+
+  function openStudent(studentId: string) {
+    setShowNew(false);
+    setEditingId(null);
+    setForm(null);
+    setSelectedStudentId(studentId);
+  }
+
+  function backToList() {
+    setSelectedStudentId(null);
+  }
 
   function examPathIdForClass(classId: string) {
     return classesRaw.find((c) => c.id === classId)?.examPathId ?? null;
@@ -130,13 +158,15 @@ export default function StudentsPage() {
 
   const filteredClassGroups = useMemo(() => {
     const q = search.trim();
-    if (!q) return classGroups;
-
-    const qLower = q.toLowerCase();
     return classGroups
       .map((group) => ({
         ...group,
         students: group.students.filter((s) => {
+          if (showCandidatesOnly && !outstandingByStudentId[s.id]?.isCandidate) {
+            return false;
+          }
+          if (!q) return true;
+          const qLower = q.toLowerCase();
           const trackNames =
             s.tracks?.map((t) => t.name).join(" ") ?? s.track?.name ?? "";
           return (
@@ -148,7 +178,7 @@ export default function StudentsPage() {
         }),
       }))
       .filter((group) => group.students.length > 0);
-  }, [classGroups, search]);
+  }, [classGroups, search, showCandidatesOnly, outstandingByStudentId]);
 
   const exportStudents = useMemo(() => {
     if (search.trim()) return filteredClassGroups.flatMap((g) => g.students);
@@ -283,10 +313,16 @@ export default function StudentsPage() {
       : s.track?.name ?? "—";
   }
 
-  const pageTitle = canEdit ? "ניהול תלמידים" : "תלמידים";
-  const pageSubtitle = canEdit
-    ? "הוספה ידנית, עריכת שיוכים, מגמות, מקצועות חובה, רמות יחידות (מתמטיקה/אנגלית) וכיתות"
-    : "צפייה בתלמידים לפי ההרשאות שהוגדרו";
+  const pageTitle = selectedStudent
+    ? selectedStudent.user.name
+    : canEdit
+      ? "ניהול תלמידים"
+      : "תלמידים";
+  const pageSubtitle = selectedStudent
+    ? `כרטיס תלמיד · ${selectedStudent.class?.name ?? "ללא כיתה"}`
+    : canEdit
+      ? "הוספה ידנית, עריכת שיוכים, מגמות, מקצועות חובה, רמות יחידות (מתמטיקה/אנגלית) וכיתות"
+      : "צפייה בתלמידים לפי ההרשאות שהוגדרו";
 
   if (studentsLoading && students.length === 0) {
     return (
@@ -302,29 +338,65 @@ export default function StudentsPage() {
   return (
     <>
       <PageHeader title={pageTitle} subtitle={pageSubtitle}>
-        <div className="flex flex-wrap items-center gap-2">
-          <ExportButton onExport={handleExport} disabled={exportStudents.length === 0} />
-          {canEdit && (
-            <Button
-              onClick={openNewForm}
-              disabled={classes.length === 0}
-              className="shrink-0"
-              title={classes.length === 0 ? "יש ליצור כיתה לפני הוספת תלמיד" : undefined}
-            >
-              <Plus className="h-4 w-4" />
-              תלמיד חדש
-            </Button>
-          )}
-        </div>
+        {!selectedStudentId && (
+          <div className="flex flex-wrap items-center gap-2">
+            <ExportButton onExport={handleExport} disabled={exportStudents.length === 0} />
+            {canEdit && (
+              <Button
+                onClick={openNewForm}
+                disabled={classes.length === 0}
+                className="shrink-0"
+                title={classes.length === 0 ? "יש ליצור כיתה לפני הוספת תלמיד" : undefined}
+              >
+                <Plus className="h-4 w-4" />
+                תלמיד חדש
+              </Button>
+            )}
+          </div>
+        )}
       </PageHeader>
 
-      <div className="mt-6">
+      <AnimatePresence mode="wait">
+        {selectedStudentId ? (
+          <motion.div
+            key="detail"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.2 }}
+            className="mt-4"
+          >
+            <Button variant="secondary" onClick={backToList} className="mb-4">
+              <ChevronLeft className="h-4 w-4" />
+              חזרה לרשימת התלמידים
+            </Button>
+            <StudentCardView studentId={selectedStudentId} />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="list"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.2 }}
+          >
+      <div className="mt-6 flex flex-wrap items-center gap-3">
         <SearchInput
           value={search}
           onChange={setSearch}
           placeholder="חיפוש לפי שם, אימייל, כיתה או מגמה..."
           className="max-w-md"
         />
+        {canOutstandingBagrut && (
+          <Button
+            variant={showCandidatesOnly ? "primary" : "secondary"}
+            size="sm"
+            onClick={() => setShowCandidatesOnly((v) => !v)}
+          >
+            <Award className="h-4 w-4" />
+            מועמדים לבגרות מצטיינת
+          </Button>
+        )}
       </div>
 
       {saveError && !showNew && !editingId && (
@@ -397,8 +469,17 @@ export default function StudentsPage() {
                 {group.students.map((s) => (
                   <Card key={s.id} className="p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-900">{s.user.name}</p>
+                      <button
+                        type="button"
+                        onClick={() => openStudent(s.id)}
+                        className="min-w-0 flex-1 text-right transition hover:opacity-80"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-slate-900">{s.user.name}</p>
+                          {canOutstandingBagrut && outstandingByStudentId[s.id]?.isCandidate && (
+                            <OutstandingBagrutBadge size="sm" />
+                          )}
+                        </div>
                         <p className="mt-0.5 truncate text-sm text-slate-500" dir="ltr">
                           {s.user.email}
                         </p>
@@ -406,7 +487,7 @@ export default function StudentsPage() {
                         <p className="mt-1 text-xs text-slate-400">
                           מתמטיקה {s.mathUnits} · אנגלית {s.englishUnits}
                         </p>
-                      </div>
+                      </button>
                       {canEdit && (
                         <div className="flex shrink-0 gap-1">
                           <Button
@@ -446,12 +527,13 @@ export default function StudentsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[880px] table-fixed text-base">
                     <colgroup>
-                      <col className="w-[22%]" />
-                      <col className="w-[28%]" />
+                      <col className="w-[20%]" />
                       <col className="w-[24%]" />
-                      <col className="w-[9%]" />
-                      <col className="w-[9%]" />
+                      <col className="w-[20%]" />
                       <col className="w-[8%]" />
+                      <col className="w-[8%]" />
+                      {canOutstandingBagrut && <col className="w-[12%]" />}
+                      {canEdit && <col className="w-[8%]" />}
                     </colgroup>
                     <thead className="bg-slate-50/80">
                       <tr className="border-b border-slate-200 text-slate-500">
@@ -460,14 +542,22 @@ export default function StudentsPage() {
                         <th className="px-4 py-3 text-right text-xs font-semibold">מגמות</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold">מתמטיקה</th>
                         <th className="px-4 py-3 text-center text-xs font-semibold">אנגלית</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold">פעולות</th>
+                        {canOutstandingBagrut && (
+                          <th className="px-4 py-3 text-center text-xs font-semibold">
+                            בגרות מצטיינת
+                          </th>
+                        )}
+                        {canEdit && (
+                          <th className="px-4 py-3 text-right text-xs font-semibold">פעולות</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {group.students.map((s) => (
                         <tr
                           key={s.id}
-                          className="transition-colors even:bg-slate-50/40 hover:bg-primary-50/30"
+                          onClick={() => openStudent(s.id)}
+                          className="cursor-pointer transition-colors even:bg-slate-50/40 hover:bg-primary-50/30"
                         >
                           <td className="truncate px-4 py-3 font-semibold text-slate-800">
                             {s.user.name}
@@ -482,8 +572,17 @@ export default function StudentsPage() {
                           <td className="px-4 py-3 text-center tabular-nums text-slate-700">
                             {s.englishUnits}
                           </td>
-                          <td className="px-4 py-3">
-                            {canEdit && (
+                          {canOutstandingBagrut && (
+                            <td className="px-4 py-3 text-center">
+                              {outstandingByStudentId[s.id]?.isCandidate ? (
+                                <OutstandingBagrutBadge size="sm" />
+                              ) : (
+                                <span className="text-sm text-slate-300">—</span>
+                              )}
+                            </td>
+                          )}
+                          {canEdit && (
+                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center gap-1">
                                 <Button
                                   size="sm"
@@ -507,8 +606,8 @@ export default function StudentsPage() {
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
-                            )}
-                          </td>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -519,6 +618,9 @@ export default function StudentsPage() {
           ))
         )}
       </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <Sheet
         open={!!editingId && !!form}

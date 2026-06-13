@@ -263,6 +263,87 @@ export function collectOverdueGradeItems(input: GradeReminderDataInput): Overdue
   return overdue;
 }
 
+/** חובות עם תאריך יעד בטווח הקרוב (כולל היום) — עדיין חסרות ציונים */
+export function collectUpcomingGradeItems(
+  input: GradeReminderDataInput,
+  withinDays = 14
+): OverdueGradeItem[] {
+  const today = input.today ?? getIsraelYmd();
+  const endDate = addDaysYmd(today, withinDays);
+  const { byId: classById } = buildClassMaps(input.classes);
+  const examPathById = new Map(input.examPaths.map((p) => [p.id, p]));
+  const tracksById = new Map(input.tracks.map((t) => [t.id, t]));
+  const gradeMap = buildGradeMap(input.grades);
+  const upcoming: OverdueGradeItem[] = [];
+
+  for (const subject of input.subjects) {
+    for (const obligation of subject.obligations) {
+      const dueDate = obligation.gradeEntryDueDate;
+      if (!dueDate || dueDate < today || dueDate > endDate) continue;
+
+      const missingByClass = new Map<string, { name: string; gradeYear: string | null; count: number }>();
+      let missingTotal = 0;
+
+      for (const student of input.students) {
+        const cls = classById.get(student.classId);
+        if (!cls) continue;
+
+        const examPath = examPathById.get(cls.examPathId) ?? null;
+        const withRelations = withClass(student, cls);
+        const relevant = resolveRelevantSubjects(
+          withRelations,
+          input.subjects,
+          examPath,
+          tracksById
+        );
+        const matchedSubject = relevant.find((s) => s.id === subject.id);
+        if (!matchedSubject?.obligations.some((o) => o.id === obligation.id)) continue;
+
+        const grade = gradeMap.get(`${student.id}::${obligation.id}`);
+        if (!isGradeEntryIncomplete(obligation, grade)) continue;
+
+        missingTotal += 1;
+        const entry = missingByClass.get(cls.id) ?? {
+          name: cls.name,
+          gradeYear: cls.gradeYear,
+          count: 0,
+        };
+        entry.count += 1;
+        missingByClass.set(cls.id, entry);
+      }
+
+      if (missingTotal === 0) continue;
+
+      const affectedClassIds = [...missingByClass.keys()];
+      const affectedGradeYears = [
+        ...new Set(
+          [...missingByClass.values()]
+            .map((c) => c.gradeYear)
+            .filter((y): y is string => !!y)
+        ),
+      ];
+      const obligationGradeYear = obligation.gradeYear ?? affectedGradeYears[0] ?? null;
+
+      upcoming.push({
+        obligationId: obligation.id,
+        subjectId: subject.id,
+        subjectName: subject.name,
+        obligationLabel: obligationDisplayLabel(obligation),
+        examEvent: obligation.examEvent,
+        gradeYear: obligationGradeYear,
+        gradeEntryDueDate: dueDate,
+        missingStudentCount: missingTotal,
+        classNames: [...missingByClass.values()].map((c) => c.name),
+        affectedClassIds,
+        affectedGradeYears,
+      });
+    }
+  }
+
+  upcoming.sort((a, b) => a.gradeEntryDueDate.localeCompare(b.gradeEntryDueDate));
+  return upcoming;
+}
+
 function matchesGradesWriteScope(
   perm: StaffPermission,
   item: OverdueGradeItem

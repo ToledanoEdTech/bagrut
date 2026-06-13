@@ -98,7 +98,8 @@ export function prefetch(key: string) {
 
 const ROUTE_PREFETCH: Record<string, string[]> = {
   "/admin": ["/api/admin/dashboard"],
-  "/admin/students": ["/api/students", "/api/classes", "/api/tracks"],
+  "/admin/students": ["/api/students", "/api/classes", "/api/tracks", "/api/students/outstanding-bagrut"],
+  "/admin/outstanding-bagrut": ["/api/students/outstanding-bagrut"],
   "/admin/classes": ["/api/classes", "/api/paths"],
   "/admin/subjects": ["/api/subjects"],
   "/admin/grades": ["/api/students", "/api/classes/list"],

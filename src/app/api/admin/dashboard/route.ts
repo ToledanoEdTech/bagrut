@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireStaff } from "@/lib/api-auth";
-import { getAdminDashboardData } from "@/lib/firestore";
+import { getAdminDashboardForSession } from "@/lib/admin-dashboard";
 
 export async function GET() {
-  const { error } = await requireStaff();
-  if (error) return error;
+  const { error, session } = await requireStaff();
+  if (error || !session) return error;
 
-  const data = await getAdminDashboardData();
+  const data = await getAdminDashboardForSession(session);
   return NextResponse.json(data);
 }

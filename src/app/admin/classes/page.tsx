@@ -12,7 +12,11 @@ import { Button } from "@/components/ui/Button";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
+import { useAuth } from "@/components/AuthProvider";
+import { canViewOutstandingBagrut } from "@/lib/permissions";
 import { StudentCardView } from "@/components/students/StudentCardView";
+import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
+import type { OutstandingBagrutResult } from "@/lib/outstanding-bagrut";
 import {
   buildClassStudentsSheet,
   buildClassesSheet,
@@ -43,6 +47,8 @@ type View = "classes" | "students" | "detail";
 
 export default function ClassesPage() {
   const toast = useToast();
+  const { session } = useAuth();
+  const canOutstandingBagrut = session ? canViewOutstandingBagrut(session) : false;
   const [view, setView] = useState<View>("classes");
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
@@ -55,6 +61,15 @@ export default function ClassesPage() {
   const { data: students = [], loading: studentsLoading } = useApi<Student[]>(
     view !== "classes" ? "/api/students" : null
   );
+  const { data: outstandingData } = useApi<{
+    byStudentId: Record<string, OutstandingBagrutResult>;
+  }>(
+    view !== "classes" && canOutstandingBagrut
+      ? "/api/students/outstanding-bagrut"
+      : null
+  );
+
+  const outstandingByStudentId = outstandingData?.byStudentId ?? {};
 
   const selectedClass = classes.find((c) => c.id === selectedClassId);
   const selectedStudent = students.find((s) => s.id === selectedStudentId);
@@ -255,9 +270,14 @@ export default function ClassesPage() {
                     >
                       <ChevronLeft className="h-4 w-4 shrink-0 text-slate-400" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-base font-medium text-slate-900">
-                          {student.user.name}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-base font-medium text-slate-900">
+                            {student.user.name}
+                          </p>
+                          {canOutstandingBagrut && outstandingByStudentId[student.id]?.isCandidate && (
+                            <OutstandingBagrutBadge size="sm" />
+                          )}
+                        </div>
                         <p className="mt-0.5 text-base text-slate-500">
                           מתמטיקה {student.mathUnits} יח&quot;ל · אנגלית {student.englishUnits}{" "}
                           יח&quot;ל
