@@ -75,6 +75,8 @@ export interface Subject {
   units: number | null;
   category: SubjectCategory;
   trackId: string | null;
+  /** מזהה חבר צוות (staff.id) המוגדר כמורה המקצוע. null/undefined = לא הוגדר מורה */
+  teacherId?: string | null;
   obligations: Obligation[];
 }
 

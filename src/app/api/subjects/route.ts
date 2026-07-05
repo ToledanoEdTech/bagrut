@@ -81,8 +81,12 @@ export async function PATCH(req: NextRequest) {
   if (error) return error;
 
   const body = await req.json();
-  const { id, ...data } = body;
-  const subject = await updateSubject(id, data);
+  const { id, teacherId, ...data } = body;
+  const patch: Parameters<typeof updateSubject>[1] = { ...data };
+  if (teacherId !== undefined) {
+    patch.teacherId = teacherId || null;
+  }
+  const subject = await updateSubject(id, patch);
   return NextResponse.json(subject);
 }
 

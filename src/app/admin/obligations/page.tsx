@@ -50,8 +50,16 @@ type Subject = {
   name: string;
   units: number | null;
   category: string;
+  teacherId?: string | null;
   pathLinks?: Array<{ path: { label: string } }>;
   obligations: Obligation[];
+};
+
+type StaffMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
 };
 
 type EditableField =
@@ -96,14 +104,26 @@ function obligationHasBreakdown(obligation: Obligation): boolean {
 export default function ObligationsBoardPage() {
   const toast = useToast();
   const { data: subjects = [], loading, mutate } = useApi<Subject[]>("/api/subjects");
+  const { data: staff = [] } = useApi<StaffMember[]>("/api/staff");
   const [search, setSearch] = useState("");
   const [subjectFilter, setSubjectFilter] = useState("");
   const [gradeYearFilter, setGradeYearFilter] = useState("");
   const [edits, setEdits] = useState<Record<string, RowEdits>>({});
+  const [subjectEdits, setSubjectEdits] = useState<Record<string, string>>({});
   const [subItemEdits, setSubItemEdits] = useState<Record<string, Record<number, string>>>({});
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const teachers = useMemo(
+    () =>
+      staff
+        .filter((m) => m.role === "TEACHER")
+        .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email, "he")),
+    [staff]
+  );
+
+  const staffById = useMemo(() => new Map(staff.map((m) => [m.id, m])), [staff]);
 
   const rows = useMemo(() => {
     const flat = subjects.flatMap((s) =>
@@ -164,6 +184,15 @@ export default function ObligationsBoardPage() {
     });
   }
 
+  function teacherValue(subject: Subject): string {
+    if (subject.id in subjectEdits) return subjectEdits[subject.id];
+    return subject.teacherId ?? "";
+  }
+
+  function setTeacher(subjectId: string, teacherId: string) {
+    setSubjectEdits((prev) => ({ ...prev, [subjectId]: teacherId }));
+  }
+
   function setField(
     subjectId: string,
     obligationId: string,
@@ -192,6 +221,7 @@ export default function ObligationsBoardPage() {
 
   const dirtyCount =
     Object.keys(edits).length +
+    Object.keys(subjectEdits).length +
     Object.values(subItemEdits).filter((m) => Object.keys(m).length > 0).length;
 
   async function save() {
@@ -250,21 +280,48 @@ export default function ObligationsBoardPage() {
     });
 
     try {
-      const res = await fetch("/api/obligations/bulk", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ updates }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error ?? "שגיאה בשמירה");
-        return;
+      if (updates.length > 0) {
+        const res = await fetch("/api/obligations/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ updates }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          setError(json.error ?? "שגיאה בשמירה");
+          return;
+        }
       }
+
+      const subjectIds = Object.keys(subjectEdits);
+      if (subjectIds.length > 0) {
+        const results = await Promise.all(
+          subjectIds.map((id) =>
+            fetch("/api/subjects", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id, teacherId: subjectEdits[id] || null }),
+            })
+          )
+        );
+        const failed = results.find((r) => !r.ok);
+        if (failed) {
+          const json = await failed.json().catch(() => ({}));
+          setError(json.error ?? "שגיאה בשמירת שיוך מורה");
+          return;
+        }
+      }
+
       invalidateCache("/api/subjects");
       await mutate();
       setEdits({});
+      setSubjectEdits({});
       setSubItemEdits({});
-      toast.success(`${json.updated} מטלות עודכנו`);
+      const saved =
+        updates.length + Object.keys(subjectEdits).length;
+      toast.success(
+        saved > 0 ? `${saved} עדכונים נשמרו` : "השינויים נשמרו"
+      );
     } catch {
       setError("שגיאת רשת בשמירה");
     } finally {
@@ -279,6 +336,7 @@ export default function ObligationsBoardPage() {
         title: `לוח מטלות וציונים (${filteredRows.length})`,
         columns: [
           { header: "מקצוע", key: "subject" },
+          { header: "מורה", key: "teacher" },
           { header: "מסלול / יח\"ל", key: "details" },
           { header: "מטלה", key: "name" },
           { header: "שאלון", key: "questionnaire" },
@@ -289,8 +347,10 @@ export default function ObligationsBoardPage() {
           { header: "סוג", key: "examType" },
         ],
         rows: filteredRows.flatMap(({ subject, obligation }) => {
+          const teacherMember = staffById.get(teacherValue(subject));
           const base = {
             subject: subject.name,
+            teacher: teacherMember?.name || teacherMember?.email || "—",
             details: subjectDetails(subject),
             name: obligation.name ?? "—",
             questionnaire: obligation.questionnaireNumber ?? "—",
@@ -414,11 +474,12 @@ export default function ObligationsBoardPage() {
 
       <Card variant="flat" className="mt-4 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1100px] text-sm">
+          <table className="w-full min-w-[1200px] text-sm">
             <thead className="bg-slate-50/80">
               <tr className="border-b border-slate-200 text-slate-500">
                 <th className="w-8 px-2 py-3" />
                 <th className="px-3 py-3 text-right text-xs font-semibold">מקצוע</th>
+                <th className="px-3 py-3 text-right text-xs font-semibold">מורה</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold">שם מטלה</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold">שאלון</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold">אירוע</th>
@@ -430,7 +491,10 @@ export default function ObligationsBoardPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredRows.map(({ subject, obligation }) => {
-                const isDirty = !!edits[obligation.id] || !!subItemEdits[obligation.id];
+                const isDirty =
+                  !!edits[obligation.id] ||
+                  !!subItemEdits[obligation.id] ||
+                  subject.id in subjectEdits;
                 const hasBreakdown = obligationHasBreakdown(obligation);
                 const isExpanded = expandedIds.has(obligation.id);
                 const components = obligation.components ?? [];
@@ -460,6 +524,20 @@ export default function ObligationsBoardPage() {
                       <td className="px-3 py-2 align-middle">
                         <div className="font-medium text-slate-800">{subject.name}</div>
                         <div className="text-xs text-slate-500">{subjectDetails(subject)}</div>
+                      </td>
+                      <td className="px-3 py-2 align-middle">
+                        <Select
+                          value={teacherValue(subject)}
+                          onChange={(e) => setTeacher(subject.id, e.target.value)}
+                          className="min-w-[140px] py-1.5 text-sm"
+                        >
+                          <option value="">לא הוגדר</option>
+                          {teachers.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name || t.email}
+                            </option>
+                          ))}
+                        </Select>
                       </td>
                       <td className="px-3 py-2">
                         <input
@@ -553,7 +631,8 @@ export default function ObligationsBoardPage() {
                           className="bg-slate-50/60 text-slate-600"
                         >
                           <td />
-                          <td className="px-3 py-1.5 text-xs" colSpan={2}>
+                          <td />
+                          <td className="px-3 py-1.5 text-xs" colSpan={1}>
                             <span className="me-2 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
                               רכיב
                             </span>
@@ -573,7 +652,8 @@ export default function ObligationsBoardPage() {
                           className="bg-slate-50/60 text-slate-600"
                         >
                           <td />
-                          <td className="px-3 py-1.5 text-xs" colSpan={2}>
+                          <td />
+                          <td className="px-3 py-1.5 text-xs" colSpan={1}>
                             <span className="me-2 rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
                               תת-מטלה
                             </span>
