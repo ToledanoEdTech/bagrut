@@ -55,7 +55,13 @@ export async function POST(req: NextRequest) {
       gradeEntryDueDate: o.gradeEntryDueDate ?? defaultGradeEntryDueDate(),
       sortOrder: i,
       components: (o.components ?? []).map((c, j) => ({ ...c, sortOrder: j })),
-      subItems: (o.subItems ?? []).map((si, j) => ({ ...si, sortOrder: j })),
+      subItems: (o.subItems ?? []).map(
+        (si: { name: string; weightPercent: number; gradeEntryDueDate?: string }, j: number) => ({
+          ...si,
+          sortOrder: j,
+          gradeEntryDueDate: si.gradeEntryDueDate ?? defaultGradeEntryDueDate(),
+        })
+      ),
     })
   );
 

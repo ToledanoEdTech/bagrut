@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatCardGrid } from "@/components/ui/StatCardGrid";
 import { StaggerChildren, StaggerItem } from "@/components/motion/StaggerChildren";
-import type { OutstandingBagrutResult } from "@/lib/outstanding-bagrut";
+import { OUTSTANDING_BAGRUT_TIER_LABELS, type OutstandingBagrutResult } from "@/lib/outstanding-bagrut-core";
 import { calcWeightedBagrutAverage } from "@/lib/bagrut-average";
 import { BookOpen, AlertCircle } from "lucide-react";
 
@@ -163,8 +163,8 @@ export function StudentDashboardContent({
                     title: "בגרות מצטיינת",
                     value: "מועמד",
                     subtitle:
-                      data.outstandingBagrut.average != null
-                        ? `ממוצע ${data.outstandingBagrut.average.toFixed(1)}`
+                      data.outstandingBagrut.tier != null
+                        ? OUTSTANDING_BAGRUT_TIER_LABELS[data.outstandingBagrut.tier]
                         : undefined,
                     icon: "award" as const,
                     color:

@@ -5,6 +5,8 @@ import { defaultGradeEntryDueDate } from "@/lib/grade-due-date";
 
 export type WeightedItem = { name: string; weightPercent: number };
 
+export type SubItemDraft = WeightedItem & { gradeEntryDueDate: string };
+
 export type ObligationDraft = {
   id?: string;
   questionnaireNumber: string;
@@ -16,7 +18,7 @@ export type ObligationDraft = {
   gradeYear: string;
   gradeEntryDueDate: string;
   components: WeightedItem[];
-  subItems: WeightedItem[];
+  subItems: SubItemDraft[];
 };
 
 export const EMPTY_OBLIGATION: ObligationDraft = {
@@ -91,6 +93,97 @@ function WeightedListEditor({
                     ...next[i],
                     weightPercent: parseFloat(e.target.value) || 0,
                   };
+                  onChange(next);
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => onChange(items.filter((_, j) => j !== i))}
+                className="px-1 text-red-400 hover:text-red-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+          <p className="text-xs text-slate-400">סה&quot;כ: {total.toFixed(1)}%</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubItemsListEditor({
+  items,
+  onChange,
+}: {
+  items: SubItemDraft[];
+  onChange: (items: SubItemDraft[]) => void;
+}) {
+  const total = items.reduce((s, i) => s + (i.weightPercent || 0), 0);
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div>
+          <span className="text-xs font-medium text-slate-700">עבודות / תת-מטלות</span>
+          <p className="text-xs text-slate-400">כמה אחוז כל עבודה שווה מתוך המטלה הכללית</p>
+        </div>
+        <button
+          type="button"
+          onClick={() =>
+            onChange([
+              ...items,
+              { name: "", weightPercent: 0, gradeEntryDueDate: defaultGradeEntryDueDate() },
+            ])
+          }
+          className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700"
+        >
+          <Plus className="h-3 w-3" />
+          הוסף
+        </button>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-slate-400">אין פריטים</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2">
+              <input
+                className="input min-w-[8rem] flex-1 py-1.5 text-sm"
+                placeholder="שם"
+                value={item.name}
+                onChange={(e) => {
+                  const next = [...items];
+                  next[i] = { ...next[i], name: e.target.value };
+                  onChange(next);
+                }}
+              />
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.01}
+                className="input w-20 py-1.5 text-sm"
+                placeholder="%"
+                value={item.weightPercent || ""}
+                onChange={(e) => {
+                  const next = [...items];
+                  next[i] = {
+                    ...next[i],
+                    weightPercent: parseFloat(e.target.value) || 0,
+                  };
+                  onChange(next);
+                }}
+              />
+              <input
+                type="date"
+                className="input w-36 py-1.5 text-sm"
+                dir="ltr"
+                title="תאריך יעד להזנה"
+                value={item.gradeEntryDueDate || defaultGradeEntryDueDate()}
+                onChange={(e) => {
+                  const next = [...items];
+                  next[i] = { ...next[i], gradeEntryDueDate: e.target.value };
                   onChange(next);
                 }}
               />
@@ -224,9 +317,7 @@ export function ObligationEditor({
           items={draft.components}
           onChange={(components) => onChange({ ...draft, components })}
         />
-        <WeightedListEditor
-          label="עבודות / תת-מטלות"
-          hint="כמה אחוז כל עבודה שווה מתוך המטלה הכללית"
+        <SubItemsListEditor
           items={draft.subItems}
           onChange={(subItems) => onChange({ ...draft, subItems })}
         />

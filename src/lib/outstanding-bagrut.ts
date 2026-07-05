@@ -1,3 +1,16 @@
+export {
+  OUTSTANDING_BAGRUT_MIN_AVERAGE,
+  OUTSTANDING_BAGRUT_MIN_ENGLISH_UNITS,
+  OUTSTANDING_BAGRUT_MIN_MATH_UNITS,
+  OUTSTANDING_BAGRUT_TIER_YELLOW_MIN,
+  OUTSTANDING_BAGRUT_TIER_GREEN_MIN,
+  OUTSTANDING_BAGRUT_TIER_LABELS,
+  evaluateOutstandingBagrut,
+  type OutstandingBagrutTier,
+  type OutstandingBagrutResult,
+  type OutstandingBagrutStudent,
+} from "@/lib/outstanding-bagrut-core";
+
 import { calcSubjectProgressForObligations } from "@/lib/progress";
 import {
   loadSubjectContext,
@@ -11,116 +24,10 @@ import {
   listStudents,
 } from "@/lib/firestore";
 import type { Class, ExamPath, Grade, Student, Subject } from "@/lib/types";
-
-export const OUTSTANDING_BAGRUT_MIN_AVERAGE = 90;
-export const OUTSTANDING_BAGRUT_MIN_ENGLISH_UNITS = 5;
-export const OUTSTANDING_BAGRUT_MIN_MATH_UNITS = 5;
-export const OUTSTANDING_BAGRUT_TIER_YELLOW_MIN = 80;
-export const OUTSTANDING_BAGRUT_TIER_GREEN_MIN = 90;
-
-/**
- * רמת המועמדות נקבעת לפי הממוצע (רק עבור תלמידים שהם מועמדים):
- *  - "red":    אין ציונים עדיין או ממוצע < 80
- *  - "yellow": 80 ≤ ממוצע < 90
- *  - "green":  ממוצע ≥ 90
- */
-export type OutstandingBagrutTier = "red" | "yellow" | "green";
-
-export type OutstandingBagrutResult = {
-  isCandidate: boolean;
-  tier: OutstandingBagrutTier | null;
-  average: number | null;
-  gradedSubjectsCount: number;
-  totalSubjectsCount: number;
-  meetsEnglishUnits: boolean;
-  meetsMathUnits: boolean;
-  meetsAverage: boolean;
-  missingReasons: string[];
-};
-
-export type OutstandingBagrutStudent = {
-  studentId: string;
-  name: string;
-  email: string;
-  className: string;
-  gradeYear: string | null;
-  mathUnits: number;
-  englishUnits: number;
-  outstandingBagrut: OutstandingBagrutResult;
-};
-
-type SubjectWithProgress = {
-  progress: { estimatedGrade: number | null };
-};
-
-export function evaluateOutstandingBagrut(
-  student: { mathUnits: number; englishUnits: number },
-  subjects: SubjectWithProgress[]
-): OutstandingBagrutResult {
-  const meetsEnglishUnits = student.englishUnits === OUTSTANDING_BAGRUT_MIN_ENGLISH_UNITS;
-  const meetsMathUnits = student.mathUnits === OUTSTANDING_BAGRUT_MIN_MATH_UNITS;
-
-  const gradedSubjects = subjects.filter((s) => s.progress.estimatedGrade != null);
-  const totalSubjectsCount = subjects.length;
-  const gradedSubjectsCount = gradedSubjects.length;
-
-  const average =
-    gradedSubjectsCount > 0
-      ? gradedSubjects.reduce((sum, s) => sum + s.progress.estimatedGrade!, 0) /
-        gradedSubjectsCount
-      : null;
-
-  const meetsAverage =
-    average != null && average >= OUTSTANDING_BAGRUT_MIN_AVERAGE;
-
-  // מועמד = רשום ל-5 יח"ל אנגלית וגם 5 יח"ל מתמטיקה. הממוצע אינו תנאי סף
-  // אלא קובע את רמת הצבע (אדום/צהוב/ירוק).
-  const isCandidate = meetsEnglishUnits && meetsMathUnits;
-
-  let tier: OutstandingBagrutTier | null = null;
-  if (isCandidate) {
-    if (average != null && average >= OUTSTANDING_BAGRUT_TIER_GREEN_MIN) {
-      tier = "green";
-    } else if (average != null && average >= OUTSTANDING_BAGRUT_TIER_YELLOW_MIN) {
-      tier = "yellow";
-    } else {
-      tier = "red";
-    }
-  }
-
-  const missingReasons: string[] = [];
-  if (!meetsEnglishUnits) {
-    missingReasons.push(
-      `נדרשות ${OUTSTANDING_BAGRUT_MIN_ENGLISH_UNITS} יח"ל אנגלית (כרגע ${student.englishUnits})`
-    );
-  }
-  if (!meetsMathUnits) {
-    missingReasons.push(
-      `נדרשות ${OUTSTANDING_BAGRUT_MIN_MATH_UNITS} יח"ל מתמטיקה (כרגע ${student.mathUnits})`
-    );
-  }
-  if (isCandidate && tier !== "green") {
-    if (average == null) {
-      missingReasons.push("אין עדיין ציונים למיצוע");
-    } else {
-      missingReasons.push(
-        `ממוצע ${average.toFixed(1)} — נדרש ${OUTSTANDING_BAGRUT_TIER_GREEN_MIN}+ לרמה הגבוהה`
-      );
-    }
-  }
-
-  return {
-    isCandidate,
-    tier,
-    average,
-    gradedSubjectsCount,
-    totalSubjectsCount,
-    meetsEnglishUnits,
-    meetsMathUnits,
-    meetsAverage,
-    missingReasons,
-  };
-}
+import {
+  evaluateOutstandingBagrut,
+  type OutstandingBagrutStudent,
+} from "@/lib/outstanding-bagrut-core";
 
 function buildSubjectsWithProgress(
   student: StudentWithRelations,
@@ -128,7 +35,7 @@ function buildSubjectsWithProgress(
   examPathsById: Map<string, ExamPath>,
   tracksById: Map<string, import("@/lib/types").Track>,
   gradesByStudent: Map<string, Grade[]>
-): SubjectWithProgress[] {
+) {
   const examPath = examPathsById.get(student.class.examPathId) ?? null;
   const subjects = resolveRelevantSubjects(
     student,
@@ -142,7 +49,11 @@ function buildSubjectsWithProgress(
     const subjectGrades = grades.filter((g) =>
       subject.obligations.some((o) => o.id === g.obligationId)
     );
-    return { progress: calcSubjectProgressForObligations(subject.obligations, subjectGrades) };
+    return {
+      units: subject.units,
+      category: subject.category,
+      progress: calcSubjectProgressForObligations(subject.obligations, subjectGrades),
+    };
   });
 }
 

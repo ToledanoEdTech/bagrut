@@ -26,6 +26,7 @@ import {
 import { defaultGradeEntryDueDate, resolveGradeEntryDueDate } from "@/lib/grade-due-date";
 
 type WeightedItem = { name: string; weightPercent: number };
+type SubItem = WeightedItem & { gradeEntryDueDate?: string | null };
 
 type Obligation = {
   id: string;
@@ -39,7 +40,7 @@ type Obligation = {
   gradeEntryDueDate?: string | null;
   sortOrder: number;
   components: WeightedItem[];
-  subItems: WeightedItem[];
+  subItems: SubItem[];
 };
 
 type Subject = {
@@ -81,7 +82,11 @@ function obligationToDraft(o?: Obligation): ObligationDraft {
     gradeYear: o.gradeYear ?? "",
     gradeEntryDueDate: resolveGradeEntryDueDate(o.gradeEntryDueDate),
     components: o.components.map(({ name, weightPercent }) => ({ name, weightPercent })),
-    subItems: o.subItems.map(({ name, weightPercent }) => ({ name, weightPercent })),
+    subItems: o.subItems.map(({ name, weightPercent, gradeEntryDueDate }) => ({
+      name,
+      weightPercent,
+      gradeEntryDueDate: resolveGradeEntryDueDate(gradeEntryDueDate),
+    })),
   };
 }
 

@@ -17,7 +17,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { canViewOutstandingBagrut, hasAnyStudentEdit } from "@/lib/permissions";
 import { StudentCardView } from "@/components/students/StudentCardView";
 import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
-import type { OutstandingBagrutResult } from "@/lib/outstanding-bagrut";
+import type { OutstandingBagrutResult } from "@/lib/outstanding-bagrut-core";
 import {
   buildClassStudentsSheet,
   buildClassesSheet,

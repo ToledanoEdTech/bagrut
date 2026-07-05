@@ -1,5 +1,6 @@
 import {
   collectOverdueGradeItems,
+  collectPastDueGradeItems,
   collectUpcomingGradeItems,
   buildReminderPlans,
   buildReminderRecipients,
@@ -287,7 +288,7 @@ function computeGradeGaps(data: ScopedData): GradeGaps {
     grades: data.grades,
   };
 
-  const overdueItems = collectOverdueGradeItems(reminderInput);
+  const overdueItems = collectPastDueGradeItems(reminderInput);
   const upcomingItems = collectUpcomingGradeItems(reminderInput);
 
   const topMissingSubjects = [...missingBySubject.entries()]
@@ -429,20 +430,12 @@ function computeDataQualityAlerts(data: RawData): DataQualityAlerts {
     (s) => s.obligations.length === 0
   ).length;
 
-  let obligationsWithoutDueDate = 0;
-  for (const subject of data.subjects) {
-    for (const obligation of subject.obligations) {
-      if (!obligation.gradeEntryDueDate) {
-        obligationsWithoutDueDate += 1;
-      }
-    }
-  }
-
   return {
     studentsWithoutClass,
     classesWithoutStudents,
     subjectsWithoutObligations,
-    obligationsWithoutDueDate,
+    // כל מטלה ותת-מטלה מקבלים תאריך יעד ברירת מחדל (1.6) — אין חובות ללא יעד
+    obligationsWithoutDueDate: 0,
   };
 }
 
@@ -502,7 +495,7 @@ function computeTeacherAlerts(raw: RawData): TeacherAlerts {
     grades: raw.grades,
   };
 
-  const overdueItems = collectOverdueGradeItems(reminderInput);
+  const overdueItems = collectPastDueGradeItems(reminderInput);
   const upcomingItems = collectUpcomingGradeItems(reminderInput, 7);
 
   const sumMissing = (items: OverdueGradeItem[]) =>

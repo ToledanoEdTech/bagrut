@@ -13,7 +13,7 @@ import { canViewOutstandingBagrut } from "@/lib/permissions";
 import type {
   OutstandingBagrutStudent,
   OutstandingBagrutTier,
-} from "@/lib/outstanding-bagrut";
+} from "@/lib/outstanding-bagrut-core";
 
 type OutstandingBagrutApiData = {
   candidates: OutstandingBagrutStudent[];

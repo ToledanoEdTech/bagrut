@@ -74,6 +74,19 @@ export async function PATCH(req: NextRequest) {
         }
       }
     }
+    if (Array.isArray(u.patch.subItems)) {
+      patch.subItems = u.patch.subItems.map(
+        (
+          si: { name: string; weightPercent: number; sortOrder?: number; gradeEntryDueDate?: string },
+          i: number
+        ) => ({
+          name: si.name,
+          weightPercent: si.weightPercent,
+          sortOrder: si.sortOrder ?? i,
+          gradeEntryDueDate: si.gradeEntryDueDate ?? defaultGradeEntryDueDate(),
+        })
+      );
+    }
     if (Object.keys(patch).length > 0) {
       updates.push({ subjectId: u.subjectId, obligationId: u.obligationId, patch });
     }

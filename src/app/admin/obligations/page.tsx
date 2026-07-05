@@ -21,7 +21,12 @@ import {
   normalizeSubItems,
 } from "@/lib/grade-components";
 
-type WeightedItem = { name: string; weightPercent: number; sortOrder?: number };
+type SubItem = {
+  name: string;
+  weightPercent: number;
+  sortOrder?: number;
+  gradeEntryDueDate?: string | null;
+};
 
 type Obligation = {
   id: string;
@@ -35,8 +40,10 @@ type Obligation = {
   gradeEntryDueDate?: string | null;
   sortOrder: number;
   components: WeightedItem[];
-  subItems: WeightedItem[];
+  subItems: SubItem[];
 };
+
+type WeightedItem = { name: string; weightPercent: number; sortOrder?: number };
 
 type Subject = {
   id: string;
@@ -93,6 +100,7 @@ export default function ObligationsBoardPage() {
   const [subjectFilter, setSubjectFilter] = useState("");
   const [gradeYearFilter, setGradeYearFilter] = useState("");
   const [edits, setEdits] = useState<Record<string, RowEdits>>({});
+  const [subItemEdits, setSubItemEdits] = useState<Record<string, Record<number, string>>>({});
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,7 +176,23 @@ export default function ObligationsBoardPage() {
     }));
   }
 
-  const dirtyCount = Object.keys(edits).length;
+  function setSubItemDue(obligationId: string, sortOrder: number, value: string) {
+    setSubItemEdits((prev) => ({
+      ...prev,
+      [obligationId]: { ...prev[obligationId], [sortOrder]: value },
+    }));
+  }
+
+  function subItemDueValue(obligation: Obligation, sortOrder: number): string {
+    const edit = subItemEdits[obligation.id]?.[sortOrder];
+    if (edit !== undefined) return edit;
+    const si = obligation.subItems.find((s, i) => (s.sortOrder ?? i) === sortOrder);
+    return resolveGradeEntryDueDate(si?.gradeEntryDueDate);
+  }
+
+  const dirtyCount =
+    Object.keys(edits).length +
+    Object.values(subItemEdits).filter((m) => Object.keys(m).length > 0).length;
 
   async function save() {
     if (dirtyCount === 0) return;
@@ -180,9 +204,14 @@ export default function ObligationsBoardPage() {
       subjectByObligation.set(obligation.id, subject.id);
     }
 
-    const updates = Object.entries(edits).map(([obligationId, patch]) => {
+    const obligationIds = new Set([
+      ...Object.keys(edits),
+      ...Object.keys(subItemEdits).filter((id) => Object.keys(subItemEdits[id] ?? {}).length > 0),
+    ]);
+
+    const updates = [...obligationIds].map((obligationId) => {
       const obligation = rows.find((r) => r.obligation.id === obligationId)?.obligation;
-      const normalized: RowEdits = { ...patch };
+      const normalized: RowEdits & { subItems?: SubItem[] } = { ...(edits[obligationId] ?? {}) };
       if ("weightPercent" in normalized) {
         normalized.weightPercent =
           normalized.weightPercent === "" || normalized.weightPercent == null
@@ -197,6 +226,22 @@ export default function ObligationsBoardPage() {
       } else if (obligation && !obligation.gradeEntryDueDate) {
         normalized.gradeEntryDueDate = defaultGradeEntryDueDate();
       }
+
+      const subEdits = subItemEdits[obligationId];
+      if (subEdits && obligation) {
+        normalized.subItems = obligation.subItems.map((si, i) => {
+          const sortOrder = si.sortOrder ?? i;
+          const dueEdit = subEdits[sortOrder];
+          return {
+            ...si,
+            sortOrder,
+            gradeEntryDueDate:
+              dueEdit ??
+              resolveGradeEntryDueDate(si.gradeEntryDueDate),
+          };
+        });
+      }
+
       return {
         subjectId: subjectByObligation.get(obligationId)!,
         obligationId,
@@ -218,6 +263,7 @@ export default function ObligationsBoardPage() {
       invalidateCache("/api/subjects");
       await mutate();
       setEdits({});
+      setSubItemEdits({});
       toast.success(`${json.updated} מטלות עודכנו`);
     } catch {
       setError("שגיאת רשת בשמירה");
@@ -269,6 +315,7 @@ export default function ObligationsBoardPage() {
               ...base,
               name: `↳ תת-מטלה: ${si.name}`,
               weight: si.weightPercent,
+              due: resolveGradeEntryDueDate(si.gradeEntryDueDate),
               breakdown: "subItem",
             });
           }
@@ -383,7 +430,7 @@ export default function ObligationsBoardPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredRows.map(({ subject, obligation }) => {
-                const isDirty = !!edits[obligation.id];
+                const isDirty = !!edits[obligation.id] || !!subItemEdits[obligation.id];
                 const hasBreakdown = obligationHasBreakdown(obligation);
                 const isExpanded = expandedIds.has(obligation.id);
                 const components = obligation.components ?? [];
@@ -518,7 +565,9 @@ export default function ObligationsBoardPage() {
                         </tr>
                       ))}
                     {isExpanded &&
-                      subItems.map((si, i) => (
+                      subItems.map((si, i) => {
+                        const sortOrder = si.sortOrder ?? i;
+                        return (
                         <tr
                           key={`${obligation.id}-s-${i}`}
                           className="bg-slate-50/60 text-slate-600"
@@ -532,9 +581,21 @@ export default function ObligationsBoardPage() {
                           </td>
                           <td colSpan={3} />
                           <td className="px-3 py-1.5 text-sm font-medium">{si.weightPercent}%</td>
-                          <td colSpan={2} />
+                          <td className="px-3 py-1.5">
+                            <input
+                              type="date"
+                              className="input w-36 py-1 text-sm"
+                              dir="ltr"
+                              value={subItemDueValue(obligation, sortOrder)}
+                              onChange={(e) =>
+                                setSubItemDue(obligation.id, sortOrder, e.target.value)
+                              }
+                            />
+                          </td>
+                          <td />
                         </tr>
-                      ))}
+                        );
+                      })}
                   </Fragment>
                 );
               })}

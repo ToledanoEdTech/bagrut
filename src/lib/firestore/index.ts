@@ -585,7 +585,7 @@ export async function bulkUpdateObligationFields(
         | "gradeEntryDueDate"
         | "sortOrder"
       >
-    >;
+    > & { subItems?: Obligation["subItems"] };
   }>
 ): Promise<number> {
   const bySubject = new Map<string, typeof updates>();

@@ -33,9 +33,10 @@ export async function POST(req: NextRequest) {
       })
     ),
     subItems: (body.subItems ?? []).map(
-      (si: { name: string; weightPercent: number }, i: number) => ({
+      (si: { name: string; weightPercent: number; gradeEntryDueDate?: string }, i: number) => ({
         ...si,
         sortOrder: i,
+        gradeEntryDueDate: si.gradeEntryDueDate ?? defaultGradeEntryDueDate(),
       })
     ),
   });
@@ -66,9 +67,10 @@ export async function PATCH(req: NextRequest) {
       })
     ),
     subItems: (obligation.subItems ?? []).map(
-      (si: { name: string; weightPercent: number }, i: number) => ({
+      (si: { name: string; weightPercent: number; gradeEntryDueDate?: string }, i: number) => ({
         ...si,
         sortOrder: i,
+        gradeEntryDueDate: si.gradeEntryDueDate ?? defaultGradeEntryDueDate(),
       })
     ),
   });

@@ -1,4 +1,5 @@
-import { resolveObligationGradeScore, obligationDisplayLabel } from "@/lib/grade-components";
+import { resolveObligationGradeScore, obligationDisplayLabel, hasSubItemGrades, normalizeSubItems } from "@/lib/grade-components";
+import { resolveGradeEntryDueDate } from "@/lib/grade-due-date";
 import { LEGACY_TEACHER_PERMISSIONS } from "@/lib/permissions";
 import { ADMIN_EMAILS } from "@/lib/roles";
 import type {
@@ -66,6 +67,8 @@ export interface OverdueGradeItem {
   classNames: string[];
   affectedClassIds: string[];
   affectedGradeYears: string[];
+  /** תת-מטלה ספציפית (כשיש שקלול לפי תתי-מטלות) */
+  subItemSortOrder?: number;
   /** overdue = המועד חלף | pre_due = תזכורת מקדימה לפני המועד */
   kind?: "overdue" | "pre_due";
   /** עבור pre_due: כמה ימים נותרו עד המועד */
@@ -133,9 +136,14 @@ export function reminderDedupKey(
   recipientId: string,
   obligationId: string,
   dueDate: string,
-  variant?: string
+  variant?: string,
+  subItemSortOrder?: number
 ): string {
-  const base = `${recipientId}::${obligationId}::${dueDate}`;
+  const itemKey =
+    subItemSortOrder !== undefined
+      ? `${obligationId}::sub:${subItemSortOrder}`
+      : obligationId;
+  const base = `${recipientId}::${itemKey}::${dueDate}`;
   return variant ? `${base}::${variant}` : base;
 }
 
@@ -159,7 +167,8 @@ export function filterUnsentReminderItems(
           recipientId,
           item.obligationId,
           item.gradeEntryDueDate,
-          itemDedupVariant(item)
+          itemDedupVariant(item),
+          item.subItemSortOrder
         )
       ]
   );
@@ -174,6 +183,157 @@ export function isGradeEntryIncomplete(
   if (grade.status === "NOT_STARTED" || grade.status === "IN_PROGRESS") return true;
   const score = resolveObligationGradeScore(obligation, grade);
   return score == null;
+}
+
+export function isSubItemScoreMissing(grade: Grade | undefined, sortOrder: number): boolean {
+  if (!grade) return true;
+  if (grade.status === "EXEMPT") return false;
+  return grade.subItemScores?.[sortOrder] == null;
+}
+
+export type GradeEntryTarget = {
+  obligationId: string;
+  subItemSortOrder?: number;
+  label: string;
+  dueDate: string;
+};
+
+/** מחזיר יעדי הזנה — תת-מטלה נפרדת לכל תת-מטלה, אחרת המטלה כולה */
+export function getGradeEntryTargets(obligation: Obligation): GradeEntryTarget[] {
+  const baseLabel = obligationDisplayLabel(obligation);
+  const subItems = obligation.subItems ?? [];
+  if (hasSubItemGrades(normalizeSubItems(subItems))) {
+    return subItems.map((si, i) => ({
+      obligationId: obligation.id,
+      subItemSortOrder: si.sortOrder ?? i,
+      label: `${baseLabel} — ${si.name || "תת-מטלה"}`,
+      dueDate: resolveGradeEntryDueDate(si.gradeEntryDueDate),
+    }));
+  }
+  return [
+    {
+      obligationId: obligation.id,
+      label: baseLabel,
+      dueDate: resolveGradeEntryDueDate(obligation.gradeEntryDueDate),
+    },
+  ];
+}
+
+function isTargetIncomplete(
+  obligation: Obligation,
+  grade: Grade | undefined,
+  target: GradeEntryTarget
+): boolean {
+  if (target.subItemSortOrder !== undefined) {
+    return isSubItemScoreMissing(grade, target.subItemSortOrder);
+  }
+  return isGradeEntryIncomplete(obligation, grade);
+}
+
+type TargetCollectorOptions = {
+  today: string;
+  matchDueDate: (dueDate: string, today: string) => boolean;
+  kind?: OverdueGradeItem["kind"];
+  daysBeforeDue?: number;
+};
+
+function collectGradeItemsMatchingDue(
+  input: GradeReminderDataInput,
+  options: TargetCollectorOptions
+): OverdueGradeItem[] {
+  const { today, matchDueDate, kind, daysBeforeDue } = options;
+  const { byId: classById } = buildClassMaps(input.classes);
+  const examPathById = new Map(input.examPaths.map((p) => [p.id, p]));
+  const tracksById = new Map(input.tracks.map((t) => [t.id, t]));
+  const gradeMap = buildGradeMap(input.grades);
+  const items: OverdueGradeItem[] = [];
+
+  for (const subject of input.subjects) {
+    for (const obligation of subject.obligations) {
+      const targets = getGradeEntryTargets(obligation).filter((t) =>
+        matchDueDate(t.dueDate, today)
+      );
+      if (targets.length === 0) continue;
+
+      for (const target of targets) {
+        const missingByClass = new Map<
+          string,
+          { name: string; gradeYear: string | null; count: number }
+        >();
+        let missingTotal = 0;
+
+        for (const student of input.students) {
+          const cls = classById.get(student.classId);
+          if (!cls) continue;
+
+          const examPath = examPathById.get(cls.examPathId) ?? null;
+          const withRelations = withClass(student, cls);
+          const relevant = resolveRelevantSubjects(
+            withRelations,
+            input.subjects,
+            examPath,
+            tracksById
+          );
+          const matchedSubject = relevant.find((s) => s.id === subject.id);
+          if (!matchedSubject?.obligations.some((o) => o.id === obligation.id)) continue;
+
+          const grade = gradeMap.get(`${student.id}::${obligation.id}`);
+          if (!isTargetIncomplete(obligation, grade, target)) continue;
+
+          missingTotal += 1;
+          const entry = missingByClass.get(cls.id) ?? {
+            name: cls.name,
+            gradeYear: cls.gradeYear,
+            count: 0,
+          };
+          entry.count += 1;
+          missingByClass.set(cls.id, entry);
+        }
+
+        if (missingTotal === 0) continue;
+
+        const affectedClassIds = [...missingByClass.keys()];
+        const affectedGradeYears = [
+          ...new Set(
+            [...missingByClass.values()]
+              .map((c) => c.gradeYear)
+              .filter((y): y is string => !!y)
+          ),
+        ];
+        const obligationGradeYear = obligation.gradeYear ?? affectedGradeYears[0] ?? null;
+
+        items.push({
+          obligationId: obligation.id,
+          subjectId: subject.id,
+          subjectName: subject.name,
+          obligationLabel: target.label,
+          examEvent: obligation.examEvent,
+          gradeYear: obligationGradeYear,
+          gradeEntryDueDate: target.dueDate,
+          missingStudentCount: missingTotal,
+          classNames: [...missingByClass.values()].map((c) => c.name),
+          affectedClassIds,
+          affectedGradeYears,
+          subItemSortOrder: target.subItemSortOrder,
+          kind,
+          daysBeforeDue,
+        });
+      }
+    }
+  }
+
+  items.sort((a, b) => a.gradeEntryDueDate.localeCompare(b.gradeEntryDueDate));
+  return items;
+}
+
+/** מטלות שמועד היעד שלהן חלף ועדיין חסרים בהן ציונים (לתצוגה בדשבורד) */
+export function collectPastDueGradeItems(input: GradeReminderDataInput): OverdueGradeItem[] {
+  const today = input.today ?? getIsraelYmd();
+  return collectGradeItemsMatchingDue(input, {
+    today,
+    matchDueDate: (dueDate, current) => dueDate < current,
+    kind: "overdue",
+  });
 }
 
 export interface GradeReminderDataInput {
@@ -218,79 +378,11 @@ function buildGradeMap(grades: Grade[]): Map<string, Grade> {
 
 export function collectOverdueGradeItems(input: GradeReminderDataInput): OverdueGradeItem[] {
   const today = input.today ?? getIsraelYmd();
-  const { byId: classById } = buildClassMaps(input.classes);
-  const examPathById = new Map(input.examPaths.map((p) => [p.id, p]));
-  const tracksById = new Map(input.tracks.map((t) => [t.id, t]));
-  const gradeMap = buildGradeMap(input.grades);
-  const overdue: OverdueGradeItem[] = [];
-
-  for (const subject of input.subjects) {
-    for (const obligation of subject.obligations) {
-      const dueDate = obligation.gradeEntryDueDate;
-      if (!dueDate || !isReminderSendDay(dueDate, today)) continue;
-
-      const missingByClass = new Map<string, { name: string; gradeYear: string | null; count: number }>();
-      let missingTotal = 0;
-
-      for (const student of input.students) {
-        const cls = classById.get(student.classId);
-        if (!cls) continue;
-
-        const examPath = examPathById.get(cls.examPathId) ?? null;
-        const withRelations = withClass(student, cls);
-        const relevant = resolveRelevantSubjects(
-          withRelations,
-          input.subjects,
-          examPath,
-          tracksById
-        );
-        const matchedSubject = relevant.find((s) => s.id === subject.id);
-        if (!matchedSubject?.obligations.some((o) => o.id === obligation.id)) continue;
-
-        const grade = gradeMap.get(`${student.id}::${obligation.id}`);
-        if (!isGradeEntryIncomplete(obligation, grade)) continue;
-
-        missingTotal += 1;
-        const entry = missingByClass.get(cls.id) ?? {
-          name: cls.name,
-          gradeYear: cls.gradeYear,
-          count: 0,
-        };
-        entry.count += 1;
-        missingByClass.set(cls.id, entry);
-      }
-
-      if (missingTotal === 0) continue;
-
-      const affectedClassIds = [...missingByClass.keys()];
-      const affectedGradeYears = [
-        ...new Set(
-          [...missingByClass.values()]
-            .map((c) => c.gradeYear)
-            .filter((y): y is string => !!y)
-        ),
-      ];
-      const obligationGradeYear = obligation.gradeYear ?? affectedGradeYears[0] ?? null;
-
-      overdue.push({
-        obligationId: obligation.id,
-        subjectId: subject.id,
-        subjectName: subject.name,
-        obligationLabel: obligationDisplayLabel(obligation),
-        examEvent: obligation.examEvent,
-        gradeYear: obligationGradeYear,
-        gradeEntryDueDate: dueDate,
-        missingStudentCount: missingTotal,
-        classNames: [...missingByClass.values()].map((c) => c.name),
-        affectedClassIds,
-        affectedGradeYears,
-        kind: "overdue",
-      });
-    }
-  }
-
-  overdue.sort((a, b) => a.gradeEntryDueDate.localeCompare(b.gradeEntryDueDate));
-  return overdue;
+  return collectGradeItemsMatchingDue(input, {
+    today,
+    matchDueDate: (dueDate, current) => isReminderSendDay(dueDate, current),
+    kind: "overdue",
+  });
 }
 
 /**
@@ -308,85 +400,16 @@ export function collectPreDueGradeItems(
   }
   if (targetDates.size === 0) return [];
 
-  const { byId: classById } = buildClassMaps(input.classes);
-  const examPathById = new Map(input.examPaths.map((p) => [p.id, p]));
-  const tracksById = new Map(input.tracks.map((t) => [t.id, t]));
-  const gradeMap = buildGradeMap(input.grades);
-  const items: OverdueGradeItem[] = [];
+  const all = collectGradeItemsMatchingDue(input, {
+    today,
+    matchDueDate: (dueDate) => targetDates.has(dueDate),
+    kind: "pre_due",
+  });
 
-  for (const subject of input.subjects) {
-    for (const obligation of subject.obligations) {
-      const dueDate = obligation.gradeEntryDueDate;
-      if (!dueDate) continue;
-      const daysUntil = targetDates.get(dueDate);
-      if (daysUntil === undefined) continue;
-
-      const missingByClass = new Map<
-        string,
-        { name: string; gradeYear: string | null; count: number }
-      >();
-      let missingTotal = 0;
-
-      for (const student of input.students) {
-        const cls = classById.get(student.classId);
-        if (!cls) continue;
-
-        const examPath = examPathById.get(cls.examPathId) ?? null;
-        const withRelations = withClass(student, cls);
-        const relevant = resolveRelevantSubjects(
-          withRelations,
-          input.subjects,
-          examPath,
-          tracksById
-        );
-        const matchedSubject = relevant.find((s) => s.id === subject.id);
-        if (!matchedSubject?.obligations.some((o) => o.id === obligation.id)) continue;
-
-        const grade = gradeMap.get(`${student.id}::${obligation.id}`);
-        if (!isGradeEntryIncomplete(obligation, grade)) continue;
-
-        missingTotal += 1;
-        const entry = missingByClass.get(cls.id) ?? {
-          name: cls.name,
-          gradeYear: cls.gradeYear,
-          count: 0,
-        };
-        entry.count += 1;
-        missingByClass.set(cls.id, entry);
-      }
-
-      if (missingTotal === 0) continue;
-
-      const affectedClassIds = [...missingByClass.keys()];
-      const affectedGradeYears = [
-        ...new Set(
-          [...missingByClass.values()]
-            .map((c) => c.gradeYear)
-            .filter((y): y is string => !!y)
-        ),
-      ];
-      const obligationGradeYear = obligation.gradeYear ?? affectedGradeYears[0] ?? null;
-
-      items.push({
-        obligationId: obligation.id,
-        subjectId: subject.id,
-        subjectName: subject.name,
-        obligationLabel: obligationDisplayLabel(obligation),
-        examEvent: obligation.examEvent,
-        gradeYear: obligationGradeYear,
-        gradeEntryDueDate: dueDate,
-        missingStudentCount: missingTotal,
-        classNames: [...missingByClass.values()].map((c) => c.name),
-        affectedClassIds,
-        affectedGradeYears,
-        kind: "pre_due",
-        daysBeforeDue: daysUntil,
-      });
-    }
-  }
-
-  items.sort((a, b) => a.gradeEntryDueDate.localeCompare(b.gradeEntryDueDate));
-  return items;
+  return all.map((item) => ({
+    ...item,
+    daysBeforeDue: targetDates.get(item.gradeEntryDueDate),
+  }));
 }
 
 /** חובות עם תאריך יעד בטווח הקרוב (כולל היום) — עדיין חסרות ציונים */
@@ -396,78 +419,10 @@ export function collectUpcomingGradeItems(
 ): OverdueGradeItem[] {
   const today = input.today ?? getIsraelYmd();
   const endDate = addDaysYmd(today, withinDays);
-  const { byId: classById } = buildClassMaps(input.classes);
-  const examPathById = new Map(input.examPaths.map((p) => [p.id, p]));
-  const tracksById = new Map(input.tracks.map((t) => [t.id, t]));
-  const gradeMap = buildGradeMap(input.grades);
-  const upcoming: OverdueGradeItem[] = [];
-
-  for (const subject of input.subjects) {
-    for (const obligation of subject.obligations) {
-      const dueDate = obligation.gradeEntryDueDate;
-      if (!dueDate || dueDate < today || dueDate > endDate) continue;
-
-      const missingByClass = new Map<string, { name: string; gradeYear: string | null; count: number }>();
-      let missingTotal = 0;
-
-      for (const student of input.students) {
-        const cls = classById.get(student.classId);
-        if (!cls) continue;
-
-        const examPath = examPathById.get(cls.examPathId) ?? null;
-        const withRelations = withClass(student, cls);
-        const relevant = resolveRelevantSubjects(
-          withRelations,
-          input.subjects,
-          examPath,
-          tracksById
-        );
-        const matchedSubject = relevant.find((s) => s.id === subject.id);
-        if (!matchedSubject?.obligations.some((o) => o.id === obligation.id)) continue;
-
-        const grade = gradeMap.get(`${student.id}::${obligation.id}`);
-        if (!isGradeEntryIncomplete(obligation, grade)) continue;
-
-        missingTotal += 1;
-        const entry = missingByClass.get(cls.id) ?? {
-          name: cls.name,
-          gradeYear: cls.gradeYear,
-          count: 0,
-        };
-        entry.count += 1;
-        missingByClass.set(cls.id, entry);
-      }
-
-      if (missingTotal === 0) continue;
-
-      const affectedClassIds = [...missingByClass.keys()];
-      const affectedGradeYears = [
-        ...new Set(
-          [...missingByClass.values()]
-            .map((c) => c.gradeYear)
-            .filter((y): y is string => !!y)
-        ),
-      ];
-      const obligationGradeYear = obligation.gradeYear ?? affectedGradeYears[0] ?? null;
-
-      upcoming.push({
-        obligationId: obligation.id,
-        subjectId: subject.id,
-        subjectName: subject.name,
-        obligationLabel: obligationDisplayLabel(obligation),
-        examEvent: obligation.examEvent,
-        gradeYear: obligationGradeYear,
-        gradeEntryDueDate: dueDate,
-        missingStudentCount: missingTotal,
-        classNames: [...missingByClass.values()].map((c) => c.name),
-        affectedClassIds,
-        affectedGradeYears,
-      });
-    }
-  }
-
-  upcoming.sort((a, b) => a.gradeEntryDueDate.localeCompare(b.gradeEntryDueDate));
-  return upcoming;
+  return collectGradeItemsMatchingDue(input, {
+    today,
+    matchDueDate: (dueDate, current) => dueDate >= current && dueDate <= endDate,
+  });
 }
 
 function matchesGradesWriteScope(

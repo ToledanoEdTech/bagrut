@@ -28,7 +28,7 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import { hasAnyStudentEdit, canViewOutstandingBagrut } from "@/lib/permissions";
 import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
-import type { OutstandingBagrutResult } from "@/lib/outstanding-bagrut";
+import type { OutstandingBagrutResult } from "@/lib/outstanding-bagrut-core";
 
 type OutstandingBagrutApiData = {
   byStudentId: Record<string, OutstandingBagrutResult>;

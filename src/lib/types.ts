@@ -49,6 +49,8 @@ export interface ObligationSubItem {
   name: string;
   weightPercent: number;
   sortOrder: number;
+  /** תאריך אחרון להזנת ציון לתת-מטלה (YYYY-MM-DD) */
+  gradeEntryDueDate?: string | null;
 }
 
 export interface Obligation {

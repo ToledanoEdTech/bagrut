@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { Award } from "lucide-react";
-import type { OutstandingBagrutTier } from "@/lib/outstanding-bagrut";
+import type { OutstandingBagrutTier } from "@/lib/outstanding-bagrut-core";
 
 type OutstandingBagrutBadgeProps = {
   className?: string;
