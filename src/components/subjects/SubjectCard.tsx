@@ -14,6 +14,7 @@ import {
 } from "@/lib/grade-components";
 import { STATUS_LABELS, isValidSubmissionStatus } from "@/lib/grade-status";
 import { formatSubjectDisplayName } from "@/lib/subject-display";
+import { formatObligationLabel } from "@/lib/missing-grades";
 
 type Obligation = {
   id: string;
@@ -60,6 +61,10 @@ export function SubjectCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const gradeMap = new Map(grades.map((g) => [g.obligationId, g]));
+  const missingObligations = obligations.filter(
+    (o) => gradeMap.get(o.id)?.status === "MISSING"
+  );
+  const hasMissingGrades = missingObligations.length > 0;
   const displayName = formatSubjectDisplayName(name, { pathLabels, units, category });
   const showUnitsSeparately =
     units != null && category !== "MATH" && category !== "ENGLISH";
@@ -75,7 +80,12 @@ export function SubjectCard({
           : "text-red-600";
 
   return (
-    <div className="card group overflow-hidden">
+    <div
+      className={clsx(
+        "card group overflow-hidden",
+        hasMissingGrades && "border-red-300 ring-2 ring-red-200"
+      )}
+    >
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -99,6 +109,18 @@ export function SubjectCard({
                 <p className="mt-0.5 text-sm text-slate-500">
                   {obligations.length} חובות • {progress.progressPercent.toFixed(0)}% הושלם
                 </p>
+                {hasMissingGrades && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-red-600">
+                    <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+                    <span>
+                      {missingObligations.length === 1
+                        ? `חסר ציון: ${formatObligationLabel(missingObligations[0])}`
+                        : `חסרים ${missingObligations.length} ציונים: ${missingObligations
+                            .map(formatObligationLabel)
+                            .join(" · ")}`}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
             {estGrade != null && (

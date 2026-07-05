@@ -8,6 +8,7 @@ import { StatCardGrid } from "@/components/ui/StatCardGrid";
 import { StaggerChildren, StaggerItem } from "@/components/motion/StaggerChildren";
 import { OUTSTANDING_BAGRUT_TIER_LABELS, type OutstandingBagrutResult } from "@/lib/outstanding-bagrut-core";
 import { calcWeightedBagrutAverage } from "@/lib/bagrut-average";
+import { collectMissingGrades } from "@/lib/missing-grades";
 import { BookOpen, AlertCircle } from "lucide-react";
 
 export type StudentDashboardData = {
@@ -76,10 +77,7 @@ export function StudentDashboardContent({
   );
   const avgGrade = weightedAverage.average;
 
-  const missingCount = data.subjects.reduce(
-    (sum, s) => sum + s.grades.filter((g) => g.status === "MISSING").length,
-    0
-  );
+  const missingGrades = collectMissingGrades(data.subjects);
 
   const trackLabel =
     data.student.tracks?.length > 0
@@ -128,14 +126,27 @@ export function StudentDashboardContent({
     <>
       {hero ?? defaultHero}
 
-      {missingCount > 0 && (
-        <div className="mt-4 flex items-center gap-3 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-red-700">
-          <AlertCircle className="h-5 w-5 shrink-0" />
-          <span className="text-base font-semibold">
-            {missingCount === 1
-              ? "חסר לך ציון אחד — פנה למורה הרלוונטי"
-              : `חסרים לך ${missingCount} ציונים — פנה למורים הרלוונטיים`}
-          </span>
+      {missingGrades.length > 0 && (
+        <div className="mt-4 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-red-700">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-semibold">
+                {missingGrades.length === 1
+                  ? "חסר לך ציון אחד — פנה למורה הרלוונטי"
+                  : `חסרים לך ${missingGrades.length} ציונים — פנה למורים הרלוונטיים`}
+              </p>
+              <ul className="mt-2 space-y-1 text-base">
+                {missingGrades.map((entry) => (
+                  <li key={`${entry.subjectId}-${entry.obligationId}`}>
+                    <span className="font-semibold">{entry.subjectLabel}</span>
+                    <span className="mx-1.5 text-red-400">—</span>
+                    <span>{entry.obligationLabel}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
         </div>
       )}
 
