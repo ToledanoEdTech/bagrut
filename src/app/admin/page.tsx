@@ -423,8 +423,9 @@ function OutstandingPreviewCard({ preview }: { preview: OutstandingBagrutPreview
             <p className="text-sm text-slate-500">
 
               {preview.candidateCount} מועמדים
-
-              {preview.nearMissCount > 0 && ` · ${preview.nearMissCount} כמעט`}
+              {preview.greenCount > 0 && ` · ${preview.greenCount} ירוק`}
+              {preview.yellowCount > 0 && ` · ${preview.yellowCount} צהוב`}
+              {preview.redCount > 0 && ` · ${preview.redCount} אדום`}
 
             </p>
 
@@ -474,9 +475,19 @@ function OutstandingPreviewCard({ preview }: { preview: OutstandingBagrutPreview
 
               <div className="flex shrink-0 items-center gap-2">
 
-                <span className="font-bold text-amber-700">{c.average.toFixed(1)}</span>
+                <span
+                  className={
+                    c.tier === "green"
+                      ? "font-bold text-emerald-700"
+                      : c.tier === "yellow"
+                        ? "font-bold text-amber-700"
+                        : "font-bold text-red-700"
+                  }
+                >
+                  {c.average.toFixed(1)}
+                </span>
 
-                <OutstandingBagrutBadge size="sm" />
+                <OutstandingBagrutBadge size="sm" tier={c.tier} />
 
               </div>
 
@@ -761,6 +772,8 @@ export default function AdminDashboard() {
     outstandingBagrutPreview,
 
     gradeRemindersSummary,
+
+    teacherAlerts,
 
     dataQualityAlerts,
 
@@ -1245,6 +1258,80 @@ export default function AdminDashboard() {
       </div>
 
 
+
+      {teacherAlerts &&
+        (teacherAlerts.upcoming.length > 0 || teacherAlerts.overdue.length > 0) && (
+          <div className="mt-8 grid gap-6 lg:grid-cols-2">
+            <Card className="p-6">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-100">
+                  <Bell className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-h3 text-slate-900">מורים שמועד ההזנה שלהם מתקרב</h3>
+                  <p className="text-sm text-slate-500">בשבוע הקרוב, ועדיין לא הוזנו ציונים</p>
+                </div>
+              </div>
+              <div className="mt-4 space-y-2">
+                {teacherAlerts.upcoming.length === 0 ? (
+                  <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                    אין מורים עם מועד מתקרב
+                  </p>
+                ) : (
+                  teacherAlerts.upcoming.map((t) => (
+                    <div
+                      key={t.teacherId}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-amber-100 bg-amber-50/50 px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-slate-800">{t.name || t.email}</p>
+                        <p className="text-xs text-slate-500">
+                          {t.upcomingCount} מטלות · {t.upcomingMissingStudents} ציונים חסרים
+                          {t.nearestDueDate ? ` · הקרוב ביותר: ${t.nearestDueDate}` : ""}
+                        </p>
+                      </div>
+                      <span className="badge-warning shrink-0">{t.upcomingCount}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600 ring-1 ring-inset ring-red-100">
+                  <AlertTriangle className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-h3 text-slate-900">ציונים באיחור — טרם הוזנו</h3>
+                  <p className="text-sm text-slate-500">מועד ההזנה חלף וחסרים ציונים</p>
+                </div>
+              </div>
+              <div className="mt-4 space-y-2">
+                {teacherAlerts.overdue.length === 0 ? (
+                  <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                    אין ציונים באיחור
+                  </p>
+                ) : (
+                  teacherAlerts.overdue.map((t) => (
+                    <div
+                      key={t.teacherId}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-red-100 bg-red-50/50 px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-slate-800">{t.name || t.email}</p>
+                        <p className="text-xs text-slate-500">
+                          {t.overdueCount} מטלות · {t.overdueMissingStudents} ציונים חסרים
+                        </p>
+                      </div>
+                      <span className="badge-danger shrink-0">{t.overdueCount}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Card>
+          </div>
+        )}
 
       {gradeRemindersSummary && (
 

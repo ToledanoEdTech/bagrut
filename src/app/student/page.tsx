@@ -43,7 +43,10 @@ export default function StudentDashboard() {
             {data.student.user.name}
           </h1>
           {data.outstandingBagrut?.isCandidate && (
-            <OutstandingBagrutBadge variant="onDark" />
+            <OutstandingBagrutBadge
+              variant="onDark"
+              tier={data.outstandingBagrut.tier ?? undefined}
+            />
           )}
         </div>
 

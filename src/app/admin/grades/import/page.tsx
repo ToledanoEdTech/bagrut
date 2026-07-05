@@ -11,7 +11,9 @@ import { FileUpload } from "@/components/ui/FileUpload";
 import { useToast } from "@/components/ui/Toast";
 import {
   downloadGradesImportTemplate,
+  downloadFullGradesTemplate,
   exportTimestamp,
+  type FullGradesTemplateRow,
 } from "@/lib/excel-export";
 
 type ClassItem = { id: string; name: string; gradeYear: string | null };
@@ -43,7 +45,7 @@ export default function GradesImportPage() {
   const [classId, setClassId] = useState("");
   const [subjectId, setSubjectId] = useState("");
   const [obligationLabel, setObligationLabel] = useState("");
-  const [downloading, setDownloading] = useState<"empty" | "filled" | null>(null);
+  const [downloading, setDownloading] = useState<"empty" | "filled" | "full" | null>(null);
 
   const { data: classes = [] } = useApi<ClassItem[]>("/api/classes/list");
   const templateKey = classId
@@ -135,6 +137,35 @@ export default function GradesImportPage() {
           prefilledObligation: obligationLabel || undefined,
         }
       );
+    } finally {
+      setDownloading(null);
+    }
+  }
+
+  async function downloadFullClassFile() {
+    if (!classId || !selectedClass) return;
+    setDownloading("full");
+    try {
+      const res = await fetch(
+        `/api/grades/import/full-template?classId=${classId}`
+      );
+      const data = (await res.json()) as {
+        className: string;
+        statuses: string[];
+        rows: FullGradesTemplateRow[];
+        error?: string;
+      };
+      if (!res.ok) {
+        setError(data.error ?? "שגיאה בהורדת הקובץ");
+        return;
+      }
+      const safeName = selectedClass.name.replace(/[/\\?*[\]]/g, "-");
+      await downloadFullGradesTemplate(
+        `ציונים_מלא_${safeName}_${exportTimestamp()}.xlsx`,
+        { className: data.className, statuses: data.statuses, rows: data.rows }
+      );
+    } catch {
+      setError("שגיאת רשת בהורדת הקובץ");
     } finally {
       setDownloading(null);
     }
@@ -243,20 +274,34 @@ export default function GradesImportPage() {
                 </Select>
               </div>
 
-              <Button
-                onClick={() => void downloadFilledTemplate()}
-                disabled={!classId || !templateData || studentCount === 0 || downloading !== null}
-                className="mt-4"
-              >
-                {downloading === "filled" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="h-4 w-4" />
-                )}
-                {studentCount > 0
-                  ? `הורדת תבנית (${studentCount} תלמידים)`
-                  : "הורדת תבנית עם תלמידים"}
-              </Button>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Button
+                  onClick={() => void downloadFilledTemplate()}
+                  disabled={!classId || !templateData || studentCount === 0 || downloading !== null}
+                >
+                  {downloading === "filled" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  {studentCount > 0
+                    ? `תבנית לפי בחירה (${studentCount})`
+                    : "תבנית לפי בחירה"}
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  onClick={() => void downloadFullClassFile()}
+                  disabled={!classId || studentCount === 0 || downloading !== null}
+                >
+                  {downloading === "full" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  קובץ מלא — כל המטלות והרכיבים
+                </Button>
+              </div>
 
               {classId && !templateLoading && studentCount === 0 && (
                 <p className="mt-2 text-sm text-amber-600">אין תלמידים בכיתה זו</p>

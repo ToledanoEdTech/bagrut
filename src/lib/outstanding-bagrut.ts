@@ -14,10 +14,21 @@ import type { Class, ExamPath, Grade, Student, Subject } from "@/lib/types";
 
 export const OUTSTANDING_BAGRUT_MIN_AVERAGE = 90;
 export const OUTSTANDING_BAGRUT_MIN_ENGLISH_UNITS = 5;
-export const OUTSTANDING_BAGRUT_MIN_MATH_UNITS = 4;
+export const OUTSTANDING_BAGRUT_MIN_MATH_UNITS = 5;
+export const OUTSTANDING_BAGRUT_TIER_YELLOW_MIN = 80;
+export const OUTSTANDING_BAGRUT_TIER_GREEN_MIN = 90;
+
+/**
+ * רמת המועמדות נקבעת לפי הממוצע (רק עבור תלמידים שהם מועמדים):
+ *  - "red":    אין ציונים עדיין או ממוצע < 80
+ *  - "yellow": 80 ≤ ממוצע < 90
+ *  - "green":  ממוצע ≥ 90
+ */
+export type OutstandingBagrutTier = "red" | "yellow" | "green";
 
 export type OutstandingBagrutResult = {
   isCandidate: boolean;
+  tier: OutstandingBagrutTier | null;
   average: number | null;
   gradedSubjectsCount: number;
   totalSubjectsCount: number;
@@ -47,7 +58,7 @@ export function evaluateOutstandingBagrut(
   subjects: SubjectWithProgress[]
 ): OutstandingBagrutResult {
   const meetsEnglishUnits = student.englishUnits === OUTSTANDING_BAGRUT_MIN_ENGLISH_UNITS;
-  const meetsMathUnits = student.mathUnits >= OUTSTANDING_BAGRUT_MIN_MATH_UNITS;
+  const meetsMathUnits = student.mathUnits === OUTSTANDING_BAGRUT_MIN_MATH_UNITS;
 
   const gradedSubjects = subjects.filter((s) => s.progress.estimatedGrade != null);
   const totalSubjectsCount = subjects.length;
@@ -62,6 +73,21 @@ export function evaluateOutstandingBagrut(
   const meetsAverage =
     average != null && average >= OUTSTANDING_BAGRUT_MIN_AVERAGE;
 
+  // מועמד = רשום ל-5 יח"ל אנגלית וגם 5 יח"ל מתמטיקה. הממוצע אינו תנאי סף
+  // אלא קובע את רמת הצבע (אדום/צהוב/ירוק).
+  const isCandidate = meetsEnglishUnits && meetsMathUnits;
+
+  let tier: OutstandingBagrutTier | null = null;
+  if (isCandidate) {
+    if (average != null && average >= OUTSTANDING_BAGRUT_TIER_GREEN_MIN) {
+      tier = "green";
+    } else if (average != null && average >= OUTSTANDING_BAGRUT_TIER_YELLOW_MIN) {
+      tier = "yellow";
+    } else {
+      tier = "red";
+    }
+  }
+
   const missingReasons: string[] = [];
   if (!meetsEnglishUnits) {
     missingReasons.push(
@@ -70,21 +96,22 @@ export function evaluateOutstandingBagrut(
   }
   if (!meetsMathUnits) {
     missingReasons.push(
-      `נדרשות לפחות ${OUTSTANDING_BAGRUT_MIN_MATH_UNITS} יח"ל מתמטיקה (כרגע ${student.mathUnits})`
+      `נדרשות ${OUTSTANDING_BAGRUT_MIN_MATH_UNITS} יח"ל מתמטיקה (כרגע ${student.mathUnits})`
     );
   }
-  if (average == null) {
-    missingReasons.push("אין עדיין ציונים למיצוע");
-  } else if (!meetsAverage) {
-    missingReasons.push(
-      `ממוצע ${average.toFixed(1)} — נדרש ${OUTSTANDING_BAGRUT_MIN_AVERAGE}+`
-    );
+  if (isCandidate && tier !== "green") {
+    if (average == null) {
+      missingReasons.push("אין עדיין ציונים למיצוע");
+    } else {
+      missingReasons.push(
+        `ממוצע ${average.toFixed(1)} — נדרש ${OUTSTANDING_BAGRUT_TIER_GREEN_MIN}+ לרמה הגבוהה`
+      );
+    }
   }
-
-  const isCandidate = meetsEnglishUnits && meetsMathUnits && meetsAverage;
 
   return {
     isCandidate,
+    tier,
     average,
     gradedSubjectsCount,
     totalSubjectsCount,

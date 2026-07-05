@@ -23,6 +23,7 @@ import {
   EMPTY_OBLIGATION,
   type ObligationDraft,
 } from "@/components/subjects/ObligationEditor";
+import { defaultGradeEntryDueDate, resolveGradeEntryDueDate } from "@/lib/grade-due-date";
 
 type WeightedItem = { name: string; weightPercent: number };
 
@@ -78,7 +79,7 @@ function obligationToDraft(o?: Obligation): ObligationDraft {
     studyMaterial: o.studyMaterial ?? "",
     examEvent: o.examEvent ?? "",
     gradeYear: o.gradeYear ?? "",
-    gradeEntryDueDate: o.gradeEntryDueDate ?? "",
+    gradeEntryDueDate: resolveGradeEntryDueDate(o.gradeEntryDueDate),
     components: o.components.map(({ name, weightPercent }) => ({ name, weightPercent })),
     subItems: o.subItems.map(({ name, weightPercent }) => ({ name, weightPercent })),
   };
@@ -94,7 +95,7 @@ function draftToPayload(draft: ObligationDraft, subjectId: string, sortOrder: nu
     studyMaterial: draft.studyMaterial || null,
     examEvent: draft.examEvent || null,
     gradeYear: draft.gradeYear || null,
-    gradeEntryDueDate: draft.gradeEntryDueDate || null,
+    gradeEntryDueDate: draft.gradeEntryDueDate || defaultGradeEntryDueDate(),
     sortOrder,
     components: draft.components,
     subItems: draft.subItems,

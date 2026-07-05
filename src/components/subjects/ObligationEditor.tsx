@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, X, Check } from "lucide-react";
+import { defaultGradeEntryDueDate } from "@/lib/grade-due-date";
 
 export type WeightedItem = { name: string; weightPercent: number };
 
@@ -26,7 +27,7 @@ export const EMPTY_OBLIGATION: ObligationDraft = {
   studyMaterial: "",
   examEvent: "",
   gradeYear: "",
-  gradeEntryDueDate: "",
+  gradeEntryDueDate: defaultGradeEntryDueDate(),
   components: [{ name: "ציון פנימי", weightPercent: 100 }],
   subItems: [],
 };

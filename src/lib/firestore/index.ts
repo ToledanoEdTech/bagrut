@@ -366,14 +366,21 @@ export async function getClassById(id: string): Promise<Class | null> {
 }
 
 export async function listClasses() {
-  const [classesSnap, studentsSnap, pathsSnap] = await Promise.all([
+  const [classesSnap, studentsSnap, pathsSnap, staffSnap] = await Promise.all([
     adminDb.collection("classes").orderBy("name").get(),
     adminDb.collection("students").get(),
     adminDb.collection("examPaths").get(),
+    adminDb.collection("staff").get(),
   ]);
 
   const classes = docsData<Class>(classesSnap);
   const examPaths = docsMap<ExamPath>(pathsSnap);
+  const staffById = new Map(
+    staffSnap.docs.map((d) => {
+      const data = d.data() as { name?: string; email?: string };
+      return [d.id, { id: d.id, name: data.name ?? "", email: data.email ?? "" }];
+    })
+  );
   const studentCounts = new Map<string, number>();
   for (const doc of studentsSnap.docs) {
     const classId = (doc.data() as Student).classId;
@@ -383,6 +390,9 @@ export async function listClasses() {
   return classes.map((cls) => ({
     ...cls,
     examPath: examPaths.get(cls.examPathId) ?? null,
+    homeroomTeacher: cls.homeroomTeacherId
+      ? staffById.get(cls.homeroomTeacherId) ?? null
+      : null,
     _count: { students: studentCounts.get(cls.id) ?? 0 },
   }));
 }
@@ -393,7 +403,8 @@ export async function createClass(data: Omit<Class, "id">) {
   invalidateServerCache("examPaths");
   invalidateServerCache("classes");
   const examPath = await getExamPathById(data.examPathId);
-  return { id, ...data, examPath, _count: { students: 0 } };
+  const homeroomTeacher: { id: string; name: string; email: string } | null = null;
+  return { id, ...data, examPath, homeroomTeacher, _count: { students: 0 } };
 }
 
 export async function updateClass(id: string, data: Partial<Omit<Class, "id">>) {
@@ -554,6 +565,57 @@ export async function deleteObligation(subjectId: string, obligationId: string) 
   subject.obligations = subject.obligations.filter((o) => o.id !== obligationId);
   await adminDb.collection("subjects").doc(subjectId).update({ obligations: subject.obligations });
   invalidateServerCache("subjects");
+}
+
+/** עדכון שדות נבחרים על מספר מטלות בבת אחת (ללא נגיעה ברכיבים/תתי-מטלה) */
+export async function bulkUpdateObligationFields(
+  updates: Array<{
+    subjectId: string;
+    obligationId: string;
+    patch: Partial<
+      Pick<
+        Obligation,
+        | "name"
+        | "questionnaireNumber"
+        | "weightPercent"
+        | "examType"
+        | "studyMaterial"
+        | "examEvent"
+        | "gradeYear"
+        | "gradeEntryDueDate"
+        | "sortOrder"
+      >
+    >;
+  }>
+): Promise<number> {
+  const bySubject = new Map<string, typeof updates>();
+  for (const u of updates) {
+    const list = bySubject.get(u.subjectId) ?? [];
+    list.push(u);
+    bySubject.set(u.subjectId, list);
+  }
+
+  let updated = 0;
+  for (const [subjectId, subjectUpdates] of bySubject) {
+    const subject = await getSubjectById(subjectId);
+    if (!subject) continue;
+    const patchByObligation = new Map(
+      subjectUpdates.map((u) => [u.obligationId, u.patch])
+    );
+    subject.obligations = subject.obligations.map((o) => {
+      const patch = patchByObligation.get(o.id);
+      if (!patch) return o;
+      updated += 1;
+      return { ...o, ...patch };
+    });
+    await adminDb
+      .collection("subjects")
+      .doc(subjectId)
+      .update({ obligations: subject.obligations });
+  }
+
+  if (updated > 0) invalidateServerCache("subjects");
+  return updated;
 }
 
 export async function findObligation(obligationId: string) {

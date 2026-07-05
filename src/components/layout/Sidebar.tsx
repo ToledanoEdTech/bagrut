@@ -19,6 +19,7 @@ import {
   Bell,
   X,
   Award,
+  CalendarDays,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { SiteLogos } from "@/components/ui/SiteLogos";
@@ -43,6 +44,7 @@ const dailyWorkLinks: NavLink[] = [
 const managementLinks: NavLink[] = [
   { href: "/admin/classes", label: "כיתות ותוכניות", icon: School },
   { href: "/admin/subjects", label: "מקצועות וחובות", icon: BookOpen },
+  { href: "/admin/obligations", label: "לוח מטלות וציונים", icon: CalendarDays },
   { href: "/admin/import", label: "ייבוא תלמידים", icon: Upload },
   { href: "/admin/staff", label: "צוות והרשאות", icon: UserCog },
   { href: "/admin/settings", label: "תזכורות ציונים", icon: Bell },
@@ -161,7 +163,9 @@ export function Sidebar({
       : managementLinks.filter((l) => {
           if (l.href === "/admin/import" && session && !canImportStudents(role)) return false;
           if (
-            (l.href === "/admin/classes" || l.href === "/admin/subjects") &&
+            (l.href === "/admin/classes" ||
+              l.href === "/admin/subjects" ||
+              l.href === "/admin/obligations") &&
             !canManageStructure(role)
           )
             return false;

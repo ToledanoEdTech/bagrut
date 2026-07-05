@@ -3,13 +3,17 @@ import {
   buildReminderPlans,
   buildReminderRecipients,
   collectOverdueGradeItems,
+  collectPreDueGradeItems,
   DEFAULT_MIN_THRESHOLD,
+  DEFAULT_PRE_DUE_DAYS,
   filterUnsentReminderItems,
   getIsraelYmd,
   getPeriodKey,
+  itemDedupVariant,
   reminderDedupKey,
   shouldSendToRecipient,
   type GradeReminderRunSummary,
+  type OverdueGradeItem,
   type RecipientRunResult,
 } from "@/lib/grade-reminders";
 import {
@@ -66,7 +70,7 @@ export async function runGradeReminders(
     ]);
 
   const today = getIsraelYmd();
-  const overdueItems = collectOverdueGradeItems({
+  const dataInput = {
     today,
     subjects,
     students,
@@ -74,10 +78,26 @@ export async function runGradeReminders(
     examPaths,
     tracks,
     grades,
-  });
+  };
+
+  const postDueEnabled = settings.postDueEnabled ?? true;
+  const overdueItems = postDueEnabled ? collectOverdueGradeItems(dataInput) : [];
+
+  const preDue = settings.preDueReminders;
+  const preDueItems: OverdueGradeItem[] =
+    preDue?.enabled
+      ? collectPreDueGradeItems(
+          dataInput,
+          preDue.daysBefore && preDue.daysBefore.length > 0
+            ? preDue.daysBefore
+            : DEFAULT_PRE_DUE_DAYS
+        )
+      : [];
+
+  const allItems = [...preDueItems, ...overdueItems];
 
   const recipients = buildReminderRecipients(staff);
-  const plans = buildReminderPlans(recipients, staff, overdueItems);
+  const plans = buildReminderPlans(recipients, staff, allItems);
   const periodKey = getPeriodKey();
   const minThreshold = settings.minThreshold ?? DEFAULT_MIN_THRESHOLD;
   const appUrl = process.env.APP_URL?.trim() || "http://localhost:3000";
@@ -160,7 +180,12 @@ export async function runGradeReminders(
     summary.sent += 1;
     for (const item of items) {
       lastSentByRecipient[
-        reminderDedupKey(recipient.id, item.obligationId, item.gradeEntryDueDate)
+        reminderDedupKey(
+          recipient.id,
+          item.obligationId,
+          item.gradeEntryDueDate,
+          itemDedupVariant(item)
+        )
       ] = periodKey;
     }
     results.push({

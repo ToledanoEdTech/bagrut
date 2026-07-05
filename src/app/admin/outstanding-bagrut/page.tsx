@@ -10,12 +10,33 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Alert } from "@/components/ui/Alert";
 import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
 import { canViewOutstandingBagrut } from "@/lib/permissions";
-import type { OutstandingBagrutStudent } from "@/lib/outstanding-bagrut";
+import type {
+  OutstandingBagrutStudent,
+  OutstandingBagrutTier,
+} from "@/lib/outstanding-bagrut";
 
 type OutstandingBagrutApiData = {
   candidates: OutstandingBagrutStudent[];
   candidateCount: number;
   total: number;
+};
+
+const TIER_ORDER: Record<OutstandingBagrutTier, number> = {
+  green: 0,
+  yellow: 1,
+  red: 2,
+};
+
+const TIER_LABELS: Record<OutstandingBagrutTier, string> = {
+  green: "מלא (90+)",
+  yellow: "ביניים (80+)",
+  red: "בסיס",
+};
+
+const TIER_TEXT_COLORS: Record<OutstandingBagrutTier, string> = {
+  green: "text-emerald-700",
+  yellow: "text-amber-700",
+  red: "text-red-700",
 };
 
 export default function OutstandingBagrutPage() {
@@ -41,7 +62,7 @@ export default function OutstandingBagrutPage() {
       <>
         <PageHeader
           title="מועמדים לבגרות מצטיינת"
-          subtitle="תלמידים העומדים בקריטריונים: 5 יח״ל אנגלית, לפחות 4 יח״ל מתמטיקה, ממוצע 90+"
+          subtitle="תלמידים הרשומים ל-5 יח״ל אנגלית וגם 5 יח״ל מתמטיקה, מדורגים לפי ממוצע"
         />
         <div className="mt-8">
           <PageLoader variant="table" />
@@ -50,22 +71,39 @@ export default function OutstandingBagrutPage() {
     );
   }
 
-  const candidates = data?.candidates ?? [];
+  const candidates = [...(data?.candidates ?? [])].sort((a, b) => {
+    const tierA = a.outstandingBagrut.tier ?? "red";
+    const tierB = b.outstandingBagrut.tier ?? "red";
+    if (TIER_ORDER[tierA] !== TIER_ORDER[tierB]) {
+      return TIER_ORDER[tierA] - TIER_ORDER[tierB];
+    }
+    return (b.outstandingBagrut.average ?? 0) - (a.outstandingBagrut.average ?? 0);
+  });
 
   return (
     <>
       <PageHeader
         title="מועמדים לבגרות מצטיינת"
-        subtitle="תלמידים העומדים בקריטריונים: 5 יח״ל אנגלית, לפחות 4 יח״ל מתמטיקה, ממוצע 90+ בכל המקצועות"
+        subtitle="תלמידים הרשומים ל-5 יח״ל אנגלית וגם 5 יח״ל מתמטיקה, מדורגים לפי ממוצע"
       />
 
       <div className="mt-6 rounded-2xl border border-amber-100 bg-gradient-to-l from-amber-50/80 to-yellow-50/50 px-5 py-4 text-sm text-amber-900">
-        <p className="font-semibold">קריטריונים</p>
+        <p className="font-semibold">קריטריונים ורמות</p>
         <ul className="mt-2 list-inside list-disc space-y-1 text-amber-800/90">
-          <li>5 יחידות לימוד באנגלית</li>
-          <li>לפחות 4 יחידות לימוד במתמטיקה</li>
-          <li>ממוצע 90 ומעלה בכל המקצועות (מחושב לפי ציונים שהוזנו עד כה)</li>
+          <li>מועמד = 5 יחידות לימוד באנגלית וגם 5 יחידות לימוד במתמטיקה</li>
+          <li>הרמה נקבעת לפי הממוצע (מחושב לפי ציונים שהוזנו עד כה):</li>
         </ul>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-800">
+            בסיס · ממוצע מתחת ל-80
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+            ביניים · ממוצע 80–89.9
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
+            מלא · ממוצע 90 ומעלה
+          </span>
+        </div>
       </div>
 
       <div className="mt-6 flex items-center gap-3 text-sm text-slate-600">
@@ -81,7 +119,7 @@ export default function OutstandingBagrutPage() {
           <EmptyState
             icon={Award}
             title="אין מועמדים כרגע"
-            description="לא נמצאו תלמידים העומדים בכל הקריטריונים לפי הציונים שהוזנו"
+            description="לא נמצאו תלמידים הרשומים ל-5 יח״ל אנגלית וגם 5 יח״ל מתמטיקה"
           />
         ) : (
           <Card variant="flat" className="overflow-hidden">
@@ -91,6 +129,7 @@ export default function OutstandingBagrutPage() {
                   <tr className="border-b border-slate-200 text-slate-500">
                     <th className="px-4 py-3 text-right text-xs font-semibold">שם</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold">כיתה</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold">רמה</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold">מתמטיקה</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold">אנגלית</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold">ממוצע</th>
@@ -106,7 +145,10 @@ export default function OutstandingBagrutPage() {
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-semibold text-slate-800">{item.name}</span>
-                          <OutstandingBagrutBadge size="sm" />
+                          <OutstandingBagrutBadge
+                            size="sm"
+                            tier={item.outstandingBagrut.tier ?? undefined}
+                          />
                         </div>
                         <p className="mt-0.5 text-xs text-slate-400" dir="ltr">
                           {item.email}
@@ -116,9 +158,22 @@ export default function OutstandingBagrutPage() {
                         {item.className}
                         {item.gradeYear ? ` · ${item.gradeYear}` : ""}
                       </td>
+                      <td className="px-4 py-3 text-center">
+                        <span
+                          className={`text-xs font-semibold ${
+                            TIER_TEXT_COLORS[item.outstandingBagrut.tier ?? "red"]
+                          }`}
+                        >
+                          {TIER_LABELS[item.outstandingBagrut.tier ?? "red"]}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-center tabular-nums">{item.mathUnits}</td>
                       <td className="px-4 py-3 text-center tabular-nums">{item.englishUnits}</td>
-                      <td className="px-4 py-3 text-center font-bold tabular-nums text-emerald-700">
+                      <td
+                        className={`px-4 py-3 text-center font-bold tabular-nums ${
+                          TIER_TEXT_COLORS[item.outstandingBagrut.tier ?? "red"]
+                        }`}
+                      >
                         {item.outstandingBagrut.average?.toFixed(1) ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-center tabular-nums text-slate-600">

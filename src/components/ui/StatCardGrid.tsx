@@ -27,7 +27,7 @@ type StatItem = {
   value: string | number;
   subtitle?: string;
   icon: StatIconName;
-  color?: "primary" | "success" | "warning" | "info";
+  color?: "primary" | "success" | "warning" | "info" | "danger";
 };
 
 export function StatCardGrid({

@@ -7,6 +7,7 @@ import {
   updateSubject,
 } from "@/lib/firestore";
 import { requireAdmin } from "@/lib/api-auth";
+import { defaultGradeEntryDueDate } from "@/lib/grade-due-date";
 
 export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
       studyMaterial: o.studyMaterial ?? null,
       examEvent: o.examEvent ?? null,
       gradeYear: o.gradeYear ?? null,
-      gradeEntryDueDate: o.gradeEntryDueDate ?? null,
+      gradeEntryDueDate: o.gradeEntryDueDate ?? defaultGradeEntryDueDate(),
       sortOrder: i,
       components: (o.components ?? []).map((c, j) => ({ ...c, sortOrder: j })),
       subItems: (o.subItems ?? []).map((si, j) => ({ ...si, sortOrder: j })),

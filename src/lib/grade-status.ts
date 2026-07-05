@@ -9,6 +9,7 @@ export const STATUS_LABELS: Record<
   SUBMITTED: { label: "הוגש", className: "badge-info" },
   GRADED: { label: "נבדק", className: "badge-success" },
   EXEMPT: { label: "פטור", className: "badge-muted" },
+  MISSING: { label: "חסר ציון", className: "badge-danger" },
 };
 
 export const SUBMISSION_STATUSES: SubmissionStatus[] = [
@@ -17,6 +18,7 @@ export const SUBMISSION_STATUSES: SubmissionStatus[] = [
   "SUBMITTED",
   "GRADED",
   "EXEMPT",
+  "MISSING",
 ];
 
 export function isValidSubmissionStatus(value: string): value is SubmissionStatus {
@@ -41,6 +43,9 @@ const STATUS_ALIASES: Record<string, SubmissionStatus> = {
   graded: "GRADED",
   "פטור": "EXEMPT",
   exempt: "EXEMPT",
+  "חסר ציון": "MISSING",
+  "חסר": "MISSING",
+  missing: "MISSING",
 };
 
 export function parseStatusInput(value: string): SubmissionStatus | null {
@@ -55,7 +60,12 @@ export function autoStatusOnScore(
   score: number | null,
   currentStatus: SubmissionStatus
 ): SubmissionStatus {
-  if (score != null && (currentStatus === "NOT_STARTED" || currentStatus === "IN_PROGRESS")) {
+  if (
+    score != null &&
+    (currentStatus === "NOT_STARTED" ||
+      currentStatus === "IN_PROGRESS" ||
+      currentStatus === "MISSING")
+  ) {
     return "GRADED";
   }
   return currentStatus;

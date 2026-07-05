@@ -17,8 +17,13 @@ export async function POST(req: NextRequest) {
   const { error } = await requireAdmin();
   if (error) return error;
 
-  const { name, gradeYear, examPathId } = await req.json();
-  const cls = await createClass({ name, gradeYear, examPathId });
+  const { name, gradeYear, examPathId, homeroomTeacherId } = await req.json();
+  const cls = await createClass({
+    name,
+    gradeYear,
+    examPathId,
+    homeroomTeacherId: homeroomTeacherId || null,
+  });
   return NextResponse.json(cls);
 }
 
@@ -26,8 +31,12 @@ export async function PATCH(req: NextRequest) {
   const { error } = await requireAdmin();
   if (error) return error;
 
-  const { id, name, gradeYear, examPathId } = await req.json();
-  const cls = await updateClass(id, { name, gradeYear, examPathId });
+  const { id, name, gradeYear, examPathId, homeroomTeacherId } = await req.json();
+  const patch: Parameters<typeof updateClass>[1] = { name, gradeYear, examPathId };
+  if (homeroomTeacherId !== undefined) {
+    patch.homeroomTeacherId = homeroomTeacherId || null;
+  }
+  const cls = await updateClass(id, patch);
   return NextResponse.json(cls);
 }
 

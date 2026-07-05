@@ -296,6 +296,7 @@ type ClassExportRow = {
   name: string;
   gradeYear: string | null;
   examPath: { label: string };
+  homeroomTeacher?: { name: string; email: string } | null;
   _count: { students: number };
 };
 
@@ -308,12 +309,16 @@ export function buildClassesSheet(classes: ClassExportRow[]): ExportSheet {
     columns: [
       { header: "שם כיתה", key: "name" },
       { header: "שכבה", key: "gradeYear" },
+      { header: "מחנך", key: "homeroom" },
       { header: "תוכנית חובה", key: "path" },
       { header: "מספר תלמידים", key: "students" },
     ],
     rows: sorted.map((c) => ({
       name: c.name,
       gradeYear: c.gradeYear ?? "—",
+      homeroom: c.homeroomTeacher
+        ? c.homeroomTeacher.name || c.homeroomTeacher.email
+        : "לא הוגדר מחנך",
       path: c.examPath.label,
       students: c._count.students,
     })),
@@ -512,6 +517,209 @@ export function buildObligationLabels(
     }
   }
   return Array.from(labels).sort((a, b) => a.localeCompare(b, "he"));
+}
+
+export type FullGradesTemplateRow = {
+  className: string;
+  subjectName: string;
+  obligationName: string;
+  taskName: string;
+  studentName: string;
+  score: number | string;
+  status: string;
+};
+
+const FULL_GRADES_COLUMNS = [
+  { header: "כיתה", key: "className", width: 14 },
+  { header: "מקצוע", key: "subjectName", width: 20 },
+  { header: "מטלה", key: "obligationName", width: 26 },
+  { header: "רכיב/תת-מטלה", key: "taskName", width: 20 },
+  { header: "שם תלמיד", key: "studentName", width: 20 },
+  { header: "ציון", key: "score", width: 10 },
+  { header: "סטטוס", key: "status", width: 14 },
+] as const;
+
+export async function downloadFullGradesTemplate(
+  filename: string,
+  input: { className: string; statuses: string[]; rows: FullGradesTemplateRow[] }
+): Promise<void> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Bagrut Manager";
+  workbook.created = new Date();
+
+  const listsWs = workbook.addWorksheet(LISTS_SHEET);
+  listsWs.state = "veryHidden";
+  const statusRange = writeListColumn(
+    listsWs,
+    1,
+    input.statuses.length > 0
+      ? input.statuses
+      : SUBMISSION_STATUSES.map((s) => STATUS_LABELS[s].label)
+  );
+
+  const ws = workbook.addWorksheet("ייבוא ציונים", {
+    views: [{ rightToLeft: true, state: "frozen", ySplit: 2 }],
+  });
+
+  ws.mergeCells(1, 1, 1, FULL_GRADES_COLUMNS.length);
+  const titleCell = ws.getCell(1, 1);
+  titleCell.value = `קובץ הזנת ציונים מלא — ${input.className} (${input.rows.length} שורות)`;
+  titleCell.font = { bold: true, size: 14, color: { argb: "FF1E293B" } };
+  titleCell.alignment = { horizontal: "right", vertical: "middle" };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2FF" } };
+  ws.getRow(1).height = 30;
+
+  const headerRow = ws.getRow(2);
+  FULL_GRADES_COLUMNS.forEach((col, i) => {
+    const cell = headerRow.getCell(i + 1);
+    cell.value = col.header;
+    cell.font = HEADER_FONT;
+    cell.fill = HEADER_FILL;
+    cell.alignment = { horizontal: "right", vertical: "middle" };
+    cell.border = THIN_BORDER;
+  });
+  headerRow.height = 24;
+
+  const dataStartRow = 3;
+  input.rows.forEach((row, idx) => {
+    const excelRow = ws.getRow(dataStartRow + idx);
+    FULL_GRADES_COLUMNS.forEach((col, i) => {
+      const cell = excelRow.getCell(i + 1);
+      const val = row[col.key as keyof FullGradesTemplateRow];
+      cell.value = val === null || val === undefined ? "" : val;
+      cell.alignment = { horizontal: "right", vertical: "middle", wrapText: true };
+      cell.border = THIN_BORDER;
+      if (idx % 2 === 1) cell.fill = ALT_ROW_FILL;
+    });
+    excelRow.height = 20;
+  });
+
+  FULL_GRADES_COLUMNS.forEach((col, i) => {
+    ws.getColumn(i + 1).width = col.width;
+  });
+
+  const lastDataRow = dataStartRow + Math.max(input.rows.length, 1) - 1;
+  applyListValidation(ws, "G", dataStartRow, lastDataRow, statusRange);
+  (ws as WorksheetWithValidations).dataValidations.add(
+    `F${dataStartRow}:F${lastDataRow}`,
+    {
+      type: "decimal",
+      operator: "between",
+      allowBlank: true,
+      formulae: [0, 100],
+      showErrorMessage: true,
+      errorStyle: "warning",
+      errorTitle: "ציון לא תקין",
+      error: "הציון חייב להיות בין 0 ל-100",
+    }
+  );
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export type StudentsImportTemplateInput = {
+  classes: string[];
+  tracks: string[];
+  mathUnits: number[];
+  englishUnits: number[];
+};
+
+const STUDENT_IMPORT_COLUMNS = [
+  { header: "שם", key: "name", width: 22 },
+  { header: "אימייל", key: "email", width: 26 },
+  { header: "כיתה", key: "className", width: 14 },
+  { header: "מגמה", key: "track", width: 20 },
+  { header: "מתמטיקה", key: "math", width: 12 },
+  { header: "אנגלית", key: "english", width: 12 },
+] as const;
+
+export async function downloadStudentsImportTemplate(
+  filename: string,
+  input: StudentsImportTemplateInput
+): Promise<void> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Bagrut Manager";
+  workbook.created = new Date();
+
+  const listsWs = workbook.addWorksheet(LISTS_SHEET);
+  listsWs.state = "veryHidden";
+
+  const classRange = writeListColumn(listsWs, 1, input.classes);
+  const trackRange = writeListColumn(listsWs, 2, input.tracks);
+  const mathRange = writeListColumn(listsWs, 3, input.mathUnits.map(String));
+  const englishRange = writeListColumn(listsWs, 4, input.englishUnits.map(String));
+
+  const ws = workbook.addWorksheet("ייבוא תלמידים", {
+    views: [{ rightToLeft: true, state: "frozen", ySplit: 2 }],
+  });
+
+  ws.mergeCells(1, 1, 1, STUDENT_IMPORT_COLUMNS.length);
+  const titleCell = ws.getCell(1, 1);
+  titleCell.value = "תבנית ייבוא תלמידים";
+  titleCell.font = { bold: true, size: 14, color: { argb: "FF1E293B" } };
+  titleCell.alignment = { horizontal: "right", vertical: "middle" };
+  titleCell.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFEEF2FF" },
+  };
+  ws.getRow(1).height = 30;
+
+  const headerRow = ws.getRow(2);
+  STUDENT_IMPORT_COLUMNS.forEach((col, i) => {
+    const cell = headerRow.getCell(i + 1);
+    cell.value = col.header;
+    cell.font = HEADER_FONT;
+    cell.fill = HEADER_FILL;
+    cell.alignment = { horizontal: "right", vertical: "middle" };
+    cell.border = THIN_BORDER;
+  });
+  headerRow.height = 24;
+
+  const rowCount = 100;
+  const dataStartRow = 3;
+
+  for (let idx = 0; idx < rowCount; idx++) {
+    const excelRow = ws.getRow(dataStartRow + idx);
+    STUDENT_IMPORT_COLUMNS.forEach((_, i) => {
+      const cell = excelRow.getCell(i + 1);
+      cell.value = "";
+      cell.alignment = { horizontal: "right", vertical: "middle", wrapText: true };
+      cell.border = THIN_BORDER;
+      if (idx % 2 === 1) cell.fill = ALT_ROW_FILL;
+    });
+    excelRow.height = 20;
+  }
+
+  STUDENT_IMPORT_COLUMNS.forEach((col, i) => {
+    ws.getColumn(i + 1).width = col.width;
+  });
+
+  const lastDataRow = dataStartRow + rowCount - 1;
+  applyListValidation(ws, "C", dataStartRow, lastDataRow, classRange);
+  applyListValidation(ws, "D", dataStartRow, lastDataRow, trackRange);
+  applyListValidation(ws, "E", dataStartRow, lastDataRow, mathRange);
+  applyListValidation(ws, "F", dataStartRow, lastDataRow, englishRange);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function downloadGradesImportTemplate(

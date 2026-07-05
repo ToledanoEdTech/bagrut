@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Pencil, Trash2, Save, X, ChevronLeft, Users } from "lucide-react";
+import { Plus, Pencil, Trash2, Save, X, ChevronLeft, Users, GraduationCap } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -12,8 +12,9 @@ import { Button } from "@/components/ui/Button";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useAuth } from "@/components/AuthProvider";
-import { canViewOutstandingBagrut } from "@/lib/permissions";
+import { canViewOutstandingBagrut, hasAnyStudentEdit } from "@/lib/permissions";
 import { StudentCardView } from "@/components/students/StudentCardView";
 import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
 import type { OutstandingBagrutResult } from "@/lib/outstanding-bagrut";
@@ -25,11 +26,14 @@ import {
 } from "@/lib/excel-export";
 
 type ExamPath = { id: string; label: string; key: string };
+type StaffMember = { id: string; name: string; email: string; role: string };
 type ClassItem = {
   id: string;
   name: string;
   gradeYear: string | null;
   examPath: ExamPath;
+  homeroomTeacherId?: string | null;
+  homeroomTeacher?: { id: string; name: string; email: string } | null;
   _count: { students: number };
 };
 
@@ -47,18 +51,26 @@ type View = "classes" | "students" | "detail";
 
 export default function ClassesPage() {
   const toast = useToast();
+  const confirm = useConfirm();
   const { session } = useAuth();
   const canOutstandingBagrut = session ? canViewOutstandingBagrut(session) : false;
+  const canEditStudents = session ? hasAnyStudentEdit(session) : false;
   const [view, setView] = useState<View>("classes");
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
-  const [form, setForm] = useState({ name: "", gradeYear: "", examPathId: "" });
+  const [form, setForm] = useState({
+    name: "",
+    gradeYear: "",
+    examPathId: "",
+    homeroomTeacherId: "",
+  });
 
   const { data: classes = [], loading, mutate: refreshClasses } = useApi<ClassItem[]>("/api/classes");
   const { data: paths = [], mutate: refreshPaths } = useApi<ExamPath[]>("/api/paths");
-  const { data: students = [], loading: studentsLoading } = useApi<Student[]>(
+  const { data: staff = [] } = useApi<StaffMember[]>("/api/staff");
+  const { data: students = [], loading: studentsLoading, mutate: refreshStudents } = useApi<Student[]>(
     view !== "classes" ? "/api/students" : null
   );
   const { data: outstandingData } = useApi<{
@@ -95,7 +107,7 @@ export default function ClassesPage() {
       body: JSON.stringify(form),
     });
     setShowNew(false);
-    setForm({ name: "", gradeYear: "", examPathId: paths[0]?.id ?? "" });
+    setForm({ name: "", gradeYear: "", examPathId: paths[0]?.id ?? "", homeroomTeacherId: "" });
     toast.success("הכיתה נוצרה בהצלחה");
     load();
   }
@@ -119,6 +131,25 @@ export default function ClassesPage() {
       toast.success("הכיתה נמחקה");
       load();
     }
+  }
+
+  async function removeStudent(id: string): Promise<boolean> {
+    const ok = await confirm({
+      title: "מחיקת תלמיד",
+      description: "למחוק תלמיד זה? פעולה זו אינה ניתנת לביטול.",
+      confirmLabel: "מחק",
+      variant: "danger",
+    });
+    if (!ok) return false;
+    const res = await fetch(`/api/students?id=${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error ?? "שגיאה במחיקה");
+      return false;
+    }
+    toast.success("התלמיד נמחק");
+    await Promise.all([refreshStudents(), refreshClasses()]);
+    return true;
   }
 
   function openClass(classId: string) {
@@ -226,10 +257,25 @@ export default function ClassesPage() {
             transition={{ duration: 0.2 }}
             className="mt-4"
           >
-            <Button variant="secondary" onClick={backToStudents} className="mb-4">
-              <ChevronLeft className="h-4 w-4" />
-              חזרה לרשימת התלמידים
-            </Button>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <Button variant="secondary" onClick={backToStudents}>
+                <ChevronLeft className="h-4 w-4" />
+                חזרה לרשימת התלמידים
+              </Button>
+              {canEditStudents && (
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    const deleted = await removeStudent(selectedStudentId);
+                    if (deleted) backToStudents();
+                  }}
+                  className="text-red-500 hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  מחיקת תלמיד
+                </Button>
+              )}
+            </div>
             <StudentCardView studentId={selectedStudentId} />
           </motion.div>
         ) : view === "students" && selectedClass ? (
@@ -275,7 +321,10 @@ export default function ClassesPage() {
                             {student.user.name}
                           </p>
                           {canOutstandingBagrut && outstandingByStudentId[student.id]?.isCandidate && (
-                            <OutstandingBagrutBadge size="sm" />
+                            <OutstandingBagrutBadge
+                              size="sm"
+                              tier={outstandingByStudentId[student.id]?.tier ?? undefined}
+                            />
                           )}
                         </div>
                         <p className="mt-0.5 text-base text-slate-500">
@@ -302,7 +351,7 @@ export default function ClassesPage() {
       {showNew && (
         <div className="mt-6 card p-6">
           <h3 className="font-semibold">כיתה חדשה</h3>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className="label">שם כיתה</label>
               <input
@@ -336,6 +385,21 @@ export default function ClassesPage() {
                 {paths.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">מחנך</label>
+              <select
+                className="input"
+                value={form.homeroomTeacherId}
+                onChange={(e) => setForm({ ...form, homeroomTeacherId: e.target.value })}
+              >
+                <option value="">לא הוגדר מחנך</option>
+                {staff.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name || m.email}
                   </option>
                 ))}
               </select>
@@ -381,6 +445,18 @@ export default function ClassesPage() {
                     </option>
                   ))}
                 </select>
+                <select
+                  className="input"
+                  value={form.homeroomTeacherId}
+                  onChange={(e) => setForm({ ...form, homeroomTeacherId: e.target.value })}
+                >
+                  <option value="">לא הוגדר מחנך</option>
+                  {staff.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name || m.email}
+                    </option>
+                  ))}
+                </select>
                 <div className="flex gap-2">
                   <Button onClick={() => saveEdit(c.id)} className="flex-1">
                     <Save className="h-4 w-4" />
@@ -400,6 +476,16 @@ export default function ClassesPage() {
                   >
                     <h3 className="text-h3 text-slate-900">{c.name}</h3>
                     <p className="mt-1 text-base text-slate-500">{c.gradeYear}</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-sm">
+                      <GraduationCap className="h-4 w-4 shrink-0 text-slate-400" />
+                      {c.homeroomTeacher ? (
+                        <span className="text-slate-600">
+                          מחנך: {c.homeroomTeacher.name || c.homeroomTeacher.email}
+                        </span>
+                      ) : (
+                        <span className="italic text-slate-400">לא הוגדר מחנך</span>
+                      )}
+                    </p>
                   </button>
                   <div className="flex gap-1">
                     <Button
@@ -411,6 +497,7 @@ export default function ClassesPage() {
                           name: c.name,
                           gradeYear: c.gradeYear ?? "",
                           examPathId: c.examPath.id,
+                          homeroomTeacherId: c.homeroomTeacherId ?? "",
                         });
                       }}
                       aria-label="עריכה"

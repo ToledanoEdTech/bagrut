@@ -288,17 +288,18 @@ export default function StudentsPage() {
     }
   }
 
-  async function remove(id: string) {
+  async function remove(id: string): Promise<boolean> {
     const ok = await confirm({
       title: "מחיקת תלמיד",
       description: "למחוק תלמיד זה? פעולה זו אינה ניתנת לביטול.",
       confirmLabel: "מחק",
       variant: "danger",
     });
-    if (!ok) return;
+    if (!ok) return false;
     await fetch(`/api/students?id=${id}`, { method: "DELETE" });
     toast.success("התלמיד נמחק");
     load();
+    return true;
   }
 
   async function handleExport() {
@@ -366,10 +367,25 @@ export default function StudentsPage() {
             transition={{ duration: 0.2 }}
             className="mt-4"
           >
-            <Button variant="secondary" onClick={backToList} className="mb-4">
-              <ChevronLeft className="h-4 w-4" />
-              חזרה לרשימת התלמידים
-            </Button>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <Button variant="secondary" onClick={backToList}>
+                <ChevronLeft className="h-4 w-4" />
+                חזרה לרשימת התלמידים
+              </Button>
+              {canEdit && (
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    const deleted = await remove(selectedStudentId);
+                    if (deleted) backToList();
+                  }}
+                  className="text-red-500 hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  מחיקת תלמיד
+                </Button>
+              )}
+            </div>
             <StudentCardView studentId={selectedStudentId} />
           </motion.div>
         ) : (
@@ -477,7 +493,10 @@ export default function StudentsPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-semibold text-slate-900">{s.user.name}</p>
                           {canOutstandingBagrut && outstandingByStudentId[s.id]?.isCandidate && (
-                            <OutstandingBagrutBadge size="sm" />
+                            <OutstandingBagrutBadge
+                              size="sm"
+                              tier={outstandingByStudentId[s.id]?.tier ?? undefined}
+                            />
                           )}
                         </div>
                         <p className="mt-0.5 truncate text-sm text-slate-500" dir="ltr">
@@ -575,7 +594,10 @@ export default function StudentsPage() {
                           {canOutstandingBagrut && (
                             <td className="px-4 py-3 text-center">
                               {outstandingByStudentId[s.id]?.isCandidate ? (
-                                <OutstandingBagrutBadge size="sm" />
+                                <OutstandingBagrutBadge
+                                  size="sm"
+                                  tier={outstandingByStudentId[s.id]?.tier ?? undefined}
+                                />
                               ) : (
                                 <span className="text-sm text-slate-300">—</span>
                               )}

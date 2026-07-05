@@ -3,8 +3,16 @@ import type { GradeReminderSettings } from "@/lib/grade-reminders";
 
 const SETTINGS_DOC = "settings/general";
 
+export interface ClassPromotionSettings {
+  /** השנה (לפי לוח גרגוריאני, אזור זמן ישראל) שבה בוצעה עליית הכיתות האחרונה */
+  lastPromotionYear?: number;
+  lastPromotionAt?: string;
+  lastPromotedCount?: number;
+}
+
 export interface GeneralSettings {
   gradeReminders?: GradeReminderSettings;
+  classPromotion?: ClassPromotionSettings;
 }
 
 export async function getGeneralSettings(): Promise<GeneralSettings> {
@@ -24,5 +32,19 @@ export async function updateGradeReminderSettings(
   const current = await getGradeReminderSettings();
   const next: GradeReminderSettings = { ...current, ...patch };
   await adminDb.doc(SETTINGS_DOC).set({ gradeReminders: next }, { merge: true });
+  return next;
+}
+
+export async function getClassPromotionSettings(): Promise<ClassPromotionSettings> {
+  const settings = await getGeneralSettings();
+  return settings.classPromotion ?? {};
+}
+
+export async function updateClassPromotionSettings(
+  patch: Partial<ClassPromotionSettings>
+): Promise<ClassPromotionSettings> {
+  const current = await getClassPromotionSettings();
+  const next: ClassPromotionSettings = { ...current, ...patch };
+  await adminDb.doc(SETTINGS_DOC).set({ classPromotion: next }, { merge: true });
   return next;
 }

@@ -13,12 +13,25 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function duePhrase(item: OverdueGradeItem): string {
+  if (item.kind === "pre_due") {
+    const n = item.daysBeforeDue ?? 0;
+    if (n === 1) return "מחר";
+    return `בעוד ${n} ימים`;
+  }
+  return "חלף";
+}
+
 function formatItemLine(item: OverdueGradeItem): string {
+  const timing =
+    item.kind === "pre_due"
+      ? `— מועד הזנה ${duePhrase(item)} (${formatDueDateHe(item.gradeEntryDueDate)})`
+      : `— יעד חלף: ${formatDueDateHe(item.gradeEntryDueDate)}`;
   const parts = [
     item.subjectName,
     item.obligationLabel,
     item.examEvent ? `(${item.examEvent})` : null,
-    `— יעד: ${formatDueDateHe(item.gradeEntryDueDate)}`,
+    timing,
     `(${item.missingStudentCount} תלמידים חסרים)`,
   ].filter(Boolean);
   return parts.join(" ");
@@ -34,7 +47,15 @@ export function renderGradeReminderEmail(options: {
   const remaining = items.length - shown.length;
   const gradesUrl = `${appUrl.replace(/\/$/, "")}/admin/grades`;
 
-  const subject = "תזכורת: יש להזין ציונים לאירועי בחינה";
+  const hasOverdue = items.some((i) => i.kind !== "pre_due");
+
+  const subject = hasOverdue
+    ? "תזכורת: יש להזין ציונים לאירועי בחינה"
+    : "תזכורת מקדימה: מתקרב מועד הזנת ציונים";
+
+  const intro = hasOverdue
+    ? "מועד ההזנה לחלק מהציונים הבאים חלף ועדיין חסרים ציונים:"
+    : "מתקרב מועד ההזנה לציונים הבאים, שעדיין חסרים:";
 
   const lines = shown.map((item) => `• ${formatItemLine(item)}`);
   if (remaining > 0) {
@@ -44,7 +65,7 @@ export function renderGradeReminderEmail(options: {
   const text = [
     `שלום ${recipientName},`,
     "",
-    "מועד ההזנה לציונים הבאים חלף ועדיין חסרים ציונים:",
+    intro,
     "",
     ...lines,
     "",
@@ -59,9 +80,10 @@ export function renderGradeReminderEmail(options: {
       <li style="margin-bottom:10px;line-height:1.6;">
         <strong>${escapeHtml(item.subjectName)}</strong> — ${escapeHtml(item.obligationLabel)}
         ${item.examEvent ? `<span style="color:#64748b;"> (${escapeHtml(item.examEvent)})</span>` : ""}
+        ${item.kind === "pre_due" ? `<span style="color:#0369a1;font-weight:600;"> · תזכורת מקדימה (${escapeHtml(duePhrase(item))})</span>` : ""}
         <br />
         <span style="color:#475569;font-size:14px;">
-          יעד הזנה: ${escapeHtml(formatDueDateHe(item.gradeEntryDueDate))}
+          ${item.kind === "pre_due" ? "מועד הזנה" : "יעד הזנה"}: ${escapeHtml(formatDueDateHe(item.gradeEntryDueDate))}
           · ${item.missingStudentCount} תלמידים ללא ציון
           ${item.classNames.length ? `· כיתות: ${escapeHtml(item.classNames.join(", "))}` : ""}
         </span>
@@ -90,7 +112,7 @@ export function renderGradeReminderEmail(options: {
             <td style="padding:28px;color:#0f172a;">
               <p style="margin:0 0 16px;font-size:16px;">שלום ${escapeHtml(recipientName)},</p>
               <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#334155;">
-                מועד ההזנה לציונים הבאים חלף ועדיין חסרים ציונים. נא להשלים את ההזנה בהקדם.
+                ${escapeHtml(intro)} נא להשלים את ההזנה בהקדם.
               </p>
               <ul style="margin:0 0 24px;padding-right:20px;color:#0f172a;">
                 ${listHtml}

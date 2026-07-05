@@ -36,7 +36,8 @@ export type SubmissionStatus =
   | "IN_PROGRESS"
   | "SUBMITTED"
   | "GRADED"
-  | "EXEMPT";
+  | "EXEMPT"
+  | "MISSING";
 
 export interface ObligationComponent {
   name: string;
@@ -89,6 +90,8 @@ export interface Class {
   name: string;
   gradeYear: string | null;
   examPathId: string;
+  /** מזהה חבר צוות (staff.id) המוגדר כמחנך הכיתה. null/undefined = לא הוגדר מחנך */
+  homeroomTeacherId?: string | null;
 }
 
 export interface Track {

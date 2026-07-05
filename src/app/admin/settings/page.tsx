@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Bell, Mail, Play, RefreshCw, Settings2 } from "lucide-react";
+import {
+  Bell,
+  Mail,
+  Play,
+  RefreshCw,
+  Settings2,
+  ArrowUpCircle,
+} from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -36,6 +43,27 @@ type SettingsResponse = {
   appUrl: string | null;
 };
 
+type ClassPromotionChange = {
+  classId: string;
+  oldName: string;
+  newName: string;
+  oldGradeYear: string | null;
+  newGradeYear: string | null;
+};
+
+type ClassPromotionResponse = {
+  settings: {
+    lastPromotionYear?: number;
+    lastPromotionAt?: string;
+    lastPromotedCount?: number;
+  };
+  year: number;
+  alreadyPromotedThisYear: boolean;
+  preview: ClassPromotionChange[];
+  promotableCount: number;
+  skippedNames: string[];
+};
+
 function formatDateTime(iso?: string): string {
   if (!iso) return "—";
   return new Intl.DateTimeFormat("he-IL", {
@@ -52,9 +80,22 @@ export default function SettingsPage() {
   const [running, setRunning] = useState<"dry" | "force" | null>(null);
   const [testEmail, setTestEmail] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
+  const { data: promo, mutate: mutatePromo } = useApi<ClassPromotionResponse>(
+    "/api/settings/class-promotion"
+  );
+  const [promoting, setPromoting] = useState<"dry" | "run" | null>(null);
 
   const enabled = data?.settings.enabled ?? false;
   const minThreshold = data?.settings.minThreshold ?? 1;
+  const postDueEnabled = data?.settings.postDueEnabled ?? true;
+  const preDue = data?.settings.preDueReminders;
+  const preDueEnabled = preDue?.enabled ?? false;
+  const [daysInput, setDaysInput] = useState<string | null>(null);
+  const daysValue =
+    daysInput ??
+    (preDue?.daysBefore && preDue.daysBefore.length > 0
+      ? preDue.daysBefore.join(", ")
+      : "7, 3, 1");
 
   const saveSettings = useCallback(
     async (patch: Partial<GradeReminderSettings>) => {
@@ -77,6 +118,20 @@ export default function SettingsPage() {
       }
     },
     [mutate, toast]
+  );
+
+  const saveDaysBefore = useCallback(
+    (raw: string) => {
+      const days = raw
+        .split(/[,\s]+/)
+        .map((s) => parseInt(s, 10))
+        .filter((n) => !isNaN(n) && n > 0 && n <= 60);
+      saveSettings({
+        preDueReminders: { enabled: preDueEnabled, daysBefore: days },
+      });
+      setDaysInput(null);
+    },
+    [preDueEnabled, saveSettings]
   );
 
   const runReminders = useCallback(
@@ -130,6 +185,44 @@ export default function SettingsPage() {
     }
   }, [testEmail, toast]);
 
+  const runPromotion = useCallback(
+    async (mode: "dry" | "run") => {
+      if (mode === "run") {
+        const ok = window.confirm(
+          "פעולה זו תעדכן את שמות כל הכיתות והשכבות לשנה הבאה. להמשיך?"
+        );
+        if (!ok) return;
+      }
+      setPromoting(mode);
+      try {
+        const res = await fetch("/api/settings/class-promotion", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dryRun: mode === "dry",
+            force: mode === "run",
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || json.ok === false) {
+          throw new Error(json.error ?? "שגיאה בהרצה");
+        }
+        if (mode === "dry") {
+          toast.success(`סימולציה: ${json.promoted} כיתות יעלו שכבה`);
+        } else {
+          invalidateCache("/api/classes");
+          toast.success(`${json.promoted} כיתות עלו שכבה בהצלחה`);
+        }
+        await mutatePromo();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "שגיאה בהרצה");
+      } finally {
+        setPromoting(null);
+      }
+    },
+    [mutatePromo, toast]
+  );
+
   if (loading && !data) return <PageLoader />;
 
   return (
@@ -156,7 +249,7 @@ export default function SettingsPage() {
             <div>
               <p className="font-medium text-slate-800">תזכורות אוטומטיות</p>
               <p className="text-sm text-slate-500">
-                שליחה ביום למחרת תאריך היעד, בשעה 08:00 (שעון ישראל)
+                הפעלה כללית של מנגנון התזכורות (רץ יומית בשעה 08:00 שעון ישראל)
               </p>
             </div>
             <button
@@ -176,6 +269,91 @@ export default function SettingsPage() {
               />
             </button>
           </label>
+
+          <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+            <div>
+              <p className="font-medium text-slate-800">תזכורת לאחר חלוף המועד</p>
+              <p className="text-sm text-slate-500">
+                שליחה ביום למחרת תאריך היעד כאשר עדיין חסרים ציונים
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={postDueEnabled}
+              disabled={saving}
+              onClick={() => saveSettings({ postDueEnabled: !postDueEnabled })}
+              className={`relative h-7 w-12 shrink-0 rounded-full transition ${
+                postDueEnabled ? "bg-primary-600" : "bg-slate-300"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition ${
+                  postDueEnabled ? "right-0.5" : "right-5"
+                }`}
+              />
+            </button>
+          </label>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="font-medium text-slate-800">תזכורת מקדימה (לפני המועד)</p>
+                <p className="text-sm text-slate-500">
+                  שליחת תזכורות מספר ימים לפני מועד ההגשה
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={preDueEnabled}
+                disabled={saving}
+                onClick={() =>
+                  saveSettings({
+                    preDueReminders: {
+                      enabled: !preDueEnabled,
+                      daysBefore: preDue?.daysBefore,
+                    },
+                  })
+                }
+                className={`relative h-7 w-12 shrink-0 rounded-full transition ${
+                  preDueEnabled ? "bg-primary-600" : "bg-slate-300"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition ${
+                    preDueEnabled ? "right-0.5" : "right-5"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {preDueEnabled && (
+              <div className="mt-4">
+                <label className="label">ימים לפני המועד (מופרדים בפסיק)</label>
+                <div className="flex gap-2">
+                  <Input
+                    value={daysValue}
+                    onChange={(e) => setDaysInput(e.target.value)}
+                    onBlur={() => saveDaysBefore(daysValue)}
+                    placeholder="7, 3, 1"
+                    className="max-w-[200px]"
+                    dir="ltr"
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={() => saveDaysBefore(daysValue)}
+                    disabled={saving}
+                  >
+                    שמירה
+                  </Button>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  לדוגמה: 7, 3, 1 — תישלח תזכורת 7 ימים, 3 ימים ויום לפני המועד (מספר הערכים = מספר השליחות)
+                </p>
+              </div>
+            )}
+          </div>
 
           <div>
             <label className="label">סף מינימלי למטלות חסרות</label>
@@ -301,6 +479,79 @@ export default function SettingsPage() {
             curl -H &quot;Authorization: Bearer $CRON_SECRET&quot; &quot;$APP_URL/api/test-email?to=...&quot;
           </code>
         </p>
+      </Card>
+
+      <Card className="space-y-4 p-6">
+        <div className="flex items-center gap-2 text-slate-800">
+          <ArrowUpCircle className="h-5 w-5 text-primary-600" />
+          <h2 className="text-lg font-bold">עליית כיתות ושכבות</h2>
+        </div>
+        <p className="text-sm text-slate-500">
+          ב-1 בספטמבר בכל שנה הכיתות עולות שכבה אוטומטית (י&apos; → י&quot;א → י&quot;ב
+          → י&quot;ג). ניתן גם להריץ ידנית.
+        </p>
+
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
+            <dt className="text-slate-500">שנה נוכחית</dt>
+            <dd className="font-medium">{promo?.year ?? "—"}</dd>
+          </div>
+          <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
+            <dt className="text-slate-500">בוצע השנה</dt>
+            <dd className="font-medium">
+              {promo?.alreadyPromotedThisYear ? "כן" : "לא"}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
+            <dt className="text-slate-500">כיתות שיעלו</dt>
+            <dd className="font-medium">{promo?.promotableCount ?? 0}</dd>
+          </div>
+          <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
+            <dt className="text-slate-500">עלייה אחרונה</dt>
+            <dd className="font-medium">
+              {formatDateTime(promo?.settings.lastPromotionAt)}
+            </dd>
+          </div>
+        </dl>
+
+        {promo && promo.preview.length > 0 && (
+          <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
+            <p className="mb-2 text-sm font-semibold text-slate-700">
+              תצוגה מקדימה של השינויים:
+            </p>
+            <ul className="grid max-h-48 gap-1 overflow-y-auto text-sm sm:grid-cols-2">
+              {promo.preview.map((c) => (
+                <li key={c.classId} className="text-slate-600">
+                  <span className="font-medium">{c.oldName}</span>
+                  <span className="mx-1 text-slate-400">←</span>
+                  <span className="font-medium text-primary-700">{c.newName}</span>
+                </li>
+              ))}
+            </ul>
+            {promo.skippedNames.length > 0 && (
+              <p className="mt-2 text-xs text-slate-400">
+                לא יעלו (י&quot;ג או שם לא מזוהה): {promo.skippedNames.join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-3">
+          <Button
+            variant="secondary"
+            disabled={!!promoting}
+            onClick={() => runPromotion("dry")}
+          >
+            {promoting === "dry" ? "מריץ..." : "סימולציה"}
+          </Button>
+          <Button
+            variant="primary"
+            disabled={!!promoting || (promo?.promotableCount ?? 0) === 0}
+            onClick={() => runPromotion("run")}
+          >
+            {promoting === "run" ? "מעדכן..." : "הרץ עליית כיתות עכשיו"}
+          </Button>
+        </div>
       </Card>
 
       {data && data.overdueItems.length > 0 && (

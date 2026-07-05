@@ -85,8 +85,25 @@ export async function PATCH(req: NextRequest) {
   const patch: Record<string, unknown> = {};
 
   if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
+  if (typeof body.postDueEnabled === "boolean") patch.postDueEnabled = body.postDueEnabled;
   if (typeof body.minThreshold === "number" && body.minThreshold >= 1) {
     patch.minThreshold = Math.floor(body.minThreshold);
+  }
+
+  if (body.preDueReminders && typeof body.preDueReminders === "object") {
+    const pre = body.preDueReminders as {
+      enabled?: unknown;
+      daysBefore?: unknown;
+    };
+    const preDue: { enabled?: boolean; daysBefore?: number[] } = {};
+    if (typeof pre.enabled === "boolean") preDue.enabled = pre.enabled;
+    if (Array.isArray(pre.daysBefore)) {
+      const days = pre.daysBefore
+        .map((n) => Math.floor(Number(n)))
+        .filter((n) => Number.isFinite(n) && n > 0 && n <= 60);
+      preDue.daysBefore = Array.from(new Set(days)).sort((a, b) => b - a);
+    }
+    patch.preDueReminders = preDue;
   }
 
   const settings = await updateGradeReminderSettings(patch);

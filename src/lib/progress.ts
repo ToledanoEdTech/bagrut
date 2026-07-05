@@ -48,6 +48,9 @@ export function calcSubjectProgress(
   let scoredSum = 0;
   let scoredWeight = 0;
 
+  // "ציון סופי" = כל המטלות הרלוונטיות הוגשו/נבדקו/פטורות, ולכל מטלה שאינה פטורה יש ציון.
+  let allFinal = obligations.length > 0;
+
   for (const o of obligations) {
     const g = gradeMap.get(o.id);
     if (g && (g.status === "GRADED" || g.status === "SUBMITTED") && g.score != null) {
@@ -57,11 +60,25 @@ export function calcSubjectProgress(
     } else if (g && g.status === "SUBMITTED") {
       completedWeight += o.weightPercent * 0.5;
     }
+
+    if (!g) {
+      allFinal = false;
+    } else if (g.status === "EXEMPT") {
+      // פטור נחשב מושלם ואינו דורש ציון
+    } else if (
+      (g.status === "GRADED" || g.status === "SUBMITTED") &&
+      g.score != null
+    ) {
+      // מושלם עם ציון
+    } else {
+      allFinal = false;
+    }
   }
 
   const totalWeight = obligations.reduce((s, o) => s + o.weightPercent, 0);
   const progressPercent = totalWeight > 0 ? (completedWeight / totalWeight) * 100 : 0;
   const estimatedGrade = scoredWeight > 0 ? (scoredSum / scoredWeight) * 100 : null;
+  const isFinal = allFinal && estimatedGrade != null;
 
-  return { progressPercent, estimatedGrade, completedWeight, totalWeight };
+  return { progressPercent, estimatedGrade, isFinal, completedWeight, totalWeight };
 }

@@ -8,11 +8,24 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { FileUpload } from "@/components/ui/FileUpload";
 import { useToast } from "@/components/ui/Toast";
+import { useApi } from "@/hooks/useApi";
+import { downloadStudentsImportTemplate, exportTimestamp } from "@/lib/excel-export";
+
+type StudentTemplateData = {
+  classes: string[];
+  tracks: string[];
+  mathUnits: number[];
+  englishUnits: number[];
+};
 
 export default function ImportPage() {
   const toast = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const { data: templateData } = useApi<StudentTemplateData>(
+    "/api/students/import/template"
+  );
   const [result, setResult] = useState<{
     created: number;
     skipped: number;
@@ -40,18 +53,18 @@ export default function ImportPage() {
     }
   }
 
-  function downloadTemplate() {
-    const headers = "שם,אימייל,כיתה,מגמה,מתמטיקה,אנגלית\n";
-    const sample = 'ישראל ישראלי,israel@student.local,י"א1,ביולוגיה,4,4\n';
-    const blob = new Blob(["\ufeff" + headers + sample], {
-      type: "text/csv;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "template_students.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+  async function downloadTemplate() {
+    setDownloadingTemplate(true);
+    try {
+      await downloadStudentsImportTemplate(`תבנית_תלמידים_${exportTimestamp()}.xlsx`, {
+        classes: templateData?.classes ?? [],
+        tracks: templateData?.tracks ?? [],
+        mathUnits: templateData?.mathUnits ?? [3, 4, 5],
+        englishUnits: templateData?.englishUnits ?? [3, 4, 5],
+      });
+    } finally {
+      setDownloadingTemplate(false);
+    }
   }
 
   return (
@@ -92,9 +105,13 @@ export default function ImportPage() {
           </p>
 
           <div className="mt-4">
-            <Button variant="secondary" onClick={downloadTemplate}>
+            <Button
+              variant="secondary"
+              onClick={() => void downloadTemplate()}
+              disabled={downloadingTemplate}
+            >
               <Download className="h-4 w-4" />
-              הורדת תבנית
+              {downloadingTemplate ? "מוריד..." : "הורדת תבנית (Excel)"}
             </Button>
           </div>
 

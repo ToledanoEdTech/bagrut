@@ -5,7 +5,9 @@ import {
   buildReminderRecipients,
   getIsraelYmd,
   isGradeEntryIncomplete,
+  staffShouldReceiveItem,
   type GradeReminderSettings,
+  type OverdueGradeItem,
 } from "@/lib/grade-reminders";
 import {
   listAllGrades,
@@ -27,8 +29,7 @@ import {
 } from "@/lib/permissions";
 import {
   computeOutstandingBagrutForStudents,
-  OUTSTANDING_BAGRUT_MIN_AVERAGE,
-  type OutstandingBagrutResult,
+  type OutstandingBagrutTier,
 } from "@/lib/outstanding-bagrut";
 import { calcSubjectProgressForObligations } from "@/lib/progress";
 import { resolveRelevantSubjects, type StudentWithRelations } from "@/lib/student-subjects";
@@ -65,12 +66,15 @@ export type SchoolProgress = {
 
 export type OutstandingBagrutPreview = {
   candidateCount: number;
-  nearMissCount: number;
+  greenCount: number;
+  yellowCount: number;
+  redCount: number;
   topCandidates: Array<{
     studentId: string;
     name: string;
     className: string;
     average: number;
+    tier: OutstandingBagrutTier;
   }>;
 };
 
@@ -79,6 +83,22 @@ export type GradeRemindersSummary = {
   overdueCount: number;
   wouldNotifyCount: number;
   lastRunAt: string | null;
+};
+
+export type TeacherAlert = {
+  teacherId: string;
+  name: string;
+  email: string;
+  overdueCount: number;
+  upcomingCount: number;
+  overdueMissingStudents: number;
+  upcomingMissingStudents: number;
+  nearestDueDate: string | null;
+};
+
+export type TeacherAlerts = {
+  upcoming: TeacherAlert[];
+  overdue: TeacherAlert[];
 };
 
 export type DataQualityAlerts = {
@@ -104,6 +124,7 @@ export type AdminDashboardResponse = {
   schoolProgress: SchoolProgress | null;
   outstandingBagrutPreview: OutstandingBagrutPreview | null;
   gradeRemindersSummary: GradeRemindersSummary | null;
+  teacherAlerts: TeacherAlerts | null;
   dataQualityAlerts: DataQualityAlerts | null;
 };
 
@@ -192,20 +213,11 @@ function buildGradeMap(grades: Grade[]): Map<string, Grade> {
   return map;
 }
 
-function isNearMiss(result: OutstandingBagrutResult): boolean {
-  if (result.isCandidate) return false;
-  if (
-    result.average != null &&
-    result.average >= OUTSTANDING_BAGRUT_MIN_AVERAGE - 2 &&
-    result.average < OUTSTANDING_BAGRUT_MIN_AVERAGE
-  ) {
-    return true;
-  }
-  const met = [result.meetsEnglishUnits, result.meetsMathUnits, result.meetsAverage].filter(
-    Boolean
-  ).length;
-  return met === 2;
-}
+const TIER_SORT_ORDER: Record<OutstandingBagrutTier, number> = {
+  green: 0,
+  yellow: 1,
+  red: 2,
+};
 
 function computeGradeGaps(data: ScopedData): GradeGaps {
   const classById = new Map(data.classes.map((c) => [c.id, c]));
@@ -478,6 +490,67 @@ function scopeData(session: AuthSession, raw: RawData): ScopedData {
   };
 }
 
+function computeTeacherAlerts(raw: RawData): TeacherAlerts {
+  const today = getIsraelYmd();
+  const reminderInput = {
+    today,
+    subjects: raw.subjects,
+    students: raw.students,
+    classes: raw.classes,
+    examPaths: raw.examPaths,
+    tracks: raw.tracks,
+    grades: raw.grades,
+  };
+
+  const overdueItems = collectOverdueGradeItems(reminderInput);
+  const upcomingItems = collectUpcomingGradeItems(reminderInput, 7);
+
+  const sumMissing = (items: OverdueGradeItem[]) =>
+    items.reduce((s, i) => s + i.missingStudentCount, 0);
+
+  const teachers = raw.staff.filter((s) => s.role === "TEACHER");
+
+  const overdue: TeacherAlert[] = [];
+  const upcoming: TeacherAlert[] = [];
+
+  for (const teacher of teachers) {
+    const teacherOverdue = overdueItems.filter((i) =>
+      staffShouldReceiveItem(teacher, i)
+    );
+    const teacherUpcoming = upcomingItems.filter((i) =>
+      staffShouldReceiveItem(teacher, i)
+    );
+
+    if (teacherOverdue.length === 0 && teacherUpcoming.length === 0) continue;
+
+    const nearestDueDate =
+      [...teacherOverdue, ...teacherUpcoming]
+        .map((i) => i.gradeEntryDueDate)
+        .sort((a, b) => a.localeCompare(b))[0] ?? null;
+
+    const alert: TeacherAlert = {
+      teacherId: teacher.id,
+      name: teacher.name,
+      email: teacher.email,
+      overdueCount: teacherOverdue.length,
+      upcomingCount: teacherUpcoming.length,
+      overdueMissingStudents: sumMissing(teacherOverdue),
+      upcomingMissingStudents: sumMissing(teacherUpcoming),
+      nearestDueDate,
+    };
+
+    if (teacherOverdue.length > 0) overdue.push(alert);
+    if (teacherUpcoming.length > 0) upcoming.push(alert);
+  }
+
+  overdue.sort((a, b) => b.overdueMissingStudents - a.overdueMissingStudents);
+  upcoming.sort((a, b) =>
+    (a.nearestDueDate ?? "").localeCompare(b.nearestDueDate ?? "")
+  );
+
+  return { upcoming: upcoming.slice(0, 15), overdue: overdue.slice(0, 15) };
+}
+
 async function computeDashboard(session: AuthSession): Promise<AdminDashboardResponse> {
   const raw = await loadRawData();
   const scoped = scopeData(session, raw);
@@ -500,20 +573,34 @@ async function computeDashboard(session: AuthSession): Promise<AdminDashboardRes
       classMap
     );
     const candidates = results.filter((r) => r.outstandingBagrut.isCandidate);
-    const nearMiss = results.filter((r) => isNearMiss(r.outstandingBagrut));
+    const tierCounts = { green: 0, yellow: 0, red: 0 };
+    for (const c of candidates) {
+      const tier = c.outstandingBagrut.tier ?? "red";
+      tierCounts[tier]++;
+    }
 
     outstandingBagrutPreview = {
       candidateCount: candidates.length,
-      nearMissCount: nearMiss.length,
+      greenCount: tierCounts.green,
+      yellowCount: tierCounts.yellow,
+      redCount: tierCounts.red,
       topCandidates: candidates
         .filter((c) => c.outstandingBagrut.average != null)
-        .sort((a, b) => (b.outstandingBagrut.average ?? 0) - (a.outstandingBagrut.average ?? 0))
+        .sort((a, b) => {
+          const tierA = a.outstandingBagrut.tier ?? "red";
+          const tierB = b.outstandingBagrut.tier ?? "red";
+          if (TIER_SORT_ORDER[tierA] !== TIER_SORT_ORDER[tierB]) {
+            return TIER_SORT_ORDER[tierA] - TIER_SORT_ORDER[tierB];
+          }
+          return (b.outstandingBagrut.average ?? 0) - (a.outstandingBagrut.average ?? 0);
+        })
         .slice(0, 5)
         .map((c) => ({
           studentId: c.studentId,
           name: c.name,
           className: c.className,
           average: c.outstandingBagrut.average!,
+          tier: c.outstandingBagrut.tier ?? "red",
         })),
     };
   }
@@ -541,6 +628,7 @@ async function computeDashboard(session: AuthSession): Promise<AdminDashboardRes
   }
 
   const dataQualityAlerts = isFullAdmin(session) ? computeDataQualityAlerts(raw) : null;
+  const teacherAlerts = isFullAdmin(session) ? computeTeacherAlerts(raw) : null;
 
   const counts = computeCounts(session, scoped, schoolProgress);
 
@@ -551,6 +639,7 @@ async function computeDashboard(session: AuthSession): Promise<AdminDashboardRes
     schoolProgress,
     outstandingBagrutPreview,
     gradeRemindersSummary,
+    teacherAlerts,
     dataQualityAlerts,
   };
 }

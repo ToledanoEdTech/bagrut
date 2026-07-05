@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import clsx from "clsx";
 import {
@@ -54,7 +54,7 @@ export function SubjectCard({
   units?: number | null;
   obligations: Obligation[];
   grades: Grade[];
-  progress: { progressPercent: number; estimatedGrade: number | null };
+  progress: { progressPercent: number; estimatedGrade: number | null; isFinal?: boolean };
   readOnly?: boolean;
   onGradeChange?: (obligationId: string, field: string, value: string | number | null) => void;
 }) {
@@ -106,7 +106,9 @@ export function SubjectCard({
                 <p className={clsx("text-4xl font-extrabold tabular-nums", gradeTone)}>
                   {estGrade.toFixed(0)}
                 </p>
-                <p className="text-caption">ציון משוער</p>
+                <p className={clsx("text-caption", progress.isFinal && "font-semibold text-emerald-600")}>
+                  {progress.isFinal ? "ציון סופי" : "ציון משוער"}
+                </p>
               </div>
             )}
           </div>
@@ -150,14 +152,24 @@ export function SubjectCard({
                     !usesSubItems && hasSeparateComponentGrades(normalizedComponents);
                   const displayScore = resolveObligationGradeScore(o, grade ?? {});
 
+                  const isMissing = statusKey === "MISSING";
+
                   return (
                     <div
                       key={o.id}
-                      className="rounded-xl border border-slate-200 bg-white p-5 transition hover:bg-slate-50"
+                      className={clsx(
+                        "rounded-xl border bg-white p-5 transition hover:bg-slate-50",
+                        isMissing
+                          ? "border-red-300 bg-red-50/40 ring-1 ring-red-200"
+                          : "border-slate-200"
+                      )}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
+                            {isMissing && (
+                              <AlertCircle className="h-5 w-5 shrink-0 text-red-600" aria-label="חסר ציון" />
+                            )}
                             <span className="text-lg font-bold text-slate-900">
                               {o.name || o.examEvent || "חובה"}
                             </span>

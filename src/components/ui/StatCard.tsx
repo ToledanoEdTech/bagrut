@@ -12,7 +12,7 @@ export function StatCard({
   value: string | number;
   subtitle?: string;
   icon: LucideIcon;
-  color?: "primary" | "success" | "warning" | "info";
+  color?: "primary" | "success" | "warning" | "info" | "danger";
 }) {
   const styles = {
     primary: {
@@ -34,6 +34,11 @@ export function StatCard({
       icon: "bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-[0_8px_20px_-6px_rgba(14,165,233,0.5)]",
       bar: "from-sky-500 to-blue-600",
       glow: "bg-sky-400/20",
+    },
+    danger: {
+      icon: "bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-[0_8px_20px_-6px_rgba(239,68,68,0.5)]",
+      bar: "from-red-500 to-rose-600",
+      glow: "bg-red-400/20",
     },
   }[color];
 

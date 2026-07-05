@@ -18,13 +18,25 @@ export const GRADE_REMINDER_TIMEZONE = "Asia/Jerusalem";
 export const DEFAULT_MIN_THRESHOLD = 1;
 export const MAX_ITEMS_IN_EMAIL = 5;
 
+export interface PreDueReminderSettings {
+  enabled?: boolean;
+  /** כמה ימים לפני מועד ההגשה לשלוח תזכורת. כל ערך = שליחה אחת (מספר הערכים = כמות השליחות) */
+  daysBefore?: number[];
+}
+
 export interface GradeReminderSettings {
   enabled?: boolean;
   minThreshold?: number;
+  /** תזכורות לאחר חלוף המועד (יום למחרת). ברירת מחדל: פעיל */
+  postDueEnabled?: boolean;
+  /** תזכורות לפני מועד ההגשה */
+  preDueReminders?: PreDueReminderSettings;
   lastRunAt?: string;
   lastRunSummary?: GradeReminderRunSummary;
   lastSentByRecipient?: Record<string, string>;
 }
+
+export const DEFAULT_PRE_DUE_DAYS = [7, 3, 1];
 
 export interface GradeReminderRunSummary {
   sent: number;
@@ -54,6 +66,10 @@ export interface OverdueGradeItem {
   classNames: string[];
   affectedClassIds: string[];
   affectedGradeYears: string[];
+  /** overdue = המועד חלף | pre_due = תזכורת מקדימה לפני המועד */
+  kind?: "overdue" | "pre_due";
+  /** עבור pre_due: כמה ימים נותרו עד המועד */
+  daysBeforeDue?: number;
 }
 
 export interface RecipientReminderPlan {
@@ -116,9 +132,17 @@ export function isReminderSendDay(dueDate: string, today: string): boolean {
 export function reminderDedupKey(
   recipientId: string,
   obligationId: string,
-  dueDate: string
+  dueDate: string,
+  variant?: string
 ): string {
-  return `${recipientId}::${obligationId}::${dueDate}`;
+  const base = `${recipientId}::${obligationId}::${dueDate}`;
+  return variant ? `${base}::${variant}` : base;
+}
+
+/** גרסת ה-dedup לפי סוג התזכורת: overdue שומר על מפתח היסטורי, pre_due לפי מספר הימים */
+export function itemDedupVariant(item: OverdueGradeItem): string | undefined {
+  if (item.kind === "pre_due") return `pre-${item.daysBeforeDue ?? 0}`;
+  return undefined;
 }
 
 export function filterUnsentReminderItems(
@@ -131,7 +155,12 @@ export function filterUnsentReminderItems(
   return items.filter(
     (item) =>
       !lastSentByRecipient?.[
-        reminderDedupKey(recipientId, item.obligationId, item.gradeEntryDueDate)
+        reminderDedupKey(
+          recipientId,
+          item.obligationId,
+          item.gradeEntryDueDate,
+          itemDedupVariant(item)
+        )
       ]
   );
 }
@@ -255,12 +284,109 @@ export function collectOverdueGradeItems(input: GradeReminderDataInput): Overdue
         classNames: [...missingByClass.values()].map((c) => c.name),
         affectedClassIds,
         affectedGradeYears,
+        kind: "overdue",
       });
     }
   }
 
   overdue.sort((a, b) => a.gradeEntryDueDate.localeCompare(b.gradeEntryDueDate));
   return overdue;
+}
+
+/**
+ * תזכורות מקדימות: חובות שמועד ההגשה שלהן חל בעוד בדיוק N ימים
+ * (כאשר N נמצא ברשימת daysBefore), ועדיין חסרים בהן ציונים.
+ */
+export function collectPreDueGradeItems(
+  input: GradeReminderDataInput,
+  daysBefore: number[]
+): OverdueGradeItem[] {
+  const today = input.today ?? getIsraelYmd();
+  const targetDates = new Map<string, number>();
+  for (const n of daysBefore) {
+    if (n > 0) targetDates.set(addDaysYmd(today, n), n);
+  }
+  if (targetDates.size === 0) return [];
+
+  const { byId: classById } = buildClassMaps(input.classes);
+  const examPathById = new Map(input.examPaths.map((p) => [p.id, p]));
+  const tracksById = new Map(input.tracks.map((t) => [t.id, t]));
+  const gradeMap = buildGradeMap(input.grades);
+  const items: OverdueGradeItem[] = [];
+
+  for (const subject of input.subjects) {
+    for (const obligation of subject.obligations) {
+      const dueDate = obligation.gradeEntryDueDate;
+      if (!dueDate) continue;
+      const daysUntil = targetDates.get(dueDate);
+      if (daysUntil === undefined) continue;
+
+      const missingByClass = new Map<
+        string,
+        { name: string; gradeYear: string | null; count: number }
+      >();
+      let missingTotal = 0;
+
+      for (const student of input.students) {
+        const cls = classById.get(student.classId);
+        if (!cls) continue;
+
+        const examPath = examPathById.get(cls.examPathId) ?? null;
+        const withRelations = withClass(student, cls);
+        const relevant = resolveRelevantSubjects(
+          withRelations,
+          input.subjects,
+          examPath,
+          tracksById
+        );
+        const matchedSubject = relevant.find((s) => s.id === subject.id);
+        if (!matchedSubject?.obligations.some((o) => o.id === obligation.id)) continue;
+
+        const grade = gradeMap.get(`${student.id}::${obligation.id}`);
+        if (!isGradeEntryIncomplete(obligation, grade)) continue;
+
+        missingTotal += 1;
+        const entry = missingByClass.get(cls.id) ?? {
+          name: cls.name,
+          gradeYear: cls.gradeYear,
+          count: 0,
+        };
+        entry.count += 1;
+        missingByClass.set(cls.id, entry);
+      }
+
+      if (missingTotal === 0) continue;
+
+      const affectedClassIds = [...missingByClass.keys()];
+      const affectedGradeYears = [
+        ...new Set(
+          [...missingByClass.values()]
+            .map((c) => c.gradeYear)
+            .filter((y): y is string => !!y)
+        ),
+      ];
+      const obligationGradeYear = obligation.gradeYear ?? affectedGradeYears[0] ?? null;
+
+      items.push({
+        obligationId: obligation.id,
+        subjectId: subject.id,
+        subjectName: subject.name,
+        obligationLabel: obligationDisplayLabel(obligation),
+        examEvent: obligation.examEvent,
+        gradeYear: obligationGradeYear,
+        gradeEntryDueDate: dueDate,
+        missingStudentCount: missingTotal,
+        classNames: [...missingByClass.values()].map((c) => c.name),
+        affectedClassIds,
+        affectedGradeYears,
+        kind: "pre_due",
+        daysBeforeDue: daysUntil,
+      });
+    }
+  }
+
+  items.sort((a, b) => a.gradeEntryDueDate.localeCompare(b.gradeEntryDueDate));
+  return items;
 }
 
 /** חובות עם תאריך יעד בטווח הקרוב (כולל היום) — עדיין חסרות ציונים */
