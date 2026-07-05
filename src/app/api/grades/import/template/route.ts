@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listClassesSimple, listExamPaths, listStudents, listSubjects } from "@/lib/firestore";
-import { obligationDisplayLabel } from "@/lib/grade-components";
+import {
+  expandObligationMatrixTasks,
+  obligationDisplayLabel,
+} from "@/lib/grade-components";
 import { STATUS_LABELS, SUBMISSION_STATUSES } from "@/lib/grade-status";
 import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
 import { getAllowedClassIds, getAllowedSubjectIds } from "@/lib/permissions";
@@ -65,10 +68,18 @@ export async function GET(req: NextRequest) {
       id: s.id,
       name: s.displayName,
       obligations: s.obligations
-        .map((o) => ({
-          id: o.id,
-          label: obligationDisplayLabel(o),
-        }))
+        .map((o) => {
+          const tasks = expandObligationMatrixTasks(o, 0);
+          return {
+            id: o.id,
+            label: obligationDisplayLabel(o),
+            tasks: tasks.map((t) => ({
+              sortOrder: t.sortOrder,
+              taskName: t.taskName,
+              taskKind: t.taskKind,
+            })),
+          };
+        })
         .sort((a, b) => a.label.localeCompare(b.label, "he")),
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "he"));

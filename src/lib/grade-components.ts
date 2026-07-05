@@ -138,13 +138,19 @@ function expandWeightedMatrixTasks(
     nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
   }
 
-  return items.map((item) => {
+  const usedNames = new Set<string>();
+
+  return items.map((item, index) => {
     const baseName = item.name ?? "ציון";
-    const taskName = disambiguateTaskName(
+    let taskName = disambiguateTaskName(
       baseName,
       item.weightPercent,
       (nameCounts.get(baseName) ?? 0) > 1
     );
+    if (usedNames.has(taskName)) {
+      taskName = `${taskName} — ${index + 1}`;
+    }
+    usedNames.add(taskName);
     return {
       id: ob.id,
       taskKind,

@@ -22,12 +22,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
   }
 
-  const classId = new URL(req.url).searchParams.get("classId");
+  const params = new URL(req.url).searchParams;
+  const classId = params.get("classId");
+  const subjectId = params.get("subjectId") || undefined;
+  const obligationId = params.get("obligationId") || undefined;
+  const taskSortOrderRaw = params.get("taskSortOrder");
+  const taskSortOrder =
+    taskSortOrderRaw !== null && taskSortOrderRaw !== ""
+      ? Number(taskSortOrderRaw)
+      : undefined;
+  if (taskSortOrderRaw && (taskSortOrder === undefined || isNaN(taskSortOrder))) {
+    return NextResponse.json({ error: "תת-מטלה לא חוקית" }, { status: 400 });
+  }
+
   if (!classId) {
     return NextResponse.json({ error: "חסר מזהה כיתה" }, { status: 400 });
   }
 
-  const accessError = await requireGradeWrite(session, { classId });
+  const accessError = await requireGradeWrite(session, {
+    classId,
+    subjectId,
+    obligationId,
+  });
   if (accessError) return accessError;
 
   const [classes, students, subjects, examPaths, tracks, grades] =
@@ -43,6 +59,19 @@ export async function GET(req: NextRequest) {
   const cls = classes.find((c) => c.id === classId);
   if (!cls) {
     return NextResponse.json({ error: "כיתה לא נמצאה" }, { status: 404 });
+  }
+
+  if (subjectId && !subjects.some((s) => s.id === subjectId)) {
+    return NextResponse.json({ error: "מקצוע לא נמצא" }, { status: 404 });
+  }
+
+  if (obligationId) {
+    const found = subjects.some((s) =>
+      s.obligations.some((o) => o.id === obligationId)
+    );
+    if (!found) {
+      return NextResponse.json({ error: "מטלה לא נמצאה" }, { status: 404 });
+    }
   }
 
   const fullClass = await getClassById(classId);
@@ -65,6 +94,7 @@ export async function GET(req: NextRequest) {
     tracksById,
     grades,
     pathLabelsBySubjectId,
+    filters: { subjectId, obligationId, taskSortOrder },
   });
 
   return NextResponse.json({

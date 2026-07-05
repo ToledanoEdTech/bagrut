@@ -26,7 +26,15 @@ type TemplateData = {
   subjectOptions: Array<{
     id: string;
     name: string;
-    obligations: Array<{ id: string; label: string }>;
+    obligations: Array<{
+      id: string;
+      label: string;
+      tasks: Array<{
+        sortOrder: number;
+        taskName: string;
+        taskKind: "single" | "component" | "subItem";
+      }>;
+    }>;
   }>;
   classStudents?: string[];
 };
@@ -45,6 +53,7 @@ export default function GradesImportPage() {
   const [classId, setClassId] = useState("");
   const [subjectId, setSubjectId] = useState("");
   const [obligationLabel, setObligationLabel] = useState("");
+  const [taskSortOrder, setTaskSortOrder] = useState("");
   const [downloading, setDownloading] = useState<"empty" | "filled" | "full" | null>(null);
 
   const { data: classes = [] } = useApi<ClassItem[]>("/api/classes/list");
@@ -65,14 +74,36 @@ export default function GradesImportPage() {
     return selectedSubject?.obligations ?? [];
   }, [selectedSubject]);
 
+  const selectedObligation = useMemo(
+    () => obligationOptions.find((o) => o.label === obligationLabel),
+    [obligationOptions, obligationLabel]
+  );
+
+  const taskOptions = useMemo(() => {
+    const tasks = selectedObligation?.tasks ?? [];
+    if (tasks.length <= 1) return [];
+    return tasks;
+  }, [selectedObligation]);
+
+  const selectedTask = useMemo(
+    () => taskOptions.find((t) => String(t.sortOrder) === taskSortOrder),
+    [taskOptions, taskSortOrder]
+  );
+
   useEffect(() => {
     setSubjectId("");
     setObligationLabel("");
+    setTaskSortOrder("");
   }, [classId]);
 
   useEffect(() => {
     setObligationLabel("");
+    setTaskSortOrder("");
   }, [subjectId]);
+
+  useEffect(() => {
+    setTaskSortOrder("");
+  }, [obligationLabel]);
 
   async function handleImport() {
     if (!file) return;
@@ -116,27 +147,69 @@ export default function GradesImportPage() {
     }
   }
 
+  function buildFilledTemplateQuery(): string {
+    const params = new URLSearchParams({ classId });
+    if (subjectId) params.set("subjectId", subjectId);
+    if (selectedObligation?.id) params.set("obligationId", selectedObligation.id);
+    if (taskSortOrder) params.set("taskSortOrder", taskSortOrder);
+    return params.toString();
+  }
+
+  function buildFilledFilename(): string {
+    const safeClass = selectedClass?.name.replace(/[/\\?*[\]]/g, "-") ?? "כיתה";
+    const parts = [safeClass];
+    if (selectedSubject?.name) {
+      parts.push(selectedSubject.name.replace(/[/\\?*[\]]/g, "-"));
+    }
+    if (obligationLabel) {
+      parts.push(obligationLabel.slice(0, 30).replace(/[/\\?*[\]]/g, "-"));
+    }
+    if (selectedTask?.taskName) {
+      parts.push(selectedTask.taskName.slice(0, 20).replace(/[/\\?*[\]]/g, "-"));
+    }
+    return `ציונים_${parts.join("_")}_${exportTimestamp()}.xlsx`;
+  }
+
+  function buildFilledTitle(rowCount: number): string {
+    const parts = [selectedClass?.name ?? "כיתה"];
+    if (selectedSubject?.name) parts.push(selectedSubject.name);
+    if (obligationLabel) parts.push(obligationLabel);
+    if (selectedTask?.taskName) parts.push(selectedTask.taskName);
+    return `קובץ הזנת ציונים — ${parts.join(" · ")} (${rowCount} שורות)`;
+  }
+
   async function downloadFilledTemplate() {
-    if (!templateData || !selectedClass) return;
+    if (!templateData || !selectedClass || !classId) return;
     const students = templateData.classStudents ?? [];
     if (students.length === 0) return;
 
     setDownloading("filled");
     try {
-      const safeName = selectedClass.name.replace(/[/\\?*[\]]/g, "-");
-      await downloadGradesImportTemplate(
-        `ציונים_${safeName}_${exportTimestamp()}.xlsx`,
-        {
-          classes: templateData.classes,
-          subjects: templateData.subjects,
-          obligations: templateData.obligations,
-          statuses: templateData.statuses,
-          students,
-          prefilledClass: selectedClass.name,
-          prefilledSubject: selectedSubject?.name || undefined,
-          prefilledObligation: obligationLabel || undefined,
-        }
+      const res = await fetch(
+        `/api/grades/import/filled-template?${buildFilledTemplateQuery()}`
       );
+      const data = (await res.json()) as {
+        className: string;
+        statuses: string[];
+        rows: FullGradesTemplateRow[];
+        error?: string;
+      };
+      if (!res.ok) {
+        setError(data.error ?? "שגיאה בהורדת הקובץ");
+        return;
+      }
+      if (data.rows.length === 0) {
+        setError("לא נמצאו שורות לפי הבחירה — בדקו שהמקצוע/מטלה רלוונטיים לכיתה");
+        return;
+      }
+      await downloadFullGradesTemplate(buildFilledFilename(), {
+        className: data.className,
+        statuses: data.statuses,
+        rows: data.rows,
+        title: buildFilledTitle(data.rows.length),
+      });
+    } catch {
+      setError("שגיאת רשת בהורדת הקובץ");
     } finally {
       setDownloading(null);
     }
@@ -180,6 +253,7 @@ export default function GradesImportPage() {
           <h2 className="text-lg font-semibold">העלאת קובץ ציונים</h2>
           <p className="mt-2 text-sm text-slate-500">
             הקובץ צריך לכלול: כיתה, מקצוע, מטלה, שם תלמיד, ציון, סטטוס
+            (ובמידת הצורך גם רכיב/תת-מטלה)
           </p>
 
           <div className="mt-6">
@@ -227,7 +301,8 @@ export default function GradesImportPage() {
                 תבנית מוכנה עם תלמידי כיתה
               </h3>
               <p className="mt-1 text-sm text-slate-500">
-                הורידו קובץ עם שמות התלמידים כבר מולאו — נשאר רק להזין ציונים
+                הורידו קובץ עם שמות התלמידים וציונים קיימים — נשאר רק למלא את
+                התאים הריקים. ניתן לסנן לפי מקצוע, מטלה או תת-מטלה.
               </p>
 
               <div className="mt-4 grid gap-3">
@@ -251,7 +326,7 @@ export default function GradesImportPage() {
                   onChange={(e) => setSubjectId(e.target.value)}
                   disabled={!classId || templateLoading}
                 >
-                  <option value="">— בחר מקצוע —</option>
+                  <option value="">— כל המקצועות —</option>
                   {(templateData?.subjectOptions ?? []).map((subject) => (
                     <option key={subject.id} value={subject.id}>
                       {subject.name}
@@ -265,13 +340,28 @@ export default function GradesImportPage() {
                   onChange={(e) => setObligationLabel(e.target.value)}
                   disabled={!subjectId}
                 >
-                  <option value="">— בחר מטלה —</option>
+                  <option value="">— כל המטלות —</option>
                   {obligationOptions.map((o) => (
                     <option key={o.id} value={o.label}>
                       {o.label}
                     </option>
                   ))}
                 </Select>
+
+                {taskOptions.length > 0 && (
+                  <Select
+                    label="תת-מטלה (אופציונלי)"
+                    value={taskSortOrder}
+                    onChange={(e) => setTaskSortOrder(e.target.value)}
+                  >
+                    <option value="">— כל תתי המטלות —</option>
+                    {taskOptions.map((task) => (
+                      <option key={task.sortOrder} value={String(task.sortOrder)}>
+                        {task.taskName}
+                      </option>
+                    ))}
+                  </Select>
+                )}
               </div>
 
               <div className="mt-4 flex flex-wrap gap-3">
@@ -285,7 +375,7 @@ export default function GradesImportPage() {
                     <Download className="h-4 w-4" />
                   )}
                   {studentCount > 0
-                    ? `תבנית לפי בחירה (${studentCount})`
+                    ? `תבנית לפי בחירה (${studentCount} תלמידים)`
                     : "תבנית לפי בחירה"}
                 </Button>
 
@@ -318,11 +408,11 @@ export default function GradesImportPage() {
               </li>
               <li className="flex gap-2">
                 <span className="font-bold text-primary-600">2.</span>
-                בחרו ערכים מרשימות הנפתחות בכיתה, מקצוע, מטלה וסטטוס
+                בחרו כיתה, ואופציונלית מקצוע / מטלה / תת-מטלה לסינון הקובץ
               </li>
               <li className="flex gap-2">
                 <span className="font-bold text-primary-600">3.</span>
-                ניתן להשתמש בעמודות בעברית או באנגלית
+                ציונים שכבר הוזנו יופיעו בקובץ — מלאו רק תאים ריקים
               </li>
               <li className="flex gap-2">
                 <span className="font-bold text-primary-600">4.</span>
