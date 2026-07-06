@@ -7,6 +7,7 @@ import {
 } from "@/lib/grade-components";
 import { resolveGradeEntryDueDate } from "@/lib/grade-due-date";
 import { isObligationDueForStudent, normalizeGradeYear } from "@/lib/grade-year";
+import { isMissingGradeStatus } from "@/lib/grade-status";
 import { LEGACY_TEACHER_PERMISSIONS } from "@/lib/permissions";
 import { ADMIN_EMAILS } from "@/lib/roles";
 import type {
@@ -187,6 +188,7 @@ export function isGradeEntryIncomplete(
 ): boolean {
   if (!grade) return true;
   if (grade.status === "EXEMPT") return false;
+  if (isMissingGradeStatus(grade.status)) return true;
   if (grade.status === "NOT_STARTED" || grade.status === "IN_PROGRESS") return true;
   const subItems = normalizeSubItems(obligation.subItems ?? []);
   if (subItems.length > 0) {

@@ -67,6 +67,20 @@ export function parseStatusInput(value: string): SubmissionStatus | null {
   return STATUS_ALIASES[trimmed] ?? STATUS_ALIASES[normalized] ?? null;
 }
 
+export function isMissingGradeStatus(status: string | null | undefined): boolean {
+  if (!status) return false;
+  if (status === "MISSING") return true;
+  return parseStatusInput(status) === "MISSING";
+}
+
+export function normalizeSubmissionStatus(
+  value: string | null | undefined
+): SubmissionStatus {
+  if (!value) return "NOT_STARTED";
+  if (isValidSubmissionStatus(value)) return value;
+  return parseStatusInput(value) ?? "NOT_STARTED";
+}
+
 /** When a score is entered, auto-upgrade status from NOT_STARTED/IN_PROGRESS to GRADED */
 export function autoStatusOnScore(
   score: number | null,

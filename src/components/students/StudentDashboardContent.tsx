@@ -86,7 +86,7 @@ export function StudentDashboardContent({
   );
   const avgGrade = weightedAverage.average;
 
-  const missingGrades = collectMissingGrades(data.subjects, studentGradeYear);
+  const missingGrades = collectMissingGrades(data.subjects);
   const negativeGrades = collectNegativeGrades(data.subjects, studentGradeYear);
 
   const trackLabel =
@@ -172,11 +172,11 @@ export function StudentDashboardContent({
               <p className="text-base font-semibold">
                 {audience === "staff"
                   ? negativeGrades.length === 1
-                    ? "הוזן לתלמיד ציון שלילי — יש לבדוק ולעדכן"
-                    : `הוזנו לתלמיד ${negativeGrades.length} ציונים שליליים — יש לבדוק ולעדכן`
+                    ? "הוזן לתלמיד ציון שלילי במקצוע הבא:"
+                    : "הוזנו לתלמיד ציונים שליליים במקצועות הבאים:"
                   : negativeGrades.length === 1
-                    ? "הוזן לך ציון שלילי — פנה למורה הרלוונטי"
-                    : `הוזנו לך ${negativeGrades.length} ציונים שליליים — פנה למורים הרלוונטיים`}
+                    ? "הוזן ציון שלילי במקצוע הבא:"
+                    : "הוזנו ציונים שליליים במקצועות הבאים:"}
               </p>
               <ul className="mt-2 space-y-1 text-base">
                 {negativeGrades.map((entry) => (
@@ -184,9 +184,8 @@ export function StudentDashboardContent({
                     <span className="font-semibold">{entry.subjectLabel}</span>
                     <span className="mx-1.5 text-amber-500">—</span>
                     <span>{entry.obligationLabel}</span>
-                    <span className="ms-2 font-bold tabular-nums text-amber-700">
-                      ({entry.score})
-                    </span>
+                    <span className="mx-1.5 text-amber-500">—</span>
+                    <span className="font-bold tabular-nums text-amber-700">ציון {entry.score}</span>
                   </li>
                 ))}
               </ul>

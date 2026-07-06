@@ -12,7 +12,7 @@ import { Alert } from "@/components/ui/Alert";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { useToast } from "@/components/ui/Toast";
 import { GradeMatrixTable, type MatrixRow } from "@/components/grades/GradeMatrixTable";
-import { invalidateCache } from "@/lib/api-cache";
+import { invalidateCache, invalidateStudentDashboardCaches } from "@/lib/api-cache";
 import {
   buildMatrixSheet,
   downloadExcel,
@@ -238,6 +238,7 @@ export default function GradesMatrixPage() {
       setSavedSnapshot(JSON.stringify(rowState));
       toast.success("נשמר בהצלחה");
       invalidateCache("/api/grades");
+      invalidateStudentDashboardCaches();
       await refreshMatrix();
     } catch {
       setSaveError("שגיאת רשת בשמירה");

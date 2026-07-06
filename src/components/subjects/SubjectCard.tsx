@@ -17,7 +17,11 @@ import {
   normalizeSubItems,
   resolveObligationGradeScore,
 } from "@/lib/grade-components";
-import { STATUS_LABELS, isValidSubmissionStatus } from "@/lib/grade-status";
+import {
+  STATUS_LABELS,
+  isMissingGradeStatus,
+  normalizeSubmissionStatus,
+} from "@/lib/grade-status";
 import { formatSubjectDisplayName } from "@/lib/subject-display";
 import { formatObligationLabel, getNegativeGradeScore } from "@/lib/missing-grades";
 import { isObligationDueForStudent } from "@/lib/grade-year";
@@ -70,10 +74,8 @@ export function SubjectCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const gradeMap = new Map(grades.map((g) => [g.obligationId, g]));
-  const missingObligations = obligations.filter(
-    (o) =>
-      isObligationDueForStudent(o.gradeYear, studentGradeYear) &&
-      gradeMap.get(o.id)?.status === "MISSING"
+  const missingObligations = obligations.filter((o) =>
+    isMissingGradeStatus(gradeMap.get(o.id)?.status)
   );
   const negativeObligations = obligations
     .filter((o) => isObligationDueForStudent(o.gradeYear, studentGradeYear))
@@ -201,10 +203,7 @@ export function SubjectCard({
               <div className="space-y-3">
                 {obligations.map((o) => {
                   const grade = gradeMap.get(o.id);
-                  const statusKey =
-                    grade?.status && isValidSubmissionStatus(grade.status)
-                      ? grade.status
-                      : "NOT_STARTED";
+                  const statusKey = normalizeSubmissionStatus(grade?.status);
                   const status = STATUS_LABELS[statusKey];
                   const normalizedSubItems = normalizeSubItems(o.subItems);
                   const normalizedComponents = normalizeComponents(o.components);

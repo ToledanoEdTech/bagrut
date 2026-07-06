@@ -48,6 +48,16 @@ export function invalidateCache(key?: string) {
   }
 }
 
+/** אחרי שמירת ציונים — רענון דשבורד תלמיד (עצמי + תצוגת צוות) */
+export function invalidateStudentDashboardCaches(studentId?: string) {
+  invalidateCache("/api/student/dashboard");
+  if (studentId) {
+    invalidateCache(`/api/students/dashboard?studentId=${studentId}`);
+  } else {
+    invalidateCache("/api/students/dashboard");
+  }
+}
+
 export async function fetchCached<T>(
   key: string,
   options?: { force?: boolean; ttl?: number }

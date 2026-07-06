@@ -2,7 +2,7 @@ import {
   isObligationSubItemsComplete,
   resolveObligationGradeScore,
 } from "@/lib/grade-components";
-import { isFailingGradeScore } from "@/lib/grade-status";
+import { isFailingGradeScore, isMissingGradeStatus } from "@/lib/grade-status";
 import { filterObligationsDueForStudent } from "@/lib/grade-year";
 import { formatSubjectDisplayName } from "@/lib/subject-display";
 
@@ -61,7 +61,7 @@ export function getNegativeGradeScore(
   obligation: ObligationLike,
   grade: GradeLike | undefined
 ): number | null {
-  if (!grade || grade.status === "EXEMPT" || grade.status === "MISSING") return null;
+  if (!grade || grade.status === "EXEMPT" || isMissingGradeStatus(grade.status)) return null;
   if (!isGradedStatus(grade.status)) return null;
 
   const resolved = resolveObligationGradeScore(
@@ -90,10 +90,7 @@ export function isNegativeGradeEntry(
   return getNegativeGradeScore(obligation, grade) != null;
 }
 
-export function collectMissingGrades(
-  subjects: SubjectLike[],
-  studentGradeYear?: string | null
-): MissingGradeEntry[] {
+export function collectMissingGrades(subjects: SubjectLike[]): MissingGradeEntry[] {
   const entries: MissingGradeEntry[] = [];
 
   for (const subject of subjects) {
@@ -103,15 +100,8 @@ export function collectMissingGrades(
       category: subject.category,
     });
 
-    const obligations =
-      studentGradeYear !== undefined
-        ? filterObligationsDueForStudent(subject.obligations, studentGradeYear)
-        : subject.obligations;
-    const obligationIds = new Set(obligations.map((o) => o.id));
-
     for (const grade of subject.grades) {
-      if (!obligationIds.has(grade.obligationId)) continue;
-      if (grade.status !== "MISSING") continue;
+      if (!isMissingGradeStatus(grade.status)) continue;
       const obligation = subject.obligations.find((o) => o.id === grade.obligationId);
       if (!obligation) continue;
       entries.push({

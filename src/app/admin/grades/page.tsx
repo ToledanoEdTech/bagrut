@@ -23,7 +23,7 @@ import {
   downloadExcel,
   exportTimestamp,
 } from "@/lib/excel-export";
-import { prefetch, invalidateCache } from "@/lib/api-cache";
+import { prefetch, invalidateCache, invalidateStudentDashboardCaches } from "@/lib/api-cache";
 
 type Student = {
   id: string;
@@ -201,6 +201,7 @@ export default function GradesPage() {
       // Invalidate so other views (dashboards, matrix) refetch fresh data, but do
       // NOT force-refetch into this editor — that would overwrite live edits.
       invalidateCache(`/api/grades?studentId=${selectedId}`);
+      invalidateStudentDashboardCaches(selectedId);
       return true;
     } catch {
       setSaveState("error");
