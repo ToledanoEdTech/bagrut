@@ -19,11 +19,15 @@ import {
   type SubjectContext,
 } from "@/lib/student-subjects";
 import {
+  calcPartialWeightedSubItemScore,
   calcWeightedComponentScore,
   calcWeightedSubItemScore,
   expandObligationMatrixTasks,
+  formatSubItemProgressLabel,
+  getObligationSubItemProgress,
   hasSeparateComponentGrades,
   hasSubItemGrades,
+  isObligationSubItemsComplete,
   normalizeComponents,
   normalizeSubItems,
   type MatrixTaskKind,
@@ -275,7 +279,13 @@ export async function getMatrixData(
       } else if (taskKind === "component" && taskSortOrder != null) {
         itemScore = grade?.componentScores?.[taskSortOrder] ?? null;
       } else if (usesSubItems) {
-        itemScore = calcWeightedSubItemScore(subItems, grade?.subItemScores);
+        const complete = isObligationSubItemsComplete(
+          { subItems: found.obligation.subItems },
+          grade ?? {}
+        );
+        itemScore = complete
+          ? calcWeightedSubItemScore(subItems, grade?.subItemScores)
+          : calcPartialWeightedSubItemScore(subItems, grade?.subItemScores);
       } else if (hasSeparateComponentGrades(components)) {
         itemScore = calcWeightedComponentScore(components, grade?.componentScores);
       } else {
@@ -288,6 +298,29 @@ export async function getMatrixData(
         grade: grade
           ? {
               score: itemScore,
+              displayLabel:
+                usesSubItems && taskKind == null && taskSortOrder == null
+                  ? (() => {
+                      const progress = getObligationSubItemProgress(
+                        { subItems: found.obligation.subItems },
+                        grade
+                      );
+                      if (
+                        progress &&
+                        progress.enteredCount > 0 &&
+                        !isObligationSubItemsComplete(
+                          { subItems: found.obligation.subItems },
+                          grade
+                        )
+                      ) {
+                        return formatSubItemProgressLabel(
+                          progress.enteredCount,
+                          progress.totalCount
+                        );
+                      }
+                      return null;
+                    })()
+                  : null,
               componentScores: grade.componentScores ?? null,
               subItemScores: grade.subItemScores ?? null,
               status: grade.status,

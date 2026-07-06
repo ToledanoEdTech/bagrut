@@ -7,10 +7,12 @@ import {
 } from "@/lib/firestore";
 import { getMatrixData, isObligationRelevantForStudent } from "@/lib/grade-matrix";
 import {
+  calcPartialWeightedSubItemScore,
   calcWeightedComponentScore,
   calcWeightedSubItemScore,
   hasSeparateComponentGrades,
   hasSubItemGrades,
+  isObligationSubItemsComplete,
   normalizeComponents,
   normalizeSubItems,
   validateComponentScores,
@@ -183,7 +185,13 @@ export async function PUT(req: NextRequest) {
 
     let resolvedScore: number | null = score;
     if (usesSubItems) {
-      resolvedScore = calcWeightedSubItemScore(subItems, subItemScores);
+      const complete = isObligationSubItemsComplete(
+        { subItems: found.obligation.subItems },
+        { subItemScores }
+      );
+      resolvedScore = complete
+        ? calcWeightedSubItemScore(subItems, subItemScores)
+        : calcPartialWeightedSubItemScore(subItems, subItemScores);
     } else if (multiComponent) {
       resolvedScore = calcWeightedComponentScore(components, componentScores);
     }

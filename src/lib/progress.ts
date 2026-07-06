@@ -1,4 +1,4 @@
-import { resolveObligationGradeScore } from "@/lib/grade-components";
+import { calcObligationProgressContribution } from "@/lib/grade-components";
 import { filterObligationsDueForStudent } from "@/lib/grade-year";
 
 type ProgressObligation = {
@@ -35,50 +35,35 @@ export function calcSubjectProgressForObligations(
     studentGradeYear !== undefined
       ? filterObligationsDueForStudent(obligations, studentGradeYear)
       : obligations;
-  const obligationById = new Map(relevantObligations.map((o) => [o.id, o]));
-  const resolvedGrades = grades
-    .filter((g) => obligationById.has(g.obligationId))
-    .map((g) => {
-    const obligation = obligationById.get(g.obligationId);
-    const score = obligation
-      ? resolveObligationGradeScore(obligation, g)
-      : (g.score ?? null);
-    return { obligationId: g.obligationId, score, status: g.status };
-  });
-  return calcSubjectProgress(relevantObligations, resolvedGrades);
+  const gradeByObligationId = new Map(grades.map((g) => [g.obligationId, g]));
+  return calcSubjectProgress(relevantObligations, gradeByObligationId);
 }
 
 export function calcSubjectProgress(
-  obligations: Array<{ id: string; weightPercent: number }>,
-  grades: Array<{ obligationId: string; score: number | null; status: string }>
+  obligations: ProgressObligation[],
+  gradeByObligationId: Map<string, ProgressGrade>
 ) {
-  const gradeMap = new Map(grades.map((g) => [g.obligationId, g]));
   let completedWeight = 0;
   let scoredSum = 0;
   let scoredWeight = 0;
 
-  // "ציון סופי" = כל המטלות הרלוונטיות הוגשו/נבדקו/פטורות, ולכל מטלה שאינה פטורה יש ציון.
+  // "ציון סופי" = כל המטלות הרלוונטיות הוגשו/נבדקו/פטורות, ולכל מטלה שאינה פטורה יש ציון מלא.
   let allFinal = obligations.length > 0;
 
-  for (const o of obligations) {
-    const g = gradeMap.get(o.id);
-    if (g && (g.status === "GRADED" || g.status === "SUBMITTED") && g.score != null) {
-      completedWeight += o.weightPercent;
-      scoredSum += g.score * (o.weightPercent / 100);
-      scoredWeight += o.weightPercent;
-    } else if (g && g.status === "SUBMITTED") {
-      completedWeight += o.weightPercent * 0.5;
-    }
+  for (const obligation of obligations) {
+    const grade = gradeByObligationId.get(obligation.id);
+    const contribution = calcObligationProgressContribution(obligation, grade);
 
-    if (!g) {
+    completedWeight += contribution.completedWeight;
+    scoredSum += contribution.scoredSum;
+    scoredWeight += contribution.scoredWeight;
+
+    if (!grade) {
       allFinal = false;
-    } else if (g.status === "EXEMPT") {
+    } else if (grade.status === "EXEMPT") {
       // פטור נחשב מושלם ואינו דורש ציון
-    } else if (
-      (g.status === "GRADED" || g.status === "SUBMITTED") &&
-      g.score != null
-    ) {
-      // מושלם עם ציון
+    } else if (contribution.isComplete) {
+      // מושלם
     } else {
       allFinal = false;
     }

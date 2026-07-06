@@ -1,4 +1,7 @@
-import { resolveObligationGradeScore } from "@/lib/grade-components";
+import {
+  isObligationSubItemsComplete,
+  resolveObligationGradeScore,
+} from "@/lib/grade-components";
 import { isFailingGradeScore } from "@/lib/grade-status";
 import { filterObligationsDueForStudent } from "@/lib/grade-year";
 import { formatSubjectDisplayName } from "@/lib/subject-display";
@@ -63,8 +66,19 @@ export function getNegativeGradeScore(
 
   const resolved = resolveObligationGradeScore(
     { components: obligation.components ?? [], subItems: obligation.subItems ?? [] },
-    grade
+    grade,
+    { requireComplete: true }
   );
+  if (resolved == null) return null;
+  if (
+    (obligation.subItems?.length ?? 0) > 0 &&
+    !isObligationSubItemsComplete(
+      { subItems: obligation.subItems ?? [] },
+      grade
+    )
+  ) {
+    return null;
+  }
   if (!isFailingGradeScore(resolved)) return null;
   return resolved;
 }

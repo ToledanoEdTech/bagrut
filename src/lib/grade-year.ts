@@ -66,7 +66,7 @@ export function compareGradeYears(a: string | null, b: string | null): number {
 
 /**
  * האם מטלה אמורה להיות מוזנת/הושלמה עבור תלמיד בשכבה studentGradeYear.
- * מחזיר false אם לאחד מהערכים אין שנתון שכבה תקף.
+ * מטלה ללא שכבה מוגדרת חלה על כל התלמידים.
  */
 export function isObligationDueForStudent(
   obligationGradeYear: string | null | undefined,
@@ -74,7 +74,10 @@ export function isObligationDueForStudent(
 ): boolean {
   const obligationOrder = gradeYearOrder(obligationGradeYear);
   const studentOrder = gradeYearOrder(studentGradeYear);
-  if (obligationOrder == null || studentOrder == null) return false;
+
+  if (obligationOrder == null) return true;
+  if (studentOrder == null) return true;
+
   return obligationOrder <= studentOrder;
 }
 

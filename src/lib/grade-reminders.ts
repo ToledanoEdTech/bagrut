@@ -1,4 +1,10 @@
-import { resolveObligationGradeScore, obligationDisplayLabel, hasSubItemGrades, normalizeSubItems } from "@/lib/grade-components";
+import {
+  isObligationSubItemsComplete,
+  resolveObligationGradeScore,
+  obligationDisplayLabel,
+  hasSubItemGrades,
+  normalizeSubItems,
+} from "@/lib/grade-components";
 import { resolveGradeEntryDueDate } from "@/lib/grade-due-date";
 import { isObligationDueForStudent, normalizeGradeYear } from "@/lib/grade-year";
 import { LEGACY_TEACHER_PERMISSIONS } from "@/lib/permissions";
@@ -182,7 +188,11 @@ export function isGradeEntryIncomplete(
   if (!grade) return true;
   if (grade.status === "EXEMPT") return false;
   if (grade.status === "NOT_STARTED" || grade.status === "IN_PROGRESS") return true;
-  const score = resolveObligationGradeScore(obligation, grade);
+  const subItems = normalizeSubItems(obligation.subItems ?? []);
+  if (subItems.length > 0) {
+    return !isObligationSubItemsComplete({ subItems: obligation.subItems ?? [] }, grade);
+  }
+  const score = resolveObligationGradeScore(obligation, grade, { requireComplete: true });
   return score == null;
 }
 

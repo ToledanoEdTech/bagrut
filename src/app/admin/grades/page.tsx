@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { SubjectCard } from "@/components/subjects/SubjectCard";
-import { calcWeightedComponentScore, calcWeightedSubItemScore, normalizeComponents, normalizeSubItems, resolveObligationGradeScore } from "@/lib/grade-components";
+import { calcWeightedComponentScore, calcPartialWeightedSubItemScore, normalizeComponents, normalizeSubItems, resolveObligationGradeScore } from "@/lib/grade-components";
 import { calcSubjectProgressForObligations } from "@/lib/progress";
 import { autoStatusOnScore } from "@/lib/grade-status";
 import type { SubmissionStatus } from "@/lib/types";
@@ -302,7 +302,7 @@ export default function GradesPage() {
           [sortOrder]: value as number | null,
         };
         const score = obligation
-          ? calcWeightedSubItemScore(normalizeSubItems(obligation.subItems), subItemScores)
+          ? calcPartialWeightedSubItemScore(normalizeSubItems(obligation.subItems), subItemScores)
           : null;
         const hasAnyScore = Object.values(subItemScores).some((s) => s != null);
         const status = (existing?.status ?? "NOT_STARTED") as SubmissionStatus;

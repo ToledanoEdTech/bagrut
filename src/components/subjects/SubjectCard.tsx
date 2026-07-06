@@ -6,8 +6,13 @@ import { ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import clsx from "clsx";
 import {
+  calcObligationEarnedSubjectPoints,
+  formatObligationEarnedScoreLabel,
+  formatSubItemProgressLabel,
+  getObligationSubItemProgress,
   hasSeparateComponentGrades,
   hasSubItemGrades,
+  isObligationSubItemsComplete,
   normalizeComponents,
   normalizeSubItems,
   resolveObligationGradeScore,
@@ -82,6 +87,10 @@ export function SubjectCard({
   const displayName = formatSubjectDisplayName(name, { pathLabels, units, category });
   const showUnitsSeparately =
     units != null && category !== "MATH" && category !== "ENGLISH";
+  const dueObligations =
+    studentGradeYear !== undefined
+      ? obligations.filter((o) => isObligationDueForStudent(o.gradeYear, studentGradeYear))
+      : obligations;
 
   const estGrade = progress.estimatedGrade;
   const gradeTone =
@@ -122,7 +131,7 @@ export function SubjectCard({
                   )}
                 </h3>
                 <p className="mt-0.5 text-sm text-slate-500">
-                  {obligations.length} חובות • {progress.progressPercent.toFixed(0)}% הושלם
+                  {dueObligations.length} חובות • {progress.progressPercent.toFixed(0)}% הושלם
                 </p>
                 {hasMissingGrades && (
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-red-600">
@@ -203,9 +212,33 @@ export function SubjectCard({
                   const multiComponent =
                     !usesSubItems && hasSeparateComponentGrades(normalizedComponents);
                   const displayScore = resolveObligationGradeScore(o, grade ?? {});
+                  const subItemProgress = getObligationSubItemProgress(o, grade);
+                  const subItemsComplete =
+                    !usesSubItems || isObligationSubItemsComplete(o, grade ?? {});
+                  const showPartialSubItemProgress =
+                    usesSubItems &&
+                    subItemProgress != null &&
+                    subItemProgress.enteredCount > 0 &&
+                    !subItemsComplete;
+                  const partialProgressLabel = showPartialSubItemProgress
+                    ? formatSubItemProgressLabel(
+                        subItemProgress.enteredCount,
+                        subItemProgress.totalCount
+                      )
+                    : null;
+                  const earnedSubjectPoints = usesSubItems
+                    ? calcObligationEarnedSubjectPoints(o, grade)
+                    : null;
+                  const earnedScoreLabel =
+                    earnedSubjectPoints != null
+                      ? formatObligationEarnedScoreLabel(
+                          earnedSubjectPoints.earned,
+                          earnedSubjectPoints.total
+                        )
+                      : null;
 
                   const isMissing = statusKey === "MISSING";
-                  const negativeScore = getNegativeGradeScore(o, grade);
+                  const negativeScore = subItemsComplete ? getNegativeGradeScore(o, grade) : null;
                   const isNegative = negativeScore != null;
                   const isFuture =
                     studentGradeYear !== undefined &&
@@ -334,11 +367,16 @@ export function SubjectCard({
                                 {displayScore != null && (
                                   <div className="flex flex-col items-end gap-1">
                                     <span className="text-xs font-medium text-slate-600">
-                                      ציון משוקלל
+                                      {showPartialSubItemProgress ? "התקדמות" : "ציון משוקלל"}
                                     </span>
-                                    <span className="flex h-10 w-16 items-center justify-center rounded-lg bg-primary-50 text-lg font-bold text-primary-600">
-                                      {displayScore}
+                                    <span className="flex min-h-10 min-w-16 items-center justify-center rounded-lg bg-primary-50 px-2 text-lg font-bold text-primary-600">
+                                      {partialProgressLabel ?? displayScore}
                                     </span>
+                                    {showPartialSubItemProgress && (
+                                      <span className="text-xs text-slate-500">
+                                        ממוצע חלקי: {displayScore}
+                                      </span>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -360,28 +398,59 @@ export function SubjectCard({
                               />
                             ) : displayScore != null ? (
                               <div className="flex flex-col items-end gap-1">
-                                <span className="text-xs font-medium text-slate-600">ציון משוקלל</span>
-                                <span className="flex h-10 w-16 items-center justify-center rounded-lg bg-primary-50 text-lg font-bold text-primary-600">
-                                  {displayScore}
+                                <span className="text-xs font-medium text-slate-600">
+                                  {showPartialSubItemProgress ? "התקדמות" : "ציון משוקלל"}
                                 </span>
+                                <span className="flex min-h-10 min-w-16 items-center justify-center rounded-lg bg-primary-50 px-2 text-lg font-bold text-primary-600">
+                                  {partialProgressLabel ?? displayScore}
+                                </span>
+                                {showPartialSubItemProgress && (
+                                  <span className="text-xs text-slate-500">
+                                    {earnedScoreLabel
+                                      ? `ציון: ${earnedScoreLabel}`
+                                      : displayScore != null
+                                        ? `ממוצע חלקי: ${displayScore}`
+                                        : null}
+                                  </span>
+                                )}
+                                {!showPartialSubItemProgress && earnedScoreLabel && (
+                                  <span className="text-xs text-slate-500">
+                                    ציון: {earnedScoreLabel}
+                                  </span>
+                                )}
                               </div>
                             ) : null}
                           </div>
                         ) : (
-                          displayScore != null && (
+                          (displayScore != null || partialProgressLabel) && (
                             <div
                               className={clsx(
-                                "flex h-16 w-16 shrink-0 items-center justify-center rounded-xl text-2xl font-bold",
-                                displayScore <= 55
-                                  ? "bg-amber-100 text-amber-800 ring-2 ring-amber-300"
-                                  : displayScore >= 70
-                                    ? "bg-emerald-50 text-emerald-600"
-                                    : displayScore >= 55
-                                      ? "bg-amber-50 text-amber-600"
-                                      : "bg-red-50 text-red-600"
+                                "flex min-h-16 min-w-16 shrink-0 flex-col items-center justify-center rounded-xl px-3 py-2 text-center font-bold",
+                                showPartialSubItemProgress
+                                  ? "bg-sky-50 text-sky-700 ring-2 ring-sky-200"
+                                  : displayScore != null && displayScore <= 55
+                                    ? "bg-amber-100 text-amber-800 ring-2 ring-amber-300"
+                                    : displayScore != null && displayScore >= 70
+                                      ? "bg-emerald-50 text-emerald-600"
+                                      : displayScore != null && displayScore >= 55
+                                        ? "bg-amber-50 text-amber-600"
+                                        : "bg-red-50 text-red-600"
                               )}
                             >
-                              {displayScore}
+                              <span className={showPartialSubItemProgress ? "text-lg" : "text-2xl"}>
+                                {partialProgressLabel ?? displayScore}
+                              </span>
+                              {earnedScoreLabel && (
+                                <span className="mt-0.5 text-xs font-medium opacity-80">
+                                  {showPartialSubItemProgress ? "ציון: " : ""}
+                                  {earnedScoreLabel}
+                                </span>
+                              )}
+                              {showPartialSubItemProgress && !earnedScoreLabel && displayScore != null && (
+                                <span className="mt-0.5 text-xs font-medium opacity-80">
+                                  ממוצע: {displayScore}
+                                </span>
+                              )}
                             </div>
                           )
                         )}
@@ -420,7 +489,14 @@ export function SubjectCard({
 
                       {usesSubItems && (
                         <div className="mt-4 border-t border-slate-100 pt-4">
-                          <p className="mb-2 text-base font-semibold text-slate-800">תתי מטלות:</p>
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-base font-semibold text-slate-800">תתי מטלות:</p>
+                            {earnedScoreLabel && (
+                              <span className="text-sm font-semibold text-primary-700">
+                                ציון נוכחי: {earnedScoreLabel}
+                              </span>
+                            )}
+                          </div>
                           <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-3">
                             {o.subItems.map((si, i) => {
                               const sortOrder = si.sortOrder ?? i;

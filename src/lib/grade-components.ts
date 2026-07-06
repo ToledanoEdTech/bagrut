@@ -40,6 +40,30 @@ export function hasSubItemGrades(subItems: WeightedItemLike[]): boolean {
   return subItems.length > 0;
 }
 
+export function countEnteredWeightedScores(
+  items: WeightedItemLike[],
+  scores: Record<number, number | null> | null | undefined
+): { enteredCount: number; totalCount: number } {
+  const totalCount = items.length;
+  if (!scores || totalCount === 0) return { enteredCount: 0, totalCount };
+  const enteredCount = items.filter((item) => scores[item.sortOrder] != null).length;
+  return { enteredCount, totalCount };
+}
+
+export function formatSubItemProgressLabel(enteredCount: number, totalCount: number): string {
+  return `${enteredCount} מתוך ${totalCount}`;
+}
+
+export function isWeightedScoreComplete(
+  items: WeightedItemLike[],
+  scores: Record<number, number | null> | null | undefined
+): boolean {
+  if (items.length === 0) return false;
+  if (items.length === 1) return scores?.[items[0]!.sortOrder] != null;
+  if (!scores) return false;
+  return items.every((item) => scores[item.sortOrder] != null);
+}
+
 export function calcWeightedItemScore(
   items: WeightedItemLike[],
   scores: Record<number, number | null> | null | undefined
@@ -59,8 +83,51 @@ export function calcWeightedItemScore(
   return Math.round(weightedSum * 10) / 10;
 }
 
+/** ממוצע משוקלל מתתי-מטלות שהוזנו בלבד (ללא דרישה שכל המשבצות ימולאו). */
+export function calcPartialWeightedItemScore(
+  items: WeightedItemLike[],
+  scores: Record<number, number | null> | null | undefined
+): number | null {
+  if (items.length === 0) return null;
+  if (items.length === 1) {
+    return scores?.[items[0]!.sortOrder] ?? null;
+  }
+  if (!scores) return null;
+
+  let weightedSum = 0;
+  let enteredWeight = 0;
+  for (const item of items) {
+    const s = scores[item.sortOrder];
+    if (s != null) {
+      weightedSum += s * (item.weightPercent / 100);
+      enteredWeight += item.weightPercent;
+    }
+  }
+  if (enteredWeight === 0) return null;
+  return Math.round((weightedSum / enteredWeight) * 1000) / 10;
+}
+
 export const calcWeightedComponentScore = calcWeightedItemScore;
 export const calcWeightedSubItemScore = calcWeightedItemScore;
+export const calcPartialWeightedComponentScore = calcPartialWeightedItemScore;
+export const calcPartialWeightedSubItemScore = calcPartialWeightedItemScore;
+
+export function isObligationSubItemsComplete(
+  obligation: { subItems: Array<{ weightPercent: number; sortOrder?: number; name?: string }> },
+  grade: { subItemScores?: Record<number, number | null> | null }
+): boolean {
+  const subItems = normalizeSubItems(obligation.subItems);
+  return subItems.length > 0 && isWeightedScoreComplete(subItems, grade.subItemScores);
+}
+
+export function getObligationSubItemProgress(
+  obligation: { subItems: Array<{ weightPercent: number; sortOrder?: number; name?: string }> },
+  grade: { subItemScores?: Record<number, number | null> | null } | undefined
+): { enteredCount: number; totalCount: number } | null {
+  const subItems = normalizeSubItems(obligation.subItems);
+  if (subItems.length === 0) return null;
+  return countEnteredWeightedScores(subItems, grade?.subItemScores);
+}
 
 export function resolveObligationGradeScore(
   obligation: {
@@ -71,17 +138,245 @@ export function resolveObligationGradeScore(
     score?: number | null;
     componentScores?: Record<number, number | null> | null;
     subItemScores?: Record<number, number | null> | null;
-  }
+  },
+  options?: { requireComplete?: boolean }
 ): number | null {
   const subItems = normalizeSubItems(obligation.subItems);
   if (subItems.length > 0) {
-    return calcWeightedSubItemScore(subItems, grade.subItemScores);
+    const complete = isWeightedScoreComplete(subItems, grade.subItemScores);
+    if (options?.requireComplete) {
+      return complete ? calcWeightedSubItemScore(subItems, grade.subItemScores) : null;
+    }
+    return complete
+      ? calcWeightedSubItemScore(subItems, grade.subItemScores)
+      : calcPartialWeightedSubItemScore(subItems, grade.subItemScores);
   }
   const components = normalizeComponents(obligation.components);
   if (hasSeparateComponentGrades(components)) {
     return calcWeightedComponentScore(components, grade.componentScores);
   }
   return grade.score ?? null;
+}
+
+/** אחוז המשקל של פריטים שהוזנו מתוך סך משקלי הפריטים (לפי weightPercent, לא לפי מספר). */
+export function getEnteredWeightedItemFraction(
+  items: WeightedItemLike[],
+  scores: Record<number, number | null> | null | undefined
+): number {
+  if (items.length === 0) return 0;
+  const totalWeight = items.reduce((sum, item) => sum + item.weightPercent, 0);
+  if (totalWeight <= 0) return 0;
+  let enteredWeight = 0;
+  for (const item of items) {
+    if (scores?.[item.sortOrder] != null) {
+      enteredWeight += item.weightPercent;
+    }
+  }
+  return enteredWeight / totalWeight;
+}
+
+
+export function getObligationCompletionFraction(
+  obligation: {
+    components: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
+    subItems: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
+  },
+  grade:
+    | {
+        score?: number | null;
+        componentScores?: Record<number, number | null> | null;
+        subItemScores?: Record<number, number | null> | null;
+        status?: string;
+      }
+    | undefined
+): number {
+  if (!grade) return 0;
+  if (grade.status === "EXEMPT") return 1;
+
+  const subItems = normalizeSubItems(obligation.subItems ?? []);
+  if (subItems.length > 0) {
+    return getEnteredWeightedItemFraction(subItems, grade.subItemScores);
+  }
+
+  const components = normalizeComponents(obligation.components ?? []);
+  if (hasSeparateComponentGrades(components)) {
+    const fraction = getEnteredWeightedItemFraction(components, grade.componentScores);
+    if (fraction > 0) return fraction;
+  }
+
+  if (resolveProgressScore(obligation, grade) != null) return 1;
+  if (grade.status === "SUBMITTED") return 0.5;
+  return 0;
+}
+
+function formatProgressNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+/** תווית ציון שנצבר במטלה מתוך משקלה במקצוע (למשל "8.5 מתוך 30"). */
+export function formatObligationEarnedScoreLabel(earned: number, total: number): string {
+  return `${formatProgressNumber(earned)} מתוך ${formatProgressNumber(total)}`;
+}
+
+/**
+ * כמה נקודות מהציון הסופי של המקצוע נצברו במטלה (לפי משקל המטלה ואחוזי תתי-המטלות).
+ * מוחזר null למטלות ללא תתי-מטלות או כשאין ציונים שהוזנו.
+ */
+export function calcObligationEarnedSubjectPoints(
+  obligation: {
+    weightPercent: number;
+    components: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
+    subItems: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
+  },
+  grade:
+    | {
+        score?: number | null;
+        componentScores?: Record<number, number | null> | null;
+        subItemScores?: Record<number, number | null> | null;
+        status?: string;
+      }
+    | undefined
+): { earned: number; total: number } | null {
+  const subItems = normalizeSubItems(obligation.subItems);
+  if (subItems.length === 0) return null;
+
+  const total = obligation.weightPercent;
+  let earned = 0;
+  let hasAny = false;
+
+  for (const item of subItems) {
+    const score = grade?.subItemScores?.[item.sortOrder];
+    if (score != null) {
+      hasAny = true;
+      earned += (score / 100) * (item.weightPercent / 100) * total;
+    }
+  }
+
+  if (!hasAny) return null;
+  return { earned: Math.round(earned * 10) / 10, total };
+}
+
+export type ObligationProgressContribution = {
+  completedWeight: number;
+  scoredSum: number;
+  scoredWeight: number;
+  isComplete: boolean;
+};
+
+function resolveProgressScore(
+  obligation: {
+    components: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
+    subItems: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
+  },
+  grade: {
+    score?: number | null;
+    componentScores?: Record<number, number | null> | null;
+    subItemScores?: Record<number, number | null> | null;
+  }
+): number | null {
+  return (
+    resolveObligationGradeScore(obligation, grade) ??
+    (typeof grade.score === "number" && !isNaN(grade.score) ? grade.score : null)
+  );
+}
+
+function contributionFromWeightedParts(
+  obligationWeight: number,
+  items: WeightedItemLike[],
+  scores: Record<number, number | null> | null | undefined,
+  resolveScore: () => number | null
+): ObligationProgressContribution | null {
+  const weightFraction = getEnteredWeightedItemFraction(items, scores);
+  if (weightFraction <= 0) return null;
+
+  const effectiveWeight = obligationWeight * weightFraction;
+  const score = resolveScore();
+  const isComplete = isWeightedScoreComplete(items, scores);
+
+  return {
+    completedWeight: effectiveWeight,
+    scoredSum: score != null ? score * (effectiveWeight / 100) : 0,
+    scoredWeight: score != null ? effectiveWeight : 0,
+    isComplete,
+  };
+}
+
+/** תרומת מטלה בודדת להתקדמות ולציון המשוער במקצוע. */
+export function calcObligationProgressContribution(
+  obligation: {
+    weightPercent: number;
+    components: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
+    subItems: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
+  },
+  grade:
+    | {
+        score?: number | null;
+        componentScores?: Record<number, number | null> | null;
+        subItemScores?: Record<number, number | null> | null;
+        status?: string;
+      }
+    | undefined
+): ObligationProgressContribution {
+  const empty: ObligationProgressContribution = {
+    completedWeight: 0,
+    scoredSum: 0,
+    scoredWeight: 0,
+    isComplete: false,
+  };
+  const obligationWeight = obligation.weightPercent;
+  if (!grade) return empty;
+
+  if (grade.status === "EXEMPT") {
+    return {
+      completedWeight: obligationWeight,
+      scoredSum: 0,
+      scoredWeight: 0,
+      isComplete: true,
+    };
+  }
+
+  const subItems = normalizeSubItems(obligation.subItems ?? []);
+  if (subItems.length > 0) {
+    const subItemContribution = contributionFromWeightedParts(
+      obligationWeight,
+      subItems,
+      grade.subItemScores,
+      () => resolveObligationGradeScore(obligation, grade)
+    );
+    if (subItemContribution) return subItemContribution;
+  }
+
+  const components = normalizeComponents(obligation.components ?? []);
+  if (hasSeparateComponentGrades(components)) {
+    const componentContribution = contributionFromWeightedParts(
+      obligationWeight,
+      components,
+      grade.componentScores,
+      () => calcPartialWeightedItemScore(components, grade.componentScores)
+    );
+    if (componentContribution) return componentContribution;
+  }
+
+  const score = resolveProgressScore(obligation, grade);
+  if (score != null) {
+    return {
+      completedWeight: obligationWeight,
+      scoredSum: score * (obligationWeight / 100),
+      scoredWeight: obligationWeight,
+      isComplete: true,
+    };
+  }
+
+  if (grade.status === "SUBMITTED") {
+    return {
+      completedWeight: obligationWeight * 0.5,
+      scoredSum: 0,
+      scoredWeight: 0,
+      isComplete: false,
+    };
+  }
+
+  return empty;
 }
 
 export function obligationDisplayLabel(ob: {
