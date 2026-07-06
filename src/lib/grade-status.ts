@@ -30,6 +30,18 @@ export function validateScore(score: number | null | undefined): boolean {
   return typeof score === "number" && !isNaN(score) && score >= 0 && score <= 100;
 }
 
+/** ציון "שלילי" = ציון נכשל בטווח 0–55 */
+export const FAILING_GRADE_MAX = 55;
+
+export function isFailingGradeScore(score: number | null | undefined): boolean {
+  return (
+    typeof score === "number" &&
+    !isNaN(score) &&
+    score >= 0 &&
+    score <= FAILING_GRADE_MAX
+  );
+}
+
 const STATUS_ALIASES: Record<string, SubmissionStatus> = {
   "לא התחיל": "NOT_STARTED",
   "not started": "NOT_STARTED",

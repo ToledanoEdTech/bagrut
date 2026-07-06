@@ -219,7 +219,7 @@ export function getGradeEntryTargets(obligation: Obligation): GradeEntryTarget[]
   ];
 }
 
-function isTargetIncomplete(
+export function isTargetIncomplete(
   obligation: Obligation,
   grade: Grade | undefined,
   target: GradeEntryTarget

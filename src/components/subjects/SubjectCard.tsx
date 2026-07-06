@@ -14,7 +14,7 @@ import {
 } from "@/lib/grade-components";
 import { STATUS_LABELS, isValidSubmissionStatus } from "@/lib/grade-status";
 import { formatSubjectDisplayName } from "@/lib/subject-display";
-import { formatObligationLabel } from "@/lib/missing-grades";
+import { formatObligationLabel, getNegativeGradeScore } from "@/lib/missing-grades";
 
 type Obligation = {
   id: string;
@@ -64,7 +64,14 @@ export function SubjectCard({
   const missingObligations = obligations.filter(
     (o) => gradeMap.get(o.id)?.status === "MISSING"
   );
+  const negativeObligations = obligations
+    .map((o) => ({
+      obligation: o,
+      score: getNegativeGradeScore(o, gradeMap.get(o.id)),
+    }))
+    .filter((entry): entry is { obligation: Obligation; score: number } => entry.score != null);
   const hasMissingGrades = missingObligations.length > 0;
+  const hasNegativeGrades = negativeObligations.length > 0;
   const displayName = formatSubjectDisplayName(name, { pathLabels, units, category });
   const showUnitsSeparately =
     units != null && category !== "MATH" && category !== "ENGLISH";
@@ -83,7 +90,8 @@ export function SubjectCard({
     <div
       className={clsx(
         "card group overflow-hidden",
-        hasMissingGrades && "border-red-300 ring-2 ring-red-200"
+        hasMissingGrades && "border-red-300 ring-2 ring-red-200",
+        !hasMissingGrades && hasNegativeGrades && "border-amber-400 ring-2 ring-amber-200"
       )}
     >
       <button
@@ -117,6 +125,21 @@ export function SubjectCard({
                         ? `חסר ציון: ${formatObligationLabel(missingObligations[0])}`
                         : `חסרים ${missingObligations.length} ציונים: ${missingObligations
                             .map(formatObligationLabel)
+                            .join(" · ")}`}
+                    </span>
+                  </div>
+                )}
+                {!hasMissingGrades && hasNegativeGrades && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-amber-700">
+                    <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+                    <span>
+                      {negativeObligations.length === 1
+                        ? `ציון שלילי: ${formatObligationLabel(negativeObligations[0].obligation)} (${negativeObligations[0].score})`
+                        : `ציונים שליליים: ${negativeObligations
+                            .map(
+                              ({ obligation, score }) =>
+                                `${formatObligationLabel(obligation)} (${score})`
+                            )
                             .join(" · ")}`}
                     </span>
                   </div>
@@ -175,6 +198,8 @@ export function SubjectCard({
                   const displayScore = resolveObligationGradeScore(o, grade ?? {});
 
                   const isMissing = statusKey === "MISSING";
+                  const negativeScore = getNegativeGradeScore(o, grade);
+                  const isNegative = negativeScore != null;
 
                   return (
                     <div
@@ -183,7 +208,9 @@ export function SubjectCard({
                         "rounded-xl border bg-white p-5 transition hover:bg-slate-50",
                         isMissing
                           ? "border-red-300 bg-red-50/40 ring-1 ring-red-200"
-                          : "border-slate-200"
+                          : isNegative
+                            ? "border-amber-400 bg-amber-50/40 ring-1 ring-amber-200"
+                            : "border-slate-200"
                       )}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -191,6 +218,12 @@ export function SubjectCard({
                           <div className="flex flex-wrap items-center gap-2">
                             {isMissing && (
                               <AlertCircle className="h-5 w-5 shrink-0 text-red-600" aria-label="חסר ציון" />
+                            )}
+                            {!isMissing && isNegative && (
+                              <AlertCircle
+                                className="h-5 w-5 shrink-0 text-amber-600"
+                                aria-label="ציון שלילי"
+                              />
                             )}
                             <span className="text-lg font-bold text-slate-900">
                               {o.name || o.examEvent || "חובה"}
@@ -320,11 +353,13 @@ export function SubjectCard({
                             <div
                               className={clsx(
                                 "flex h-16 w-16 shrink-0 items-center justify-center rounded-xl text-2xl font-bold",
-                                displayScore >= 70
-                                  ? "bg-emerald-50 text-emerald-600"
-                                  : displayScore >= 55
-                                    ? "bg-amber-50 text-amber-600"
-                                    : "bg-red-50 text-red-600"
+                                displayScore <= 55
+                                  ? "bg-amber-100 text-amber-800 ring-2 ring-amber-300"
+                                  : displayScore >= 70
+                                    ? "bg-emerald-50 text-emerald-600"
+                                    : displayScore >= 55
+                                      ? "bg-amber-50 text-amber-600"
+                                      : "bg-red-50 text-red-600"
                               )}
                             >
                               {displayScore}

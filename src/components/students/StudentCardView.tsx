@@ -24,5 +24,5 @@ export function StudentCardView({ studentId, apiPath }: Props) {
     return <div className="text-center text-base text-slate-500">שגיאה בטעינת הנתונים</div>;
   }
 
-  return <StudentDashboardContent data={data} subjectsTitle="מקצועות" />;
+  return <StudentDashboardContent data={data} subjectsTitle="מקצועות" audience="staff" />;
 }

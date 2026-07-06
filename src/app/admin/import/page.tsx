@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { FileUpload } from "@/components/ui/FileUpload";
 import { useToast } from "@/components/ui/Toast";
-import { useApi } from "@/hooks/useApi";
+import { fetchCached } from "@/lib/api-cache";
 import { downloadStudentsImportTemplate, exportTimestamp } from "@/lib/excel-export";
 
 type StudentTemplateData = {
@@ -23,9 +23,6 @@ export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
-  const { data: templateData } = useApi<StudentTemplateData>(
-    "/api/students/import/template"
-  );
   const [result, setResult] = useState<{
     created: number;
     skipped: number;
@@ -56,11 +53,15 @@ export default function ImportPage() {
   async function downloadTemplate() {
     setDownloadingTemplate(true);
     try {
+      const fresh = await fetchCached<StudentTemplateData>(
+        "/api/students/import/template",
+        { force: true }
+      );
       await downloadStudentsImportTemplate(`תבנית_תלמידים_${exportTimestamp()}.xlsx`, {
-        classes: templateData?.classes ?? [],
-        tracks: templateData?.tracks ?? [],
-        mathUnits: templateData?.mathUnits ?? [3, 4, 5],
-        englishUnits: templateData?.englishUnits ?? [3, 4, 5],
+        classes: fresh.classes,
+        tracks: fresh.tracks,
+        mathUnits: fresh.mathUnits,
+        englishUnits: fresh.englishUnits,
       });
     } finally {
       setDownloadingTemplate(false);
@@ -101,7 +102,7 @@ export default function ImportPage() {
         <Card className="p-6">
           <h2 className="text-lg font-semibold">שלב 1–2: תבנית והעלאה</h2>
           <p className="mt-2 text-sm text-slate-500">
-            הקובץ צריך לכלול: שם, אימייל, כיתה, מגמה (אופציונלי), מתמטיקה, אנגלית
+            הקובץ צריך לכלול: שם, אימייל, כיתה, עד 3 מגמות (אופציונלי), מתמטיקה, אנגלית
           </p>
 
           <div className="mt-4">

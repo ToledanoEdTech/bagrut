@@ -30,6 +30,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "לא נמצא מסלול ברירת מחדל" }, { status: 500 });
   }
 
+  const [classes, tracks] = await Promise.all([listClasses(), listTracks()]);
+
   let created = 0;
   let skipped = 0;
   const errors: string[] = [];
@@ -38,7 +40,11 @@ export async function POST(req: NextRequest) {
     const name = row["שם"] || row["שם מלא"] || row["name"] || row["Name"];
     const email = row["אימייל"] || row["מייל"] || row["email"] || row["Email"];
     const className = row["כיתה"] || row["class"] || row["Class"] || "י'1";
-    const trackName = row["מגמה"] || row["track"] || "";
+    const trackNames = [
+      row["מגמה 1"] || row["מגמה"] || row["track"] || "",
+      row["מגמה 2"] || "",
+      row["מגמה 3"] || "",
+    ].filter(Boolean);
     const mathUnits = parseInt(row["מתמטיקה"] || row["math"] || "3", 10);
     const englishUnits = parseInt(row["אנגלית"] || row["english"] || "3", 10);
 
@@ -58,7 +64,6 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const classes = await listClasses();
     let cls = classes.find((c) => c.name === className);
     if (!cls) {
       const { createClass } = await import("@/lib/firestore");
@@ -67,11 +72,11 @@ export async function POST(req: NextRequest) {
         gradeYear: null,
         examPathId: defaultPath.id,
       });
+      classes.push(cls);
     }
 
     const trackIds: string[] = [];
-    if (trackName) {
-      const tracks = await listTracks();
+    for (const trackName of trackNames) {
       for (const part of trackName.split(/[,،+]/)) {
         const trimmed = part.trim();
         if (!trimmed) continue;

@@ -8,7 +8,7 @@ import { StatCardGrid } from "@/components/ui/StatCardGrid";
 import { StaggerChildren, StaggerItem } from "@/components/motion/StaggerChildren";
 import { OUTSTANDING_BAGRUT_TIER_LABELS, type OutstandingBagrutResult } from "@/lib/outstanding-bagrut-core";
 import { calcWeightedBagrutAverage } from "@/lib/bagrut-average";
-import { collectMissingGrades } from "@/lib/missing-grades";
+import { collectMissingGrades, collectNegativeGrades } from "@/lib/missing-grades";
 import { BookOpen, AlertCircle } from "lucide-react";
 
 export type StudentDashboardData = {
@@ -49,12 +49,15 @@ type StudentDashboardContentProps = {
   data: StudentDashboardData;
   hero?: React.ReactNode;
   subjectsTitle?: string;
+  /** student = תלמיד רואה את הדשבורד שלו; staff = מורה/מחנך/רכז/מנהל */
+  audience?: "student" | "staff";
 };
 
 export function StudentDashboardContent({
   data,
   hero,
   subjectsTitle = "המקצועות שלי",
+  audience = "student",
 }: StudentDashboardContentProps) {
   const completedObligations = data.subjects.reduce((sum, s) => {
     const graded = s.grades.filter(
@@ -78,6 +81,7 @@ export function StudentDashboardContent({
   const avgGrade = weightedAverage.average;
 
   const missingGrades = collectMissingGrades(data.subjects);
+  const negativeGrades = collectNegativeGrades(data.subjects);
 
   const trackLabel =
     data.student.tracks?.length > 0
@@ -132,9 +136,13 @@ export function StudentDashboardContent({
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
             <div className="min-w-0 flex-1">
               <p className="text-base font-semibold">
-                {missingGrades.length === 1
-                  ? "חסר לך ציון אחד — פנה למורה הרלוונטי"
-                  : `חסרים לך ${missingGrades.length} ציונים — פנה למורים הרלוונטיים`}
+                {audience === "staff"
+                  ? missingGrades.length === 1
+                    ? "חסר לתלמיד ציון אחד"
+                    : `חסרים לתלמיד ${missingGrades.length} ציונים`
+                  : missingGrades.length === 1
+                    ? "חסר לך ציון אחד — פנה למורה הרלוונטי"
+                    : `חסרים לך ${missingGrades.length} ציונים — פנה למורים הרלוונטיים`}
               </p>
               <ul className="mt-2 space-y-1 text-base">
                 {missingGrades.map((entry) => (
@@ -142,6 +150,37 @@ export function StudentDashboardContent({
                     <span className="font-semibold">{entry.subjectLabel}</span>
                     <span className="mx-1.5 text-red-400">—</span>
                     <span>{entry.obligationLabel}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {negativeGrades.length > 0 && (
+        <div className="mt-4 rounded-xl border border-amber-400 bg-amber-50 px-4 py-3 text-amber-900">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-semibold">
+                {audience === "staff"
+                  ? negativeGrades.length === 1
+                    ? "הוזן לתלמיד ציון שלילי — יש לבדוק ולעדכן"
+                    : `הוזנו לתלמיד ${negativeGrades.length} ציונים שליליים — יש לבדוק ולעדכן`
+                  : negativeGrades.length === 1
+                    ? "הוזן לך ציון שלילי — פנה למורה הרלוונטי"
+                    : `הוזנו לך ${negativeGrades.length} ציונים שליליים — פנה למורים הרלוונטיים`}
+              </p>
+              <ul className="mt-2 space-y-1 text-base">
+                {negativeGrades.map((entry) => (
+                  <li key={`neg-${entry.subjectId}-${entry.obligationId}`}>
+                    <span className="font-semibold">{entry.subjectLabel}</span>
+                    <span className="mx-1.5 text-amber-500">—</span>
+                    <span>{entry.obligationLabel}</span>
+                    <span className="ms-2 font-bold tabular-nums text-amber-700">
+                      ({entry.score})
+                    </span>
                   </li>
                 ))}
               </ul>

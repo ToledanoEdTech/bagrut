@@ -20,6 +20,7 @@ import {
   X,
   Award,
   CalendarDays,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { SiteLogos } from "@/components/ui/SiteLogos";
@@ -39,6 +40,7 @@ const dailyWorkLinks: NavLink[] = [
   { href: "/admin/students", label: "תלמידים", icon: Users },
   { href: "/admin/outstanding-bagrut", label: "בגרות מצטיינת", icon: Award },
   { href: "/admin/grades", label: "הזנת ציונים", icon: ClipboardList },
+  { href: "/admin/reports", label: "דוחות משימות", icon: FileSpreadsheet },
 ];
 
 const managementLinks: NavLink[] = [
@@ -142,6 +144,7 @@ export function Sidebar({
       ? []
       : dailyWorkLinks.filter((l) => {
           if (l.href === "/admin/grades" && session && !hasAnyGradeWrite(session)) return false;
+          if (l.href === "/admin/reports" && session && !hasAnyGradeWrite(session)) return false;
           if (
             (l.href === "/admin/students" || l.href === "/admin/outstanding-bagrut") &&
             session &&

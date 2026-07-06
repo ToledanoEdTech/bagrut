@@ -919,3 +919,89 @@ export async function downloadGradesImportTemplate(
   link.click();
   URL.revokeObjectURL(url);
 }
+
+export type PendingTaskExportRow = {
+  studentName: string;
+  className: string;
+  gradeYear: string;
+  subjectLabel: string;
+  taskLabel: string;
+  dueDate: string;
+  statusLabel: string;
+  overdueLabel: string;
+};
+
+export function buildPendingTasksSheet(input: {
+  title: string;
+  rows: PendingTaskExportRow[];
+  hideStudentColumn?: boolean;
+}): ExportSheet {
+  const columns: ExportColumn[] = [
+    ...(input.hideStudentColumn
+      ? []
+      : [{ header: "שם תלמיד", key: "studentName" as const }]),
+    { header: "כיתה", key: "className" },
+    { header: "שכבה", key: "gradeYear" },
+    { header: "מקצוע", key: "subjectLabel" },
+    { header: "מטלה", key: "taskLabel" },
+    { header: "תאריך יעד", key: "dueDate" },
+    { header: "סטטוס", key: "statusLabel" },
+    { header: "באיחור", key: "overdueLabel" },
+  ];
+
+  return {
+    name: "משימות",
+    title: input.title,
+    columns,
+    rows: input.rows.map((row) => ({
+      ...row,
+      gradeYear: row.gradeYear || "—",
+    })),
+  };
+}
+
+export function buildPendingTasksSummarySheet(input: {
+  title: string;
+  rows: Array<{
+    groupLabel: string;
+    taskCount: number;
+    studentCount: number;
+    overdueCount: number;
+  }>;
+}): ExportSheet {
+  return {
+    name: "סיכום",
+    title: input.title,
+    columns: [
+      { header: "קבוצה", key: "groupLabel" },
+      { header: "מספר משימות", key: "taskCount" },
+      { header: "תלמידים", key: "studentCount" },
+      { header: "באיחור", key: "overdueCount" },
+    ],
+    rows: input.rows,
+  };
+}
+
+export function pendingTaskRowsToExport(
+  entries: Array<{
+    studentName: string;
+    className: string;
+    gradeYear: string | null;
+    subjectLabel: string;
+    taskLabel: string;
+    dueDate: string;
+    statusLabel: string;
+    isOverdue: boolean;
+  }>
+): PendingTaskExportRow[] {
+  return entries.map((e) => ({
+    studentName: e.studentName,
+    className: e.className,
+    gradeYear: e.gradeYear ?? "—",
+    subjectLabel: e.subjectLabel,
+    taskLabel: e.taskLabel,
+    dueDate: e.dueDate,
+    statusLabel: e.statusLabel,
+    overdueLabel: e.isOverdue ? "כן" : "—",
+  }));
+}

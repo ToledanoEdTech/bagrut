@@ -1065,6 +1065,18 @@ export default function AdminDashboard() {
 
                 href="/admin/grades"
 
+                label="ציונים שליליים"
+
+                value={gradeGaps.totalNegative}
+
+                variant={gradeGaps.totalNegative > 0 ? "danger" : "default"}
+
+              />
+
+              <GapLinkRow
+
+                href="/admin/grades"
+
                 label="באיחור"
 
                 value={gradeGaps.overdueCount}
@@ -1106,6 +1118,42 @@ export default function AdminDashboard() {
                         <span className="shrink-0 font-bold text-amber-700">
 
                           {s.missingCount}
+
+                        </span>
+
+                      </li>
+
+                    ))}
+
+                  </ul>
+
+                </li>
+
+              )}
+
+              {gradeGaps.topNegativeSubjects.length > 0 && (
+
+                <li className="rounded-xl border border-slate-100 px-4 py-3">
+
+                  <p className="mb-2 text-xs font-medium text-slate-500">מקצועות עם הכי הרבה ציונים שליליים</p>
+
+                  <ul className="space-y-1">
+
+                    {gradeGaps.topNegativeSubjects.map((s) => (
+
+                      <li
+
+                        key={s.subjectId}
+
+                        className="flex justify-between text-slate-700"
+
+                      >
+
+                        <span className="truncate">{s.subjectName}</span>
+
+                        <span className="shrink-0 font-bold text-red-700">
+
+                          {s.negativeCount}
 
                         </span>
 
