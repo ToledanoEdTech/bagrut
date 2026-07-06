@@ -30,7 +30,7 @@ type Student = {
   mathUnits: number;
   englishUnits: number;
   user: { name: string };
-  class: { id: string; examPathId: string; name: string };
+  class: { id: string; examPathId: string; name: string; gradeYear?: string | null };
   track: { id: string; name: string } | null;
 };
 
@@ -563,7 +563,11 @@ export default function GradesPage() {
                     score: resolveObligationGradeScore(obligation, g),
                   };
                 });
-              const progress = calcSubjectProgressForObligations(subject.obligations, subjectGrades);
+              const progress = calcSubjectProgressForObligations(
+                subject.obligations,
+                subjectGrades,
+                selectedStudent?.class.gradeYear
+              );
 
               return (
                 <div key={subject.id} id={`subject-${subject.id}`} className="scroll-mt-28">
@@ -575,6 +579,7 @@ export default function GradesPage() {
                     obligations={subject.obligations}
                     grades={subjectGrades}
                     progress={progress}
+                    studentGradeYear={selectedStudent?.class.gradeYear}
                     readOnly={false}
                     onGradeChange={handleGradeChange}
                   />

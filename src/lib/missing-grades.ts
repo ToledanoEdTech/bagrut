@@ -1,5 +1,6 @@
 import { resolveObligationGradeScore } from "@/lib/grade-components";
 import { isFailingGradeScore } from "@/lib/grade-status";
+import { filterObligationsDueForStudent } from "@/lib/grade-year";
 import { formatSubjectDisplayName } from "@/lib/subject-display";
 
 type ObligationLike = {
@@ -7,6 +8,7 @@ type ObligationLike = {
   name: string | null;
   examEvent: string | null;
   questionnaireNumber: string | null;
+  gradeYear?: string | null;
   components?: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
   subItems?: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
 };
@@ -74,7 +76,10 @@ export function isNegativeGradeEntry(
   return getNegativeGradeScore(obligation, grade) != null;
 }
 
-export function collectMissingGrades(subjects: SubjectLike[]): MissingGradeEntry[] {
+export function collectMissingGrades(
+  subjects: SubjectLike[],
+  studentGradeYear?: string | null
+): MissingGradeEntry[] {
   const entries: MissingGradeEntry[] = [];
 
   for (const subject of subjects) {
@@ -84,7 +89,14 @@ export function collectMissingGrades(subjects: SubjectLike[]): MissingGradeEntry
       category: subject.category,
     });
 
+    const obligations =
+      studentGradeYear !== undefined
+        ? filterObligationsDueForStudent(subject.obligations, studentGradeYear)
+        : subject.obligations;
+    const obligationIds = new Set(obligations.map((o) => o.id));
+
     for (const grade of subject.grades) {
+      if (!obligationIds.has(grade.obligationId)) continue;
       if (grade.status !== "MISSING") continue;
       const obligation = subject.obligations.find((o) => o.id === grade.obligationId);
       if (!obligation) continue;
@@ -100,7 +112,10 @@ export function collectMissingGrades(subjects: SubjectLike[]): MissingGradeEntry
   return entries;
 }
 
-export function collectNegativeGrades(subjects: SubjectLike[]): NegativeGradeEntry[] {
+export function collectNegativeGrades(
+  subjects: SubjectLike[],
+  studentGradeYear?: string | null
+): NegativeGradeEntry[] {
   const entries: NegativeGradeEntry[] = [];
 
   for (const subject of subjects) {
@@ -110,7 +125,12 @@ export function collectNegativeGrades(subjects: SubjectLike[]): NegativeGradeEnt
       category: subject.category,
     });
 
-    for (const obligation of subject.obligations) {
+    const obligations =
+      studentGradeYear !== undefined
+        ? filterObligationsDueForStudent(subject.obligations, studentGradeYear)
+        : subject.obligations;
+
+    for (const obligation of obligations) {
       const grade = subject.grades.find((g) => g.obligationId === obligation.id);
       const negativeScore = getNegativeGradeScore(obligation, grade);
       if (negativeScore == null) continue;

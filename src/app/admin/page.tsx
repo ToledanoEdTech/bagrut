@@ -601,7 +601,9 @@ function DataQualitySection({ alerts }: { alerts: DataQualityAlerts }) {
 
     alerts.subjectsWithoutObligations +
 
-    alerts.obligationsWithoutDueDate;
+    alerts.obligationsWithoutDueDate +
+
+    alerts.obligationsWithoutGradeYear;
 
 
 
@@ -648,6 +650,16 @@ function DataQualitySection({ alerts }: { alerts: DataQualityAlerts }) {
       count: alerts.obligationsWithoutDueDate,
 
       href: "/admin/subjects",
+
+    },
+
+    alerts.obligationsWithoutGradeYear > 0 && {
+
+      label: "מטלות ללא שנתון שכבה",
+
+      count: alerts.obligationsWithoutGradeYear,
+
+      href: "/admin/obligations",
 
     },
 

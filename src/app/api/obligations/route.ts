@@ -6,6 +6,7 @@ import {
 } from "@/lib/firestore";
 import { requireAdmin } from "@/lib/api-auth";
 import { defaultGradeEntryDueDate } from "@/lib/grade-due-date";
+import { validateCanonicalGradeYear } from "@/lib/grade-year";
 
 export async function POST(req: NextRequest) {
   const { error } = await requireAdmin();
@@ -16,6 +17,10 @@ export async function POST(req: NextRequest) {
   if (!body.subjectId) {
     return NextResponse.json({ error: "חסר מזהה מקצוע" }, { status: 400 });
   }
+  const gradeYearCheck = validateCanonicalGradeYear(body.gradeYear);
+  if (!gradeYearCheck.ok) {
+    return NextResponse.json({ error: gradeYearCheck.error }, { status: 400 });
+  }
   const obligation = await addObligation(body.subjectId, {
     questionnaireNumber: body.questionnaireNumber ?? null,
     name: body.name ?? null,
@@ -23,7 +28,7 @@ export async function POST(req: NextRequest) {
     examType: body.examType ?? "פנימי",
     studyMaterial: body.studyMaterial ?? null,
     examEvent: body.examEvent ?? null,
-    gradeYear: body.gradeYear ?? null,
+    gradeYear: gradeYearCheck.value,
     gradeEntryDueDate: body.gradeEntryDueDate ?? defaultGradeEntryDueDate(),
     sortOrder: body.sortOrder ?? 0,
     components: (body.components ?? []).map(
@@ -57,6 +62,13 @@ export async function PATCH(req: NextRequest) {
   const { subjectId, ...obligation } = body;
   if (!subjectId || !obligation.id) {
     return NextResponse.json({ error: "חסר מזהה" }, { status: 400 });
+  }
+  if (obligation.gradeYear !== undefined) {
+    const gradeYearCheck = validateCanonicalGradeYear(obligation.gradeYear);
+    if (!gradeYearCheck.ok) {
+      return NextResponse.json({ error: gradeYearCheck.error }, { status: 400 });
+    }
+    obligation.gradeYear = gradeYearCheck.value;
   }
   const result = await updateObligation(subjectId, {
     ...obligation,

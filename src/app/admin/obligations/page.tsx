@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/Toast";
 import { invalidateCache } from "@/lib/api-cache";
 import { downloadExcel, exportTimestamp } from "@/lib/excel-export";
 import { defaultGradeEntryDueDate, resolveGradeEntryDueDate } from "@/lib/grade-due-date";
+import { CANONICAL_GRADE_YEARS } from "@/lib/grade-year";
 import {
   hasSeparateComponentGrades,
   hasSubItemGrades,
@@ -137,7 +138,7 @@ export default function ObligationsBoardPage() {
   }, [subjects]);
 
   const gradeYears = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(CANONICAL_GRADE_YEARS);
     for (const { obligation } of rows) {
       if (obligation.gradeYear) set.add(obligation.gradeYear);
     }
@@ -573,13 +574,20 @@ export default function ObligationsBoardPage() {
                         />
                       </td>
                       <td className="px-3 py-2">
-                        <input
-                          className="input w-24 py-1.5 text-sm"
+                        <select
+                          className="input w-28 py-1.5 text-sm"
                           value={fieldValue(obligation, "gradeYear")}
                           onChange={(e) =>
                             setField(subject.id, obligation.id, "gradeYear", e.target.value)
                           }
-                        />
+                        >
+                          <option value="">—</option>
+                          {CANONICAL_GRADE_YEARS.map((gy) => (
+                            <option key={gy} value={gy}>
+                              {gy}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="px-3 py-2">
                         <input

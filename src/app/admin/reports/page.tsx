@@ -22,6 +22,7 @@ import { Alert } from "@/components/ui/Alert";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StudentCombobox } from "@/components/students/StudentCombobox";
 import { hasAnyGradeWrite } from "@/lib/permissions";
+import { CANONICAL_GRADE_YEARS } from "@/lib/grade-year";
 import {
   buildPendingTasksSheet,
   buildPendingTasksSummarySheet,
@@ -66,8 +67,8 @@ const GROUP_OPTIONS: Array<{
 }> = [
   {
     id: "gradeYear",
-    label: "לפי שכבה",
-    description: "כל המשימות שנותרו לתלמידי שכבה מסוימת",
+    label: "לפי שכבת מטלה",
+    description: "משימות פתוחות לפי שנתון השכבה של המטלה",
     icon: Layers,
   },
   {
@@ -119,7 +120,7 @@ function buildSummaryRows(
 
   for (const entry of entries) {
     let key: string;
-    if (groupBy === "gradeYear") key = entry.gradeYear ?? "ללא שכבה";
+    if (groupBy === "gradeYear") key = entry.obligationGradeYear ?? "ללא שכבה";
     else if (groupBy === "class") key = entry.className;
     else if (groupBy === "subject") key = entry.subjectLabel;
     else key = entry.taskLabel;
@@ -165,13 +166,7 @@ export default function ReportsPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
-  const gradeYears = useMemo(() => {
-    const set = new Set<string>();
-    for (const c of classes) {
-      if (c.gradeYear) set.add(c.gradeYear);
-    }
-    return [...set].sort((a, b) => a.localeCompare(b, "he"));
-  }, [classes]);
+  const gradeYears = useMemo(() => [...CANONICAL_GRADE_YEARS], []);
 
   const sortedClasses = useMemo(
     () => [...classes].sort((a, b) => a.name.localeCompare(b.name, "he")),
@@ -490,6 +485,7 @@ export default function ReportsPage() {
                         <th className="px-4 py-3 text-right text-xs font-semibold">תלמיד</th>
                       )}
                       <th className="px-4 py-3 text-right text-xs font-semibold">כיתה</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold">שכבת מטלה</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold">מקצוע</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold">מטלה</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold">תאריך יעד</th>
@@ -511,6 +507,9 @@ export default function ReportsPage() {
                           </td>
                         )}
                         <td className="px-4 py-2.5 text-slate-600">{entry.className}</td>
+                        <td className="px-4 py-2.5 text-slate-600">
+                          {entry.obligationGradeYear ?? "—"}
+                        </td>
                         <td className="px-4 py-2.5 text-slate-600">{entry.subjectLabel}</td>
                         <td className="px-4 py-2.5 text-slate-800">{entry.taskLabel}</td>
                         <td className="px-4 py-2.5 text-slate-600">{entry.dueDate}</td>

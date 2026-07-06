@@ -36,7 +36,12 @@ export async function buildStudentDashboard(studentId: string) {
     const subjectGrades = grades.filter((g) =>
       subject.obligations.some((o) => o.id === g.obligationId)
     );
-    const progress = calcSubjectProgressForObligations(subject.obligations, subjectGrades);
+    const studentGradeYear = studentWithRelations.class.gradeYear;
+    const progress = calcSubjectProgressForObligations(
+      subject.obligations,
+      subjectGrades,
+      studentGradeYear
+    );
     return { ...subject, progress, grades: subjectGrades };
   });
 

@@ -30,6 +30,7 @@ import {
   type MatrixTaskOption,
 } from "@/lib/grade-components";
 import type { Class, ExamPath, Student } from "@/lib/types";
+import { isObligationDueForStudent } from "@/lib/grade-year";
 
 function withClass(student: Student, cls: Class): StudentWithRelations {
   return {
@@ -119,6 +120,7 @@ export async function getMatrixOptions(classId: string) {
       }
       const entry = subjectsMap.get(subject.id)!;
       for (const ob of subject.obligations) {
+        if (!isObligationDueForStudent(ob.gradeYear, cls.gradeYear)) continue;
         const existing = entry.obligations.get(ob.id);
         if (existing) {
           existing.relevantStudentCount++;
@@ -158,6 +160,10 @@ export async function getMatrixData(
   if (!classContext) throw new Error("כיתה לא נמצאה");
 
   const { cls, examPath, ctx, students } = classContext;
+  if (!isObligationDueForStudent(found.obligation.gradeYear, cls.gradeYear)) {
+    throw new Error("מטלה זו אינה רלוונטית לשכבת הכיתה");
+  }
+
   const relevantStudents: Student[] = [];
   let notRelevantCount = 0;
 

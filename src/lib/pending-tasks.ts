@@ -5,6 +5,11 @@ import {
 } from "@/lib/grade-reminders";
 import { STATUS_LABELS } from "@/lib/grade-status";
 import {
+  gradeYearOrder,
+  isObligationDueForStudent,
+  normalizeGradeYear,
+} from "@/lib/grade-year";
+import {
   getAllowedClassIds,
   getAllowedSubjectIds,
   isFullAdmin,
@@ -26,7 +31,10 @@ export type PendingTaskEntry = {
   studentName: string;
   classId: string;
   className: string;
+  /** שכבת הכיתה/תלמיד */
   gradeYear: string | null;
+  /** שנתון השכבה של המטלה */
+  obligationGradeYear: string | null;
   subjectId: string;
   subjectLabel: string;
   obligationId: string;
@@ -147,9 +155,14 @@ export function collectPendingTasks(
   } else if (filter.groupBy === "gradeYear" && filter.gradeYear) {
     students = students.filter((s) => {
       const cls = classById.get(s.classId);
-      return cls?.gradeYear === filter.gradeYear;
+      if (!cls?.gradeYear) return false;
+      const studentOrder = gradeYearOrder(cls.gradeYear);
+      const filterOrder = gradeYearOrder(filter.gradeYear);
+      return studentOrder != null && filterOrder != null && studentOrder >= filterOrder;
     });
   }
+
+  const filterGradeYear = filter.gradeYear ? normalizeGradeYear(filter.gradeYear) : null;
 
   for (const student of students) {
     const cls = classById.get(student.classId);
@@ -174,6 +187,13 @@ export function collectPendingTasks(
       });
 
       for (const obligation of subject.obligations) {
+        if (!isObligationDueForStudent(obligation.gradeYear, cls.gradeYear)) continue;
+
+        const obligationGY = normalizeGradeYear(obligation.gradeYear);
+        if (filter.groupBy === "gradeYear" && filterGradeYear) {
+          if (obligationGY !== filterGradeYear) continue;
+        }
+
         const grade = gradeMap.get(`${student.id}::${obligation.id}`);
         const targets = getGradeEntryTargets(obligation);
 
@@ -186,6 +206,7 @@ export function collectPendingTasks(
             classId: cls.id,
             className: cls.name,
             gradeYear: cls.gradeYear,
+            obligationGradeYear: obligationGY,
             subjectId: subject.id,
             subjectLabel,
             obligationId: obligation.id,

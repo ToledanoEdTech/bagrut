@@ -928,6 +928,7 @@ export type PendingTaskExportRow = {
   studentName: string;
   className: string;
   gradeYear: string;
+  obligationGradeYear: string;
   subjectLabel: string;
   taskLabel: string;
   dueDate: string;
@@ -945,7 +946,8 @@ export function buildPendingTasksSheet(input: {
       ? []
       : [{ header: "שם תלמיד", key: "studentName" as const }]),
     { header: "כיתה", key: "className" },
-    { header: "שכבה", key: "gradeYear" },
+    { header: "שכבת תלמיד", key: "gradeYear" },
+    { header: "שכבת מטלה", key: "obligationGradeYear" },
     { header: "מקצוע", key: "subjectLabel" },
     { header: "מטלה", key: "taskLabel" },
     { header: "תאריך יעד", key: "dueDate" },
@@ -960,6 +962,7 @@ export function buildPendingTasksSheet(input: {
     rows: input.rows.map((row) => ({
       ...row,
       gradeYear: row.gradeYear || "—",
+      obligationGradeYear: row.obligationGradeYear || "—",
     })),
   };
 }
@@ -991,6 +994,7 @@ export function pendingTaskRowsToExport(
     studentName: string;
     className: string;
     gradeYear: string | null;
+    obligationGradeYear?: string | null;
     subjectLabel: string;
     taskLabel: string;
     dueDate: string;
@@ -1002,6 +1006,7 @@ export function pendingTaskRowsToExport(
     studentName: e.studentName,
     className: e.className,
     gradeYear: e.gradeYear ?? "—",
+    obligationGradeYear: e.obligationGradeYear ?? "—",
     subjectLabel: e.subjectLabel,
     taskLabel: e.taskLabel,
     dueDate: e.dueDate,

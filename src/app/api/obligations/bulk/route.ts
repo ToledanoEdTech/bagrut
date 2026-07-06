@@ -3,6 +3,7 @@ import { bulkUpdateObligationFields } from "@/lib/firestore";
 import { requireAdmin } from "@/lib/api-auth";
 import type { Obligation } from "@/lib/types";
 import { defaultGradeEntryDueDate } from "@/lib/grade-due-date";
+import { validateCanonicalGradeYear } from "@/lib/grade-year";
 
 type AllowedField =
   | "name"
@@ -65,7 +66,19 @@ export async function PATCH(req: NextRequest) {
           }
           (patch as Record<string, unknown>)[key] = num;
         } else {
-          if (key === "gradeEntryDueDate" && (value === "" || value == null)) {
+          if (key === "gradeYear") {
+            if (value === "" || value == null) {
+              return NextResponse.json(
+                { error: "יש לבחור שכבה מתוך הרשימה" },
+                { status: 400 }
+              );
+            }
+            const check = validateCanonicalGradeYear(String(value));
+            if (!check.ok) {
+              return NextResponse.json({ error: check.error }, { status: 400 });
+            }
+            (patch as Record<string, unknown>)[key] = check.value;
+          } else if (key === "gradeEntryDueDate" && (value === "" || value == null)) {
             (patch as Record<string, unknown>)[key] = defaultGradeEntryDueDate();
           } else {
             (patch as Record<string, unknown>)[key] =

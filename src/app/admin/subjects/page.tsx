@@ -177,6 +177,12 @@ export default function SubjectsPage() {
       setError("יש להזין שם מקצוע");
       return;
     }
+    for (const o of newSubjectObligations) {
+      if (!o.gradeYear?.trim()) {
+        setError("יש לבחור שכבה לכל מטלה");
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     const { error: err } = await apiJson("/api/subjects", {
@@ -229,6 +235,10 @@ export default function SubjectsPage() {
   async function saveObligation(subjectId: string, existingId?: string, addAnother = false) {
     if (!obligationDraft.name?.trim() && !obligationDraft.questionnaireNumber?.trim()) {
       setError("יש להזין שם מטלה או מספר שאלון");
+      return;
+    }
+    if (!obligationDraft.gradeYear?.trim()) {
+      setError("יש לבחור שכבה למטלה");
       return;
     }
     setSaving(true);

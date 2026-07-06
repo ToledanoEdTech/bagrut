@@ -52,7 +52,11 @@ function buildSubjectsWithProgress(
     return {
       units: subject.units,
       category: subject.category,
-      progress: calcSubjectProgressForObligations(subject.obligations, subjectGrades),
+      progress: calcSubjectProgressForObligations(
+        subject.obligations,
+        subjectGrades,
+        student.class.gradeYear
+      ),
     };
   });
 }

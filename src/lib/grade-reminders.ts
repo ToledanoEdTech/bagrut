@@ -1,5 +1,6 @@
 import { resolveObligationGradeScore, obligationDisplayLabel, hasSubItemGrades, normalizeSubItems } from "@/lib/grade-components";
 import { resolveGradeEntryDueDate } from "@/lib/grade-due-date";
+import { isObligationDueForStudent, normalizeGradeYear } from "@/lib/grade-year";
 import { LEGACY_TEACHER_PERMISSIONS } from "@/lib/permissions";
 import { ADMIN_EMAILS } from "@/lib/roles";
 import type {
@@ -276,6 +277,7 @@ function collectGradeItemsMatchingDue(
           );
           const matchedSubject = relevant.find((s) => s.id === subject.id);
           if (!matchedSubject?.obligations.some((o) => o.id === obligation.id)) continue;
+          if (!isObligationDueForStudent(obligation.gradeYear, cls.gradeYear)) continue;
 
           const grade = gradeMap.get(`${student.id}::${obligation.id}`);
           if (!isTargetIncomplete(obligation, grade, target)) continue;
@@ -300,7 +302,8 @@ function collectGradeItemsMatchingDue(
               .filter((y): y is string => !!y)
           ),
         ];
-        const obligationGradeYear = obligation.gradeYear ?? affectedGradeYears[0] ?? null;
+        const obligationGradeYear =
+          normalizeGradeYear(obligation.gradeYear) ?? affectedGradeYears[0] ?? null;
 
         items.push({
           obligationId: obligation.id,

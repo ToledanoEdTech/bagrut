@@ -11,6 +11,7 @@ import {
   type OverdueGradeItem,
 } from "@/lib/grade-reminders";
 import { isNegativeGradeEntry } from "@/lib/missing-grades";
+import { isObligationDueForStudent } from "@/lib/grade-year";
 import {
   listAllGrades,
   listClasses,
@@ -111,6 +112,7 @@ export type DataQualityAlerts = {
   classesWithoutStudents: number;
   subjectsWithoutObligations: number;
   obligationsWithoutDueDate: number;
+  obligationsWithoutGradeYear: number;
 };
 
 export type AdminDashboardCounts = {
@@ -274,6 +276,8 @@ function computeGradeGaps(data: ScopedData): GradeGaps {
       if (allowedSubjects && !allowedSubjects.has(subject.id)) continue;
 
       for (const obligation of subject.obligations) {
+        if (!isObligationDueForStudent(obligation.gradeYear, cls.gradeYear)) continue;
+
         classEntry.total += 1;
         const grade = gradeMap.get(`${student.id}::${obligation.id}`);
         if (isGradeEntryIncomplete(obligation, grade)) {
@@ -381,16 +385,24 @@ function computeSchoolProgress(data: ScopedData): SchoolProgress {
     for (const subject of relevant) {
       if (allowedSubjects && !allowedSubjects.has(subject.id)) continue;
 
-      const subjectGrades = subject.obligations
+      const dueObligations = subject.obligations.filter((o) =>
+        isObligationDueForStudent(o.gradeYear, cls.gradeYear)
+      );
+
+      const subjectGrades = dueObligations
         .map((o) => gradeMap.get(`${student.id}::${o.id}`))
         .filter((g): g is Grade => !!g);
 
-      const progress = calcSubjectProgressForObligations(subject.obligations, subjectGrades);
+      const progress = calcSubjectProgressForObligations(
+        subject.obligations,
+        subjectGrades,
+        cls.gradeYear
+      );
       if (progress.estimatedGrade != null) {
         estimatedGrades.push(progress.estimatedGrade);
       }
 
-      for (const obligation of subject.obligations) {
+      for (const obligation of dueObligations) {
         totalRelevant += 1;
         const grade = gradeMap.get(`${student.id}::${obligation.id}`);
         if (!isGradeEntryIncomplete(obligation, grade)) {
@@ -463,12 +475,22 @@ function computeDataQualityAlerts(data: RawData): DataQualityAlerts {
     (s) => s.obligations.length === 0
   ).length;
 
+  let obligationsWithoutGradeYear = 0;
+  for (const subject of data.subjects) {
+    for (const obligation of subject.obligations) {
+      if (!obligation.gradeYear?.trim()) {
+        obligationsWithoutGradeYear += 1;
+      }
+    }
+  }
+
   return {
     studentsWithoutClass,
     classesWithoutStudents,
     subjectsWithoutObligations,
     // כל מטלה ותת-מטלה מקבלים תאריך יעד ברירת מחדל (1.6) — אין חובות ללא יעד
     obligationsWithoutDueDate: 0,
+    obligationsWithoutGradeYear,
   };
 }
 

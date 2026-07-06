@@ -1,8 +1,10 @@
 import { resolveObligationGradeScore } from "@/lib/grade-components";
+import { filterObligationsDueForStudent } from "@/lib/grade-year";
 
 type ProgressObligation = {
   id: string;
   weightPercent: number;
+  gradeYear?: string | null;
   components: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
   subItems: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
 };
@@ -26,17 +28,24 @@ type ProgressGrade = {
  */
 export function calcSubjectProgressForObligations(
   obligations: ProgressObligation[],
-  grades: ProgressGrade[]
+  grades: ProgressGrade[],
+  studentGradeYear?: string | null
 ) {
-  const obligationById = new Map(obligations.map((o) => [o.id, o]));
-  const resolvedGrades = grades.map((g) => {
+  const relevantObligations =
+    studentGradeYear !== undefined
+      ? filterObligationsDueForStudent(obligations, studentGradeYear)
+      : obligations;
+  const obligationById = new Map(relevantObligations.map((o) => [o.id, o]));
+  const resolvedGrades = grades
+    .filter((g) => obligationById.has(g.obligationId))
+    .map((g) => {
     const obligation = obligationById.get(g.obligationId);
     const score = obligation
       ? resolveObligationGradeScore(obligation, g)
       : (g.score ?? null);
     return { obligationId: g.obligationId, score, status: g.status };
   });
-  return calcSubjectProgress(obligations, resolvedGrades);
+  return calcSubjectProgress(relevantObligations, resolvedGrades);
 }
 
 export function calcSubjectProgress(

@@ -8,6 +8,7 @@ import {
 } from "@/lib/firestore";
 import { requireAdmin } from "@/lib/api-auth";
 import { defaultGradeEntryDueDate } from "@/lib/grade-due-date";
+import { validateCanonicalGradeYear } from "@/lib/grade-year";
 
 export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
@@ -28,7 +29,17 @@ export async function POST(req: NextRequest) {
   if (error) return error;
 
   const body = await req.json();
-  const obligations = (body.obligations ?? []).map(
+  const rawObligations = body.obligations ?? [];
+  for (const o of rawObligations) {
+    if (o.gradeYear) {
+      const check = validateCanonicalGradeYear(o.gradeYear);
+      if (!check.ok) {
+        return NextResponse.json({ error: check.error }, { status: 400 });
+      }
+      o.gradeYear = check.value;
+    }
+  }
+  const obligations = rawObligations.map(
     (
       o: {
         questionnaireNumber?: string;

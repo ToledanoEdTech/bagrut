@@ -9,6 +9,7 @@ import { StaggerChildren, StaggerItem } from "@/components/motion/StaggerChildre
 import { OUTSTANDING_BAGRUT_TIER_LABELS, type OutstandingBagrutResult } from "@/lib/outstanding-bagrut-core";
 import { calcWeightedBagrutAverage } from "@/lib/bagrut-average";
 import { collectMissingGrades, collectNegativeGrades } from "@/lib/missing-grades";
+import { filterObligationsDueForStudent } from "@/lib/grade-year";
 import { BookOpen, AlertCircle } from "lucide-react";
 
 export type StudentDashboardData = {
@@ -59,15 +60,20 @@ export function StudentDashboardContent({
   subjectsTitle = "המקצועות שלי",
   audience = "student",
 }: StudentDashboardContentProps) {
+  const studentGradeYear = data.student.class.gradeYear;
+
   const completedObligations = data.subjects.reduce((sum, s) => {
+    const due = filterObligationsDueForStudent(s.obligations, studentGradeYear);
     const graded = s.grades.filter(
-      (g) => g.status === "GRADED" || g.status === "SUBMITTED"
+      (g) =>
+        due.some((o) => o.id === g.obligationId) &&
+        (g.status === "GRADED" || g.status === "SUBMITTED")
     ).length;
     return sum + graded;
   }, 0);
 
   const totalObligations = data.subjects.reduce(
-    (sum, s) => sum + s.obligations.length,
+    (sum, s) => sum + filterObligationsDueForStudent(s.obligations, studentGradeYear).length,
     0
   );
 
@@ -80,8 +86,8 @@ export function StudentDashboardContent({
   );
   const avgGrade = weightedAverage.average;
 
-  const missingGrades = collectMissingGrades(data.subjects);
-  const negativeGrades = collectNegativeGrades(data.subjects);
+  const missingGrades = collectMissingGrades(data.subjects, studentGradeYear);
+  const negativeGrades = collectNegativeGrades(data.subjects, studentGradeYear);
 
   const trackLabel =
     data.student.tracks?.length > 0
@@ -254,6 +260,7 @@ export function StudentDashboardContent({
                   obligations={subject.obligations}
                   grades={subject.grades}
                   progress={subject.progress}
+                  studentGradeYear={studentGradeYear}
                   readOnly
                 />
               </StaggerItem>

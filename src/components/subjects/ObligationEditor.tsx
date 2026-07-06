@@ -2,6 +2,7 @@
 
 import { Plus, X, Check } from "lucide-react";
 import { defaultGradeEntryDueDate } from "@/lib/grade-due-date";
+import { CANONICAL_GRADE_YEARS } from "@/lib/grade-year";
 
 export type WeightedItem = { name: string; weightPercent: number };
 
@@ -272,12 +273,18 @@ export function ObligationEditor({
         </div>
         <div>
           <label className="label">שכבה</label>
-          <input
+          <select
             className="input"
             value={draft.gradeYear}
             onChange={(e) => onChange({ ...draft, gradeYear: e.target.value })}
-            placeholder="שכבת יא"
-          />
+          >
+            <option value="">בחר שכבה</option>
+            {CANONICAL_GRADE_YEARS.map((gy) => (
+              <option key={gy} value={gy}>
+                {gy}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="label">אירוע בחינה</label>

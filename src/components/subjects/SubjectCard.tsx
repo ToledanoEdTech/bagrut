@@ -15,6 +15,7 @@ import {
 import { STATUS_LABELS, isValidSubmissionStatus } from "@/lib/grade-status";
 import { formatSubjectDisplayName } from "@/lib/subject-display";
 import { formatObligationLabel, getNegativeGradeScore } from "@/lib/missing-grades";
+import { isObligationDueForStudent } from "@/lib/grade-year";
 
 type Obligation = {
   id: string;
@@ -48,6 +49,7 @@ export function SubjectCard({
   progress,
   readOnly = true,
   onGradeChange,
+  studentGradeYear,
 }: {
   name: string;
   pathLabels?: string[];
@@ -58,13 +60,18 @@ export function SubjectCard({
   progress: { progressPercent: number; estimatedGrade: number | null; isFinal?: boolean };
   readOnly?: boolean;
   onGradeChange?: (obligationId: string, field: string, value: string | number | null) => void;
+  /** שכבת התלמיד — לסימון מטלות עתידיות */
+  studentGradeYear?: string | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const gradeMap = new Map(grades.map((g) => [g.obligationId, g]));
   const missingObligations = obligations.filter(
-    (o) => gradeMap.get(o.id)?.status === "MISSING"
+    (o) =>
+      isObligationDueForStudent(o.gradeYear, studentGradeYear) &&
+      gradeMap.get(o.id)?.status === "MISSING"
   );
   const negativeObligations = obligations
+    .filter((o) => isObligationDueForStudent(o.gradeYear, studentGradeYear))
     .map((o) => ({
       obligation: o,
       score: getNegativeGradeScore(o, gradeMap.get(o.id)),
@@ -200,17 +207,24 @@ export function SubjectCard({
                   const isMissing = statusKey === "MISSING";
                   const negativeScore = getNegativeGradeScore(o, grade);
                   const isNegative = negativeScore != null;
+                  const isFuture =
+                    studentGradeYear !== undefined &&
+                    !isObligationDueForStudent(o.gradeYear, studentGradeYear);
 
                   return (
                     <div
                       key={o.id}
                       className={clsx(
-                        "rounded-xl border bg-white p-5 transition hover:bg-slate-50",
-                        isMissing
-                          ? "border-red-300 bg-red-50/40 ring-1 ring-red-200"
-                          : isNegative
-                            ? "border-amber-400 bg-amber-50/40 ring-1 ring-amber-200"
-                            : "border-slate-200"
+                        "rounded-xl border p-5 transition",
+                        isFuture
+                          ? "border-slate-200 bg-slate-50/80 opacity-75"
+                          : "bg-white hover:bg-slate-50",
+                        !isFuture &&
+                          (isMissing
+                            ? "border-red-300 bg-red-50/40 ring-1 ring-red-200"
+                            : isNegative
+                              ? "border-amber-400 bg-amber-50/40 ring-1 ring-amber-200"
+                              : "border-slate-200")
                       )}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -234,6 +248,11 @@ export function SubjectCard({
                               </span>
                             )}
                             <span className={status.className}>{status.label}</span>
+                            {isFuture && (
+                              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
+                                בעתיד
+                              </span>
+                            )}
                           </div>
 
                           <div className="mt-3 grid w-full grid-cols-2 gap-x-6 gap-y-2 text-base sm:grid-cols-4">
