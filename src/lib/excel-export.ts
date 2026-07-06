@@ -651,7 +651,9 @@ const STUDENT_IMPORT_COLUMNS = [
   { header: "שם", key: "name", width: 22 },
   { header: "אימייל", key: "email", width: 26 },
   { header: "כיתה", key: "className", width: 14 },
-  { header: "מגמה", key: "track", width: 20 },
+  { header: "מגמה 1", key: "track1", width: 20 },
+  { header: "מגמה 2", key: "track2", width: 20 },
+  { header: "מגמה 3", key: "track3", width: 20 },
   { header: "מתמטיקה", key: "math", width: 12 },
   { header: "אנגלית", key: "english", width: 12 },
 ] as const;
@@ -721,8 +723,10 @@ export async function downloadStudentsImportTemplate(
   const lastDataRow = dataStartRow + rowCount - 1;
   applyListValidation(ws, "C", dataStartRow, lastDataRow, classRange);
   applyListValidation(ws, "D", dataStartRow, lastDataRow, trackRange);
-  applyListValidation(ws, "E", dataStartRow, lastDataRow, mathRange);
-  applyListValidation(ws, "F", dataStartRow, lastDataRow, englishRange);
+  applyListValidation(ws, "E", dataStartRow, lastDataRow, trackRange);
+  applyListValidation(ws, "F", dataStartRow, lastDataRow, trackRange);
+  applyListValidation(ws, "G", dataStartRow, lastDataRow, mathRange);
+  applyListValidation(ws, "H", dataStartRow, lastDataRow, englishRange);
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
