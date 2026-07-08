@@ -2,11 +2,13 @@
 
 import { SubjectCard } from "@/components/subjects/SubjectCard";
 import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
+import { HightechBagrutBadge } from "@/components/students/HightechBagrutBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatCardGrid } from "@/components/ui/StatCardGrid";
 import { StaggerChildren, StaggerItem } from "@/components/motion/StaggerChildren";
 import { OUTSTANDING_BAGRUT_TIER_LABELS, type OutstandingBagrutResult } from "@/lib/outstanding-bagrut-core";
+import type { HightechBagrutResult } from "@/lib/hightech-bagrut-core";
 import { calcWeightedBagrutAverage } from "@/lib/bagrut-average";
 import { collectMissingGrades, collectNegativeGrades } from "@/lib/missing-grades";
 import { filterObligationsDueForStudent } from "@/lib/grade-year";
@@ -44,6 +46,7 @@ export type StudentDashboardData = {
   }>;
   overallProgress: number;
   outstandingBagrut?: OutstandingBagrutResult;
+  hightechBagrut?: HightechBagrutResult;
 };
 
 type StudentDashboardContentProps = {
@@ -99,12 +102,17 @@ export function StudentDashboardContent({
       <div className="bg-gradient-to-l from-primary-600 to-primary-700 px-6 py-6 text-white">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h2 className="text-display text-white">{data.student.user.name}</h2>
-          {data.outstandingBagrut?.isCandidate && (
-            <OutstandingBagrutBadge
-              variant="onDark"
-              tier={data.outstandingBagrut.tier ?? undefined}
-            />
-          )}
+          <div className="flex flex-wrap gap-2">
+            {data.outstandingBagrut?.isCandidate && (
+              <OutstandingBagrutBadge
+                variant="onDark"
+                tier={data.outstandingBagrut.tier ?? undefined}
+              />
+            )}
+            {data.hightechBagrut?.isCandidate && (
+              <HightechBagrutBadge variant="onDark" />
+            )}
+          </div>
         </div>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-base text-primary-100">
           <span>כיתה {data.student.class.name}</span>
@@ -228,6 +236,17 @@ export function StudentDashboardContent({
                         : data.outstandingBagrut.tier === "yellow"
                           ? ("warning" as const)
                           : ("danger" as const),
+                  },
+                ]
+              : []),
+            ...(data.hightechBagrut?.isCandidate
+              ? [
+                  {
+                    title: "בגרות הייטק",
+                    value: "מועמד",
+                    subtitle: data.hightechBagrut.scienceSubjectName ?? undefined,
+                    icon: "award" as const,
+                    color: "info" as const,
                   },
                 ]
               : []),

@@ -19,6 +19,7 @@ import {
   Bell,
   X,
   Award,
+  Cpu,
   CalendarDays,
   FileSpreadsheet,
 } from "lucide-react";
@@ -39,6 +40,7 @@ const dailyWorkLinks: NavLink[] = [
   { href: "/admin", label: "דשבורד", icon: LayoutDashboard, exact: true },
   { href: "/admin/students", label: "תלמידים", icon: Users },
   { href: "/admin/outstanding-bagrut", label: "בגרות מצטיינת", icon: Award },
+  { href: "/admin/hightech-bagrut", label: "בגרות הייטק", icon: Cpu },
   { href: "/admin/grades", label: "הזנת ציונים", icon: ClipboardList },
   { href: "/admin/reports", label: "דוחות משימות", icon: FileSpreadsheet },
 ];
@@ -146,13 +148,16 @@ export function Sidebar({
           if (l.href === "/admin/grades" && session && !hasAnyGradeWrite(session)) return false;
           if (l.href === "/admin/reports" && session && !hasAnyGradeWrite(session)) return false;
           if (
-            (l.href === "/admin/students" || l.href === "/admin/outstanding-bagrut") &&
+            (l.href === "/admin/students" ||
+              l.href === "/admin/outstanding-bagrut" ||
+              l.href === "/admin/hightech-bagrut") &&
             session &&
             !hasAnyStudentView(session)
           )
             return false;
           if (
-            l.href === "/admin/outstanding-bagrut" &&
+            (l.href === "/admin/outstanding-bagrut" ||
+              l.href === "/admin/hightech-bagrut") &&
             session &&
             !canViewOutstandingBagrut(session)
           )

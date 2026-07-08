@@ -11,6 +11,7 @@ import {
   listExamPaths,
 } from "@/lib/firestore";
 import { evaluateOutstandingBagrut } from "@/lib/outstanding-bagrut";
+import { evaluateHightechBagrut } from "@/lib/hightech-bagrut";
 import { attachPathLabels, buildPathLabelsBySubjectId } from "@/lib/subject-display";
 
 export async function buildStudentDashboard(studentId: string) {
@@ -52,6 +53,7 @@ export async function buildStudentDashboard(studentId: string) {
       : 0;
 
   const outstandingBagrut = evaluateOutstandingBagrut(student, subjectsWithProgress);
+  const hightechBagrut = evaluateHightechBagrut(student, subjectsWithProgress);
 
   return {
     student: {
@@ -64,5 +66,6 @@ export async function buildStudentDashboard(studentId: string) {
     subjects: subjectsWithProgress,
     overallProgress,
     outstandingBagrut,
+    hightechBagrut,
   };
 }

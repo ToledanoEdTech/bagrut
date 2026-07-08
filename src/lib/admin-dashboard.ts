@@ -34,6 +34,7 @@ import {
   computeOutstandingBagrutForStudents,
   type OutstandingBagrutTier,
 } from "@/lib/outstanding-bagrut";
+import { computeHightechBagrutForStudents } from "@/lib/hightech-bagrut";
 import { calcSubjectProgressForObligations } from "@/lib/progress";
 import { resolveRelevantSubjects, type StudentWithRelations } from "@/lib/student-subjects";
 import type {
@@ -84,6 +85,16 @@ export type OutstandingBagrutPreview = {
   }>;
 };
 
+export type HightechBagrutPreview = {
+  candidateCount: number;
+  topCandidates: Array<{
+    studentId: string;
+    name: string;
+    className: string;
+    scienceSubjectName: string;
+  }>;
+};
+
 export type GradeRemindersSummary = {
   enabled: boolean;
   overdueCount: number;
@@ -130,6 +141,7 @@ export type AdminDashboardResponse = {
   gradeGaps: GradeGaps | null;
   schoolProgress: SchoolProgress | null;
   outstandingBagrutPreview: OutstandingBagrutPreview | null;
+  hightechBagrutPreview: HightechBagrutPreview | null;
   gradeRemindersSummary: GradeRemindersSummary | null;
   teacherAlerts: TeacherAlerts | null;
   dataQualityAlerts: DataQualityAlerts | null;
@@ -614,12 +626,13 @@ async function computeDashboard(session: AuthSession): Promise<AdminDashboardRes
   const schoolProgress = canGrades ? computeSchoolProgress(scoped) : null;
 
   let outstandingBagrutPreview: OutstandingBagrutPreview | null = null;
+  let hightechBagrutPreview: HightechBagrutPreview | null = null;
   if (canViewOutstandingBagrut(session)) {
     const classMap = new Map(raw.classes.map((c) => [c.id, c]));
-    const results = await computeOutstandingBagrutForStudents(
-      scoped.scopedStudents,
-      classMap
-    );
+    const [results, hightechResults] = await Promise.all([
+      computeOutstandingBagrutForStudents(scoped.scopedStudents, classMap),
+      computeHightechBagrutForStudents(scoped.scopedStudents, classMap),
+    ]);
     const candidates = results.filter((r) => r.outstandingBagrut.isCandidate);
     const tierCounts = { green: 0, yellow: 0, red: 0 };
     for (const c of candidates) {
@@ -650,6 +663,17 @@ async function computeDashboard(session: AuthSession): Promise<AdminDashboardRes
           average: c.outstandingBagrut.average!,
           tier: c.outstandingBagrut.tier ?? "red",
         })),
+    };
+
+    const hightechCandidates = hightechResults.filter((r) => r.hightechBagrut.isCandidate);
+    hightechBagrutPreview = {
+      candidateCount: hightechCandidates.length,
+      topCandidates: hightechCandidates.slice(0, 5).map((c) => ({
+        studentId: c.studentId,
+        name: c.name,
+        className: c.className,
+        scienceSubjectName: c.scienceSubjectName ?? "—",
+      })),
     };
   }
 
@@ -686,6 +710,7 @@ async function computeDashboard(session: AuthSession): Promise<AdminDashboardRes
     gradeGaps,
     schoolProgress,
     outstandingBagrutPreview,
+    hightechBagrutPreview,
     gradeRemindersSummary,
     teacherAlerts,
     dataQualityAlerts,

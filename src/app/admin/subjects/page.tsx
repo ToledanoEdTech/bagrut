@@ -350,7 +350,7 @@ export default function SubjectsPage() {
         </div>
       </PageHeader>
 
-      {error && (
+      {error && !editingObligation && !addingObligation && !showNew && (
         <Alert variant="error" className="mt-4" onClose={() => setError(null)}>
           {error}
         </Alert>
@@ -477,13 +477,27 @@ export default function SubjectsPage() {
             ))}
           </div>
 
-          <div className="mt-4 flex gap-3">
-            <button type="button" onClick={addSubject} disabled={saving} className="btn-primary">
-              שמור מקצוע
-            </button>
-            <button type="button" onClick={() => setShowNew(false)} className="btn-secondary">
-              ביטול
-            </button>
+          <div className="mt-4 flex flex-col gap-3">
+            {error && (
+              <Alert variant="error" onClose={() => setError(null)}>
+                {error}
+              </Alert>
+            )}
+            <div className="flex gap-3">
+              <button type="button" onClick={addSubject} disabled={saving} className="btn-primary">
+                שמור מקצוע
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNew(false);
+                  setError(null);
+                }}
+                className="btn-secondary"
+              >
+                ביטול
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -659,10 +673,15 @@ export default function SubjectsPage() {
                         draft={obligationDraft}
                         onChange={setObligationDraft}
                         onSave={() => saveObligation(subject.id)}
-                        onCancel={() => setAddingObligation(null)}
+                        onCancel={() => {
+                          setAddingObligation(null);
+                          setError(null);
+                        }}
                         saving={saving}
                         showAddAnother
                         onSaveAndAddAnother={() => saveObligation(subject.id, undefined, true)}
+                        error={error}
+                        onClearError={() => setError(null)}
                       />
                     </div>
                   )}
@@ -680,8 +699,13 @@ export default function SubjectsPage() {
                             draft={obligationDraft}
                             onChange={setObligationDraft}
                             onSave={() => saveObligation(subject.id, o.id)}
-                            onCancel={() => setEditingObligation(null)}
+                            onCancel={() => {
+                              setEditingObligation(null);
+                              setError(null);
+                            }}
                             saving={saving}
+                            error={error}
+                            onClearError={() => setError(null)}
                           />
                         ) : (
                           <div className="rounded-xl border border-slate-200 bg-white p-5">

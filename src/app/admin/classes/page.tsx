@@ -17,7 +17,9 @@ import { useAuth } from "@/components/AuthProvider";
 import { canViewOutstandingBagrut, hasAnyStudentEdit } from "@/lib/permissions";
 import { StudentCardView } from "@/components/students/StudentCardView";
 import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
+import { HightechBagrutBadge } from "@/components/students/HightechBagrutBadge";
 import type { OutstandingBagrutResult } from "@/lib/outstanding-bagrut-core";
+import type { HightechBagrutResult } from "@/lib/hightech-bagrut-core";
 import {
   buildClassStudentsSheet,
   buildClassesSheet,
@@ -80,8 +82,16 @@ export default function ClassesPage() {
       ? "/api/students/outstanding-bagrut"
       : null
   );
+  const { data: hightechData } = useApi<{
+    byStudentId: Record<string, HightechBagrutResult>;
+  }>(
+    view !== "classes" && canOutstandingBagrut
+      ? "/api/students/hightech-bagrut"
+      : null
+  );
 
   const outstandingByStudentId = outstandingData?.byStudentId ?? {};
+  const hightechByStudentId = hightechData?.byStudentId ?? {};
 
   const selectedClass = classes.find((c) => c.id === selectedClassId);
   const selectedStudent = students.find((s) => s.id === selectedStudentId);
@@ -325,6 +335,9 @@ export default function ClassesPage() {
                               size="sm"
                               tier={outstandingByStudentId[student.id]?.tier ?? undefined}
                             />
+                          )}
+                          {canOutstandingBagrut && hightechByStudentId[student.id]?.isCandidate && (
+                            <HightechBagrutBadge size="sm" />
                           )}
                         </div>
                         <p className="mt-0.5 text-base text-slate-500">

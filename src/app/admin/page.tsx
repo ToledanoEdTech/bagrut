@@ -19,9 +19,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Alert } from "@/components/ui/Alert";
 
 import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
-
+import { HightechBagrutBadge } from "@/components/students/HightechBagrutBadge";
 import clsx from "clsx";
-
 import {
 
   Users,
@@ -42,6 +41,8 @@ import {
 
   Award,
 
+  Cpu,
+
   TrendingUp,
 
   School,
@@ -57,15 +58,10 @@ import {
   Settings,
 
 } from "lucide-react";
-
 import Link from "next/link";
-
 import { useAuth } from "@/components/AuthProvider";
-
 import { useApi } from "@/hooks/useApi";
-
 import { canImportStudents, canManageStructure } from "@/lib/roles";
-
 import {
 
   hasAnyGradeWrite,
@@ -79,7 +75,6 @@ import {
   isFullAdmin,
 
 } from "@/lib/permissions";
-
 import type {
 
   AdminDashboardResponse,
@@ -89,6 +84,8 @@ import type {
   GradeGaps,
 
   GradeRemindersSummary,
+
+  HightechBagrutPreview,
 
   OutstandingBagrutPreview,
 
@@ -507,6 +504,100 @@ function OutstandingPreviewCard({ preview }: { preview: OutstandingBagrutPreview
 
 
 
+function HightechPreviewCard({ preview }: { preview: HightechBagrutPreview }) {
+
+  return (
+
+    <Card className="p-6">
+
+      <div className="flex items-center justify-between gap-3">
+
+        <div className="flex items-center gap-3">
+
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50 text-sky-600 ring-1 ring-inset ring-sky-100">
+
+            <Cpu className="h-5 w-5" />
+
+          </span>
+
+          <div>
+
+            <h2 className="text-h2 text-slate-900">בגרות הייטק</h2>
+
+            <p className="text-sm text-slate-500">
+
+              {preview.candidateCount} מועמדים
+
+            </p>
+
+          </div>
+
+        </div>
+
+        <Link
+
+          href="/admin/hightech-bagrut"
+
+          className="text-sm font-medium text-primary-600 hover:text-primary-700"
+
+        >
+
+          הכל
+
+        </Link>
+
+      </div>
+
+      {preview.topCandidates.length === 0 ? (
+
+        <p className="mt-5 text-sm text-slate-500">אין מועמדים כרגע</p>
+
+      ) : (
+
+        <ul className="mt-5 space-y-2">
+
+          {preview.topCandidates.map((c) => (
+
+            <li
+
+              key={c.studentId}
+
+              className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3"
+
+            >
+
+              <div className="min-w-0">
+
+                <p className="truncate font-medium text-slate-800">{c.name}</p>
+
+                <p className="text-xs text-slate-500">{c.className}</p>
+
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+
+                <span className="text-xs text-slate-500">{c.scienceSubjectName}</span>
+
+                <HightechBagrutBadge size="sm" />
+
+              </div>
+
+            </li>
+
+          ))}
+
+        </ul>
+
+      )}
+
+    </Card>
+
+  );
+
+}
+
+
+
 function GradeRemindersCard({ summary }: { summary: GradeRemindersSummary }) {
 
   return (
@@ -783,6 +874,8 @@ export default function AdminDashboard() {
 
     outstandingBagrutPreview,
 
+    hightechBagrutPreview,
+
     gradeRemindersSummary,
 
     teacherAlerts,
@@ -906,6 +999,22 @@ export default function AdminDashboard() {
           label: "בגרות מצטיינת",
 
           icon: Award,
+
+          variant: "secondary" as const,
+
+        }
+
+      : null,
+
+    canOutstandingBagrut
+
+      ? {
+
+          href: "/admin/hightech-bagrut",
+
+          label: "בגרות הייטק",
+
+          icon: Cpu,
 
           variant: "secondary" as const,
 
@@ -1203,7 +1312,15 @@ export default function AdminDashboard() {
 
 
 
-        {!outstandingBagrutPreview && (
+        {hightechBagrutPreview && (
+
+          <HightechPreviewCard preview={hightechBagrutPreview} />
+
+        )}
+
+
+
+        {!outstandingBagrutPreview && !hightechBagrutPreview && (
 
           <Card className="p-6 lg:col-span-1">
 
@@ -1457,7 +1574,7 @@ export default function AdminDashboard() {
 
 
 
-      {!gradeRemindersSummary && outstandingBagrutPreview && (
+      {!gradeRemindersSummary && (outstandingBagrutPreview || hightechBagrutPreview) && (
 
         <div className="mt-8 grid gap-6 lg:grid-cols-3">
 

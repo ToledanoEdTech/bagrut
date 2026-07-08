@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Users, Info, Award, ChevronLeft } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, Info, Award, Cpu, ChevronLeft } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -28,10 +28,16 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import { hasAnyStudentEdit, canViewOutstandingBagrut } from "@/lib/permissions";
 import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
+import { HightechBagrutBadge } from "@/components/students/HightechBagrutBadge";
 import type { OutstandingBagrutResult } from "@/lib/outstanding-bagrut-core";
+import type { HightechBagrutResult } from "@/lib/hightech-bagrut-core";
 
 type OutstandingBagrutApiData = {
   byStudentId: Record<string, OutstandingBagrutResult>;
+};
+
+type HightechBagrutApiData = {
+  byStudentId: Record<string, HightechBagrutResult>;
 };
 
 type Student = {
@@ -89,6 +95,9 @@ export default function StudentsPage() {
   const { data: outstandingData } = useApi<OutstandingBagrutApiData>(
     canOutstandingBagrut ? "/api/students/outstanding-bagrut" : null
   );
+  const { data: hightechData } = useApi<HightechBagrutApiData>(
+    canOutstandingBagrut ? "/api/students/hightech-bagrut" : null
+  );
   const classes: ClassOption[] = classesRaw.map((c) => ({ id: c.id, name: c.name }));
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -101,10 +110,13 @@ export default function StudentsPage() {
   const [editExamPathId, setEditExamPathId] = useState<string | null>(null);
   const [newExamPathId, setNewExamPathId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [showCandidatesOnly, setShowCandidatesOnly] = useState(false);
+  const [candidateFilter, setCandidateFilter] = useState<"all" | "outstanding" | "hightech">(
+    "all"
+  );
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
   const outstandingByStudentId = outstandingData?.byStudentId ?? {};
+  const hightechByStudentId = hightechData?.byStudentId ?? {};
   const selectedStudent = students.find((s) => s.id === selectedStudentId);
 
   function openStudent(studentId: string) {
@@ -162,7 +174,13 @@ export default function StudentsPage() {
       .map((group) => ({
         ...group,
         students: group.students.filter((s) => {
-          if (showCandidatesOnly && !outstandingByStudentId[s.id]?.isCandidate) {
+          if (
+            candidateFilter === "outstanding" &&
+            !outstandingByStudentId[s.id]?.isCandidate
+          ) {
+            return false;
+          }
+          if (candidateFilter === "hightech" && !hightechByStudentId[s.id]?.isCandidate) {
             return false;
           }
           if (!q) return true;
@@ -178,7 +196,13 @@ export default function StudentsPage() {
         }),
       }))
       .filter((group) => group.students.length > 0);
-  }, [classGroups, search, showCandidatesOnly, outstandingByStudentId]);
+  }, [
+    classGroups,
+    search,
+    candidateFilter,
+    outstandingByStudentId,
+    hightechByStudentId,
+  ]);
 
   const exportStudents = useMemo(() => {
     if (search.trim()) return filteredClassGroups.flatMap((g) => g.students);
@@ -404,14 +428,28 @@ export default function StudentsPage() {
           className="max-w-md"
         />
         {canOutstandingBagrut && (
-          <Button
-            variant={showCandidatesOnly ? "primary" : "secondary"}
-            size="sm"
-            onClick={() => setShowCandidatesOnly((v) => !v)}
-          >
-            <Award className="h-4 w-4" />
-            מועמדים לבגרות מצטיינת
-          </Button>
+          <>
+            <Button
+              variant={candidateFilter === "outstanding" ? "primary" : "secondary"}
+              size="sm"
+              onClick={() =>
+                setCandidateFilter((v) => (v === "outstanding" ? "all" : "outstanding"))
+              }
+            >
+              <Award className="h-4 w-4" />
+              מועמדים לבגרות מצטיינת
+            </Button>
+            <Button
+              variant={candidateFilter === "hightech" ? "primary" : "secondary"}
+              size="sm"
+              onClick={() =>
+                setCandidateFilter((v) => (v === "hightech" ? "all" : "hightech"))
+              }
+            >
+              <Cpu className="h-4 w-4" />
+              מועמדים לבגרות הייטק
+            </Button>
+          </>
         )}
       </div>
 
@@ -498,6 +536,9 @@ export default function StudentsPage() {
                               tier={outstandingByStudentId[s.id]?.tier ?? undefined}
                             />
                           )}
+                          {canOutstandingBagrut && hightechByStudentId[s.id]?.isCandidate && (
+                            <HightechBagrutBadge size="sm" />
+                          )}
                         </div>
                         <p className="mt-0.5 truncate text-sm text-slate-500" dir="ltr">
                           {s.user.email}
@@ -563,7 +604,7 @@ export default function StudentsPage() {
                         <th className="px-4 py-3 text-center text-xs font-semibold">אנגלית</th>
                         {canOutstandingBagrut && (
                           <th className="px-4 py-3 text-center text-xs font-semibold">
-                            בגרות מצטיינת
+                            תגים
                           </th>
                         )}
                         {canEdit && (
@@ -593,14 +634,21 @@ export default function StudentsPage() {
                           </td>
                           {canOutstandingBagrut && (
                             <td className="px-4 py-3 text-center">
-                              {outstandingByStudentId[s.id]?.isCandidate ? (
-                                <OutstandingBagrutBadge
-                                  size="sm"
-                                  tier={outstandingByStudentId[s.id]?.tier ?? undefined}
-                                />
-                              ) : (
-                                <span className="text-sm text-slate-300">—</span>
-                              )}
+                              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                                {outstandingByStudentId[s.id]?.isCandidate && (
+                                  <OutstandingBagrutBadge
+                                    size="sm"
+                                    tier={outstandingByStudentId[s.id]?.tier ?? undefined}
+                                  />
+                                )}
+                                {hightechByStudentId[s.id]?.isCandidate && (
+                                  <HightechBagrutBadge size="sm" />
+                                )}
+                                {!outstandingByStudentId[s.id]?.isCandidate &&
+                                  !hightechByStudentId[s.id]?.isCandidate && (
+                                    <span className="text-sm text-slate-300">—</span>
+                                  )}
+                              </div>
                             </td>
                           )}
                           {canEdit && (

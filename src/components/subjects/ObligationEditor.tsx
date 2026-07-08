@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, X, Check } from "lucide-react";
+import { Alert } from "@/components/ui/Alert";
 import { defaultGradeEntryDueDate } from "@/lib/grade-due-date";
 import { CANONICAL_GRADE_YEARS } from "@/lib/grade-year";
 
@@ -214,6 +215,8 @@ export function ObligationEditor({
   showAddAnother,
   onSaveAndAddAnother,
   compact = false,
+  error,
+  onClearError,
 }: {
   draft: ObligationDraft;
   onChange: (d: ObligationDraft) => void;
@@ -224,6 +227,8 @@ export function ObligationEditor({
   showAddAnother?: boolean;
   onSaveAndAddAnother?: () => void;
   compact?: boolean;
+  error?: string | null;
+  onClearError?: () => void;
 }) {
   return (
     <div className="space-y-3 rounded-xl border border-primary-200 bg-primary-50/30 p-4">
@@ -329,6 +334,12 @@ export function ObligationEditor({
           onChange={(subItems) => onChange({ ...draft, subItems })}
         />
       </div>
+
+      {!compact && error && (
+        <Alert variant="error" onClose={onClearError}>
+          {error}
+        </Alert>
+      )}
 
       {!compact && onSave && (
         <div className="flex flex-wrap gap-2">

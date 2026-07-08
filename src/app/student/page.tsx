@@ -7,6 +7,7 @@ import { StudentDashboardContent } from "@/components/students/StudentDashboardC
 import { useApi } from "@/hooks/useApi";
 import type { StudentDashboardData } from "@/components/students/StudentDashboardContent";
 import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
+import { HightechBagrutBadge } from "@/components/students/HightechBagrutBadge";
 
 export default function StudentDashboard() {
   const { data, loading } = useApi<StudentDashboardData>("/api/student/dashboard");
@@ -42,12 +43,15 @@ export default function StudentDashboard() {
           <h1 className="text-4xl font-extrabold tracking-tight text-white drop-shadow-sm">
             {data.student.user.name}
           </h1>
-          {data.outstandingBagrut?.isCandidate && (
-            <OutstandingBagrutBadge
-              variant="onDark"
-              tier={data.outstandingBagrut.tier ?? undefined}
-            />
-          )}
+          <div className="flex flex-wrap gap-2">
+            {data.outstandingBagrut?.isCandidate && (
+              <OutstandingBagrutBadge
+                variant="onDark"
+                tier={data.outstandingBagrut.tier ?? undefined}
+              />
+            )}
+            {data.hightechBagrut?.isCandidate && <HightechBagrutBadge variant="onDark" />}
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
