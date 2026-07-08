@@ -559,6 +559,11 @@ export async function downloadFullGradesTemplate(
   workbook.creator = "Bagrut Manager";
   workbook.created = new Date();
 
+  // Data sheet first; Lists is only for dropdown validations.
+  const ws = workbook.addWorksheet("ייבוא ציונים", {
+    views: [{ rightToLeft: true, state: "frozen", ySplit: 2 }],
+  });
+
   const listsWs = workbook.addWorksheet(LISTS_SHEET);
   listsWs.state = "veryHidden";
   const statusRange = writeListColumn(
@@ -568,10 +573,6 @@ export async function downloadFullGradesTemplate(
       ? input.statuses
       : SUBMISSION_STATUSES.map((s) => STATUS_LABELS[s].label)
   );
-
-  const ws = workbook.addWorksheet("ייבוא ציונים", {
-    views: [{ rightToLeft: true, state: "frozen", ySplit: 2 }],
-  });
 
   ws.mergeCells(1, 1, 1, FULL_GRADES_COLUMNS.length);
   const titleCell = ws.getCell(1, 1);
@@ -666,6 +667,11 @@ export async function downloadStudentsImportTemplate(
   workbook.creator = "Bagrut Manager";
   workbook.created = new Date();
 
+  // Data sheet first so older importers that read sheet 0 still work.
+  const ws = workbook.addWorksheet("ייבוא תלמידים", {
+    views: [{ rightToLeft: true, state: "frozen", ySplit: 2 }],
+  });
+
   const listsWs = workbook.addWorksheet(LISTS_SHEET);
   listsWs.state = "veryHidden";
 
@@ -673,10 +679,6 @@ export async function downloadStudentsImportTemplate(
   const trackRange = writeListColumn(listsWs, 2, input.tracks);
   const mathRange = writeListColumn(listsWs, 3, input.mathUnits.map(String));
   const englishRange = writeListColumn(listsWs, 4, input.englishUnits.map(String));
-
-  const ws = workbook.addWorksheet("ייבוא תלמידים", {
-    views: [{ rightToLeft: true, state: "frozen", ySplit: 2 }],
-  });
 
   ws.mergeCells(1, 1, 1, STUDENT_IMPORT_COLUMNS.length);
   const titleCell = ws.getCell(1, 1);
@@ -748,12 +750,17 @@ export async function downloadGradesImportTemplate(
   workbook.creator = "Bagrut Manager";
   workbook.created = new Date();
 
-  const listsWs = workbook.addWorksheet(LISTS_SHEET);
-  listsWs.state = "veryHidden";
-
   const tasks = input.obligationTasks ?? [];
   const useTaskColumn = tasks.length > 1;
   const columns = useTaskColumn ? FULL_GRADES_COLUMNS : IMPORT_COLUMNS;
+
+  // Data sheet first; Lists is only for dropdown validations.
+  const ws = workbook.addWorksheet("ייבוא ציונים", {
+    views: [{ rightToLeft: true, state: "frozen", ySplit: 2 }],
+  });
+
+  const listsWs = workbook.addWorksheet(LISTS_SHEET);
+  listsWs.state = "veryHidden";
 
   const classRange = writeListColumn(listsWs, 1, input.classes);
   const subjectRange = writeListColumn(listsWs, 2, input.subjects);
@@ -777,10 +784,6 @@ export async function downloadGradesImportTemplate(
   const title = input.students?.length
     ? `תבנית ייבוא ציונים — ${input.prefilledClass ?? "כיתה"} (${input.students.length} תלמידים)`
     : "תבנית ייבוא ציונים";
-
-  const ws = workbook.addWorksheet("ייבוא ציונים", {
-    views: [{ rightToLeft: true, state: "frozen", ySplit: 2 }],
-  });
 
   ws.mergeCells(1, 1, 1, columns.length);
   const titleCell = ws.getCell(1, 1);

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as XLSX from "xlsx";
 import {
   listClassesSimple,
   listExamPaths,
@@ -7,6 +6,7 @@ import {
   listSubjects,
   upsertGradesBulk,
 } from "@/lib/firestore";
+import { parseImportWorkbook } from "@/lib/excel-import";
 import {
   buildPathLabelsBySubjectId,
   formatSubjectDisplayName,
@@ -110,10 +110,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "לא נבחר קובץ" }, { status: 400 });
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rawRows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet);
+  let rawRows: Record<string, string>[];
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    rawRows = parseImportWorkbook(buffer, {
+      preferredSheetNames: ["ייבוא ציונים"],
+      headerHints: [
+        "כיתה",
+        "מקצוע",
+        "מטלה",
+        "שם תלמיד",
+        "ציון",
+        "סטטוס",
+        "רכיב/תת-מטלה",
+      ],
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "לא ניתן לקרוא את הקובץ" },
+      { status: 400 }
+    );
+  }
 
   const [classes, students, subjects, examPaths] = await Promise.all([
     listClassesSimple(),

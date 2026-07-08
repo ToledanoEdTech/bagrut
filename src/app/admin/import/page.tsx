@@ -23,6 +23,7 @@ export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     created: number;
     skipped: number;
@@ -33,20 +34,33 @@ export default function ImportPage() {
     if (!file) return;
     setLoading(true);
     setResult(null);
+    setError(null);
 
     const formData = new FormData();
     formData.append("file", file);
 
-    const res = await fetch("/api/students/import", {
-      method: "POST",
-      body: formData,
-    });
-    const data = await res.json();
-    setResult(data);
-    setLoading(false);
-
-    if (res.ok && data.created > 0) {
-      toast.success(`${data.created} תלמידים יובאו בהצלחה`);
+    try {
+      const res = await fetch("/api/students/import", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "שגיאה בייבוא");
+        return;
+      }
+      setResult(data);
+      if (data.created > 0) {
+        toast.success(`${data.created} תלמידים יובאו בהצלחה`);
+      } else if (data.skipped > 0) {
+        toast.error("לא נוצרו תלמידים — בדקו את השורות שדולגו");
+      } else {
+        toast.error("לא נמצאו שורות תלמידים בקובץ");
+      }
+    } catch {
+      setError("שגיאת רשת בייבוא");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -149,16 +163,25 @@ export default function ImportPage() {
             </li>
           </ul>
 
+          {error && (
+            <Alert variant="error" className="mt-6" onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          )}
+
           {result && (
             <div className="mt-6 space-y-3">
-              <Alert variant="success" title="הייבוא הושלם">
+              <Alert
+                variant={result.created > 0 ? "success" : "warning"}
+                title={result.created > 0 ? "הייבוא הושלם" : "לא נוצרו תלמידים"}
+              >
                 <span className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4" />
                   {result.created} תלמידים נוצרו, {result.skipped} דולגו
                 </span>
               </Alert>
               {result.errors.length > 0 && (
-                <Alert variant="error" title="שגיאות בייבוא">
+                <Alert variant="error" title="שגיאות / דילוגים בייבוא">
                   <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs">
                     {result.errors.map((e, i) => (
                       <li key={i}>{e}</li>

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as XLSX from "xlsx";
 import {
   createStudent,
   listClasses,
@@ -8,6 +7,22 @@ import {
 } from "@/lib/firestore";
 import { requireAdmin } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase/admin";
+import { parseImportWorkbook } from "@/lib/excel-import";
+
+const STUDENT_HEADER_HINTS = [
+  "שם",
+  "שם מלא",
+  "אימייל",
+  "מייל",
+  "כיתה",
+  "מגמה",
+  "מגמה 1",
+  "מתמטיקה",
+  "אנגלית",
+  "name",
+  "email",
+  "class",
+];
 
 export async function POST(req: NextRequest) {
   const { error } = await requireAdmin();
@@ -19,10 +34,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "לא נבחר קובץ" }, { status: 400 });
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet);
+  let rows: Record<string, string>[];
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    rows = parseImportWorkbook(buffer, {
+      preferredSheetNames: ["ייבוא תלמידים"],
+      headerHints: STUDENT_HEADER_HINTS,
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "לא ניתן לקרוא את הקובץ" },
+      { status: 400 }
+    );
+  }
 
   const paths = await listExamPaths();
   const defaultPath = paths.find((p) => p.key === "regular");
@@ -61,6 +85,7 @@ export async function POST(req: NextRequest) {
       .get();
     if (!existing.empty) {
       skipped++;
+      errors.push(`${name}: אימייל כבר קיים (${normalizedEmail})`);
       continue;
     }
 
