@@ -14,6 +14,7 @@ import {
   googleProvider,
   isFirebaseClientConfigured,
 } from "@/lib/firebase/client";
+import { invalidateCache } from "@/lib/api-cache";
 import type { AuthSession } from "@/lib/types";
 
 type AuthContextValue = {
@@ -37,9 +38,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch("/api/auth/me");
       if (res.ok) {
         setSession(await res.json());
-      } else {
-        setSession(null);
+        return;
       }
+
+      if (res.status === 401 && isFirebaseClientConfigured()) {
+        const user = getFirebaseAuth().currentUser;
+        if (user) {
+          const idToken = await user.getIdToken(true);
+          const sessionRes = await fetch("/api/auth/session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken }),
+          });
+          if (sessionRes.ok) {
+            const meRes = await fetch("/api/auth/me");
+            if (meRes.ok) {
+              setSession(await meRes.json());
+              return;
+            }
+          }
+        }
+      }
+
+      setSession(null);
     } catch {
       setSession(null);
     } finally {
@@ -105,6 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signOut() {
     await fetch("/api/auth/session", { method: "DELETE" });
+    invalidateCache();
     if (!configError) {
       await fbSignOut(getFirebaseAuth());
     }

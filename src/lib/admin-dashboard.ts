@@ -35,6 +35,12 @@ import {
   type OutstandingBagrutTier,
 } from "@/lib/outstanding-bagrut";
 import { computeHightechBagrutForStudents } from "@/lib/hightech-bagrut";
+import {
+  buildGradeYearMetrics,
+  computeAnalyticsSegments,
+  toMetric,
+  type GradeYearMetric,
+} from "@/lib/analytics-segments";
 import { calcSubjectProgressForObligations } from "@/lib/progress";
 import { resolveRelevantSubjects, type StudentWithRelations } from "@/lib/student-subjects";
 import type {
@@ -73,9 +79,12 @@ export type SchoolProgress = {
 
 export type OutstandingBagrutPreview = {
   candidateCount: number;
+  candidatePercent: number;
   greenCount: number;
   yellowCount: number;
   redCount: number;
+  studentCount: number;
+  byGradeYear: GradeYearMetric[];
   topCandidates: Array<{
     studentId: string;
     name: string;
@@ -87,6 +96,9 @@ export type OutstandingBagrutPreview = {
 
 export type HightechBagrutPreview = {
   candidateCount: number;
+  candidatePercent: number;
+  studentCount: number;
+  byGradeYear: GradeYearMetric[];
   topCandidates: Array<{
     studentId: string;
     name: string;
@@ -640,11 +652,28 @@ async function computeDashboard(session: AuthSession): Promise<AdminDashboardRes
       tierCounts[tier]++;
     }
 
+    const analytics = computeAnalyticsSegments({
+      students: scoped.scopedStudents,
+      classes: raw.classes,
+      examPaths: raw.examPaths,
+      tracks: raw.tracks,
+      subjects: raw.subjects,
+      grades: raw.grades,
+    });
+    const studentCount = analytics.school.studentCount;
+    const candidateMetric = toMetric(candidates.length, studentCount);
+
     outstandingBagrutPreview = {
       candidateCount: candidates.length,
+      candidatePercent: candidateMetric.percent,
       greenCount: tierCounts.green,
       yellowCount: tierCounts.yellow,
       redCount: tierCounts.red,
+      studentCount,
+      byGradeYear: buildGradeYearMetrics(
+        analytics.byGradeYear,
+        (s) => s.outstandingCandidates
+      ),
       topCandidates: candidates
         .filter((c) => c.outstandingBagrut.average != null)
         .sort((a, b) => {
@@ -666,8 +695,15 @@ async function computeDashboard(session: AuthSession): Promise<AdminDashboardRes
     };
 
     const hightechCandidates = hightechResults.filter((r) => r.hightechBagrut.isCandidate);
+    const hightechMetric = toMetric(hightechCandidates.length, studentCount);
     hightechBagrutPreview = {
       candidateCount: hightechCandidates.length,
+      candidatePercent: hightechMetric.percent,
+      studentCount,
+      byGradeYear: buildGradeYearMetrics(
+        analytics.byGradeYear,
+        (s) => s.hightechCandidates
+      ),
       topCandidates: hightechCandidates.slice(0, 5).map((c) => ({
         studentId: c.studentId,
         name: c.name,

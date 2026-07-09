@@ -23,6 +23,7 @@ import {
   CalendarDays,
   FileSpreadsheet,
   AlertTriangle,
+  BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { SiteLogos } from "@/components/ui/SiteLogos";
@@ -42,6 +43,7 @@ const dailyWorkLinks: NavLink[] = [
   { href: "/admin/students", label: "תלמידים", icon: Users },
   { href: "/admin/outstanding-bagrut", label: "בגרות מצטיינת", icon: Award },
   { href: "/admin/hightech-bagrut", label: "בגרות הייטק", icon: Cpu },
+  { href: "/admin/analytics", label: "סטטיסטיקות", icon: BarChart3 },
   { href: "/admin/grades", label: "הזנת ציונים", icon: ClipboardList },
   { href: "/admin/reports", label: "דוחות משימות", icon: FileSpreadsheet },
   { href: "/admin/missing-entries", label: "מורים ומטלות שלא הוזנו", icon: AlertTriangle },
@@ -153,7 +155,8 @@ export function Sidebar({
           if (
             (l.href === "/admin/students" ||
               l.href === "/admin/outstanding-bagrut" ||
-              l.href === "/admin/hightech-bagrut") &&
+              l.href === "/admin/hightech-bagrut" ||
+              l.href === "/admin/analytics") &&
             session &&
             !hasAnyStudentView(session)
           )

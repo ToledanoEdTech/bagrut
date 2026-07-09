@@ -87,7 +87,7 @@ export default function StudentsPage() {
   const confirm = useConfirm();
   const toast = useToast();
 
-  const { data: students = [], loading: studentsLoading, mutate: refreshStudents } =
+  const { data: students = [], loading: studentsLoading, error: studentsError, mutate: refreshStudents } =
     useApi<Student[]>("/api/students");
   const { data: classesRaw = [], mutate: refreshClasses } = useApi<ClassItem[]>("/api/classes");
   const { data: tracks = [], mutate: refreshTracks } = useApi<TrackOption[]>("/api/tracks");
@@ -356,6 +356,17 @@ export default function StudentsPage() {
         <div className="mt-8">
           <PageLoader variant="table" />
         </div>
+      </>
+    );
+  }
+
+  if (studentsError && students.length === 0) {
+    return (
+      <>
+        <PageHeader title={pageTitle} subtitle={pageSubtitle} />
+        <Alert variant="error" className="mt-6">
+          {studentsError}
+        </Alert>
       </>
     );
   }

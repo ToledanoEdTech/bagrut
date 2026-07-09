@@ -1,8 +1,6 @@
 import {
   calcObligationProgressContribution,
-  selectRelevantSubItems,
 } from "@/lib/grade-components";
-import { filterObligationsDueForStudent } from "@/lib/grade-year";
 
 type ProgressObligation = {
   id: string;
@@ -25,61 +23,49 @@ type ProgressGrade = {
   status: string;
 };
 
-function relevantObligationWeight(
-  obligation: ProgressObligation,
-  studentGradeYear?: string | null
-): number {
-  const subItems = obligation.subItems ?? [];
-  if (subItems.length === 0 || studentGradeYear === undefined) {
-    return obligation.weightPercent;
-  }
-  const allW = subItems.reduce((sum, i) => sum + i.weightPercent, 0);
-  if (allW <= 0) return obligation.weightPercent;
-  const due = selectRelevantSubItems(subItems, obligation.gradeYear, studentGradeYear);
-  const dueW = due.reduce((sum, i) => sum + i.weightPercent, 0);
-  return obligation.weightPercent * (dueW / allW);
-}
-
 /**
  * Resolves each grade's effective score from its components/sub-items before
  * computing subject progress. The top-level `score` field on a grade can be
  * stale for obligations that are graded via weighted components or sub-items,
  * so the estimated grade must always be derived from the resolved score.
  *
- * Use this everywhere the estimated grade ("ציון משוער") is shown so all
- * surfaces (student card, grade entry, dashboards) stay consistent.
+ * Progress and grade are always computed over the **entire subject** (all
+ * bagrut obligations), not only the current year's due tasks.
+ * "ציון סופי" only when every obligation is complete; otherwise "ציון ביניים".
+ *
+ * The optional `studentGradeYear` argument is kept for call-site compatibility
+ * but is ignored — year filtering belongs in UI timing badges, not in the
+ * bagrut grade / progress math.
  */
 export function calcSubjectProgressForObligations(
   obligations: ProgressObligation[],
   grades: ProgressGrade[],
-  studentGradeYear?: string | null
+  _studentGradeYear?: string | null
 ) {
-  const relevantObligations =
-    studentGradeYear !== undefined
-      ? filterObligationsDueForStudent(obligations, studentGradeYear)
-      : obligations;
   const gradeByObligationId = new Map(grades.map((g) => [g.obligationId, g]));
-  return calcSubjectProgress(relevantObligations, gradeByObligationId, studentGradeYear);
+  return calcSubjectProgress(obligations, gradeByObligationId);
 }
 
 export function calcSubjectProgress(
   obligations: ProgressObligation[],
   gradeByObligationId: Map<string, ProgressGrade>,
-  studentGradeYear?: string | null
+  /** @deprecated Ignored — progress is always full-subject. */
+  _studentGradeYear?: string | null
 ) {
   let completedWeight = 0;
   let scoredSum = 0;
   let scoredWeight = 0;
 
-  // "ציון סופי" = כל המטלות הרלוונטיות הוגשו/נבדקו/פטורות, ולכל מטלה שאינה פטורה יש ציון מלא.
+  // "ציון סופי" = כל מטלות המקצוע (בגרות) הושלמו ויש ציון מלא; אחרת "ציון ביניים".
   let allFinal = obligations.length > 0;
 
   for (const obligation of obligations) {
     const grade = gradeByObligationId.get(obligation.id);
+    // undefined year → full obligation weight / all sub-items
     const contribution = calcObligationProgressContribution(
       obligation,
       grade,
-      studentGradeYear
+      undefined
     );
 
     completedWeight += contribution.completedWeight;
@@ -97,10 +83,7 @@ export function calcSubjectProgress(
     }
   }
 
-  const totalWeight = obligations.reduce(
-    (s, o) => s + relevantObligationWeight(o, studentGradeYear),
-    0
-  );
+  const totalWeight = obligations.reduce((s, o) => s + o.weightPercent, 0);
   const progressPercent = totalWeight > 0 ? (completedWeight / totalWeight) * 100 : 0;
   const estimatedGrade = scoredWeight > 0 ? (scoredSum / scoredWeight) * 100 : null;
   const isFinal = allFinal && estimatedGrade != null;

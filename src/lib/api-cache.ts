@@ -9,11 +9,33 @@ const listeners = new Map<string, Set<() => void>>();
 
 const DEFAULT_TTL = 5 * 60 * 1000;
 
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+function handleUnauthorized() {
+  if (typeof window === "undefined") return;
+  const path = window.location.pathname;
+  if (path.startsWith("/login")) return;
+  invalidateCache();
+  window.location.href = `/login?from=${encodeURIComponent(path)}`;
+}
+
 export async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error((body as { error?: string }).error ?? `שגיאה ${res.status}`);
+    const message = (body as { error?: string }).error ?? `שגיאה ${res.status}`;
+    if (res.status === 401) {
+      handleUnauthorized();
+    }
+    throw new ApiError(message, res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -103,7 +125,7 @@ export function prefetch(key: string) {
   const entry = cache.get(key);
   if (entry && Date.now() - entry.ts < DEFAULT_TTL) return;
   if (entry?.promise) return;
-  void fetchCached(key);
+  void fetchCached(key).catch(() => {});
 }
 
 const ROUTE_PREFETCH: Record<string, string[]> = {
@@ -118,6 +140,7 @@ const ROUTE_PREFETCH: Record<string, string[]> = {
   "/admin/grades/import": ["/api/classes/list", "/api/grades/import/template"],
   "/admin/import": ["/api/students/import/template"],
   "/admin/staff": ["/api/staff"],
+  "/admin/analytics": ["/api/admin/analytics"],
   "/student": ["/api/student/dashboard"],
 };
 

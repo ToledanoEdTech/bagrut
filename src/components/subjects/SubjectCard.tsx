@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
+import { ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Circle } from "lucide-react";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import clsx from "clsx";
 import {
   calcObligationEarnedSubjectPoints,
+  calcObligationProgressContribution,
   formatObligationEarnedScoreLabel,
   formatSubItemProgressLabel,
   getObligationSubItemProgress,
@@ -143,11 +144,6 @@ export function SubjectCard({
   const displayName = formatSubjectDisplayName(name, { pathLabels, units, category });
   const showUnitsSeparately =
     units != null && category !== "MATH" && category !== "ENGLISH";
-  const dueObligations =
-    studentGradeYear !== undefined
-      ? obligations.filter((o) => isObligationRelevantForStudent(o, studentGradeYear))
-      : obligations;
-
   const openCurrentYear = obligations.filter((o) =>
     hasOpenTiming(o, gradeMap.get(o.id), studentGradeYear, "current")
   );
@@ -224,7 +220,7 @@ export function SubjectCard({
                   )}
                 </h3>
                 <p className="mt-0.5 text-sm text-slate-500">
-                  {dueObligations.length} חובות • {progress.progressPercent.toFixed(0)}% הושלם
+                  {obligations.length} חובות • {progress.progressPercent.toFixed(0)}% הושלם
                 </p>
                 {(hasOpenCurrent || hasOpenPast || futureCount > 0) && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -296,7 +292,7 @@ export function SubjectCard({
                   {estGrade.toFixed(0)}
                 </p>
                 <p className={clsx("text-caption", progress.isFinal && "font-semibold text-emerald-600")}>
-                  {progress.isFinal ? "ציון סופי" : "ציון משוער"}
+                  {progress.isFinal ? "ציון סופי" : "ציון ביניים"}
                 </p>
               </div>
             )}
@@ -381,8 +377,10 @@ export function SubjectCard({
                   const isFuture =
                     studentGradeYear !== undefined &&
                     !isObligationRelevantForStudent(o, studentGradeYear);
-                  const isPastDue =
-                    !isFuture && (timing === "past" || timing === "current");
+                  // השלמת מטלה לפי כל תתי-המטלות של הבגרות (לא רק השנה)
+                  const obligationDone =
+                    grade?.status === "EXEMPT" ||
+                    calcObligationProgressContribution(o, grade, undefined).isComplete;
 
                   return (
                     <div
@@ -409,6 +407,17 @@ export function SubjectCard({
                       <div className="flex flex-wrap items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
+                            {obligationDone ? (
+                              <CheckCircle2
+                                className="h-5 w-5 shrink-0 text-emerald-600"
+                                aria-label="הושלם"
+                              />
+                            ) : (
+                              <Circle
+                                className="h-5 w-5 shrink-0 text-slate-400"
+                                aria-label="נשאר לעשות"
+                              />
+                            )}
                             {isMissing && (
                               <AlertCircle className="h-5 w-5 shrink-0 text-red-600" aria-label="חסר ציון" />
                             )}
@@ -426,6 +435,15 @@ export function SubjectCard({
                                 שאלון {o.questionnaireNumber}
                               </span>
                             )}
+                            {obligationDone ? (
+                              <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-bold text-white">
+                                הושלם
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-xs font-bold text-white">
+                                נשאר לעשות
+                              </span>
+                            )}
                             <span className={status.className}>{status.label}</span>
                             {timing === "past" && (
                               <span className="rounded-full bg-sky-600 px-2.5 py-0.5 text-xs font-bold text-white">
@@ -440,11 +458,6 @@ export function SubjectCard({
                             {isFuture && (
                               <span className="rounded-full bg-slate-400 px-2.5 py-0.5 text-xs font-bold text-white">
                                 לשנים הבאות
-                              </span>
-                            )}
-                            {isPastDue && !isMissing && statusKey === "NOT_STARTED" && (
-                              <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-xs font-bold text-white">
-                                טרם הוגש
                               </span>
                             )}
                           </div>
@@ -662,6 +675,8 @@ export function SubjectCard({
                             {o.subItems.map((si, i) => {
                               const sortOrder = si.sortOrder ?? i;
                               const subItemScore = grade?.subItemScores?.[sortOrder];
+                              const subItemDone =
+                                grade?.status === "EXEMPT" || subItemScore != null;
                               const subTiming =
                                 studentGradeYear !== undefined
                                   ? getSubItemTiming(
@@ -690,10 +705,30 @@ export function SubjectCard({
                                 >
                                   <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-1.5">
+                                      {subItemDone ? (
+                                        <CheckCircle2
+                                          className="h-4 w-4 shrink-0 text-emerald-600"
+                                          aria-label="הושלם"
+                                        />
+                                      ) : (
+                                        <Circle
+                                          className="h-4 w-4 shrink-0 text-slate-400"
+                                          aria-label="נשאר לעשות"
+                                        />
+                                      )}
                                       <span className="font-medium text-slate-800">{si.name}</span>
                                       <span className="text-sm text-primary-600">
                                         ({si.weightPercent}%)
                                       </span>
+                                      {subItemDone ? (
+                                        <span className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                          הושלם
+                                        </span>
+                                      ) : (
+                                        <span className="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                          נשאר
+                                        </span>
+                                      )}
                                       {subTiming === "past" && (
                                         <span className="rounded bg-sky-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
                                           היה עליך

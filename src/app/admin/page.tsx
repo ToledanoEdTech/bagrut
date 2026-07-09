@@ -57,6 +57,8 @@ import {
 
   Settings,
 
+  BarChart3,
+
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
@@ -397,81 +399,76 @@ function ClassSummaryCard({ byClass }: { byClass: GradeGaps["byClass"] }) {
 
 
 
-function OutstandingPreviewCard({ preview }: { preview: OutstandingBagrutPreview }) {
-
+function GradeYearBreakdown({ rows }: { rows: OutstandingBagrutPreview["byGradeYear"] }) {
+  const visible = rows.filter((r) => r.studentCount > 0 || r.count > 0);
+  if (visible.length === 0) return null;
   return (
-
-    <Card className="p-6">
-
-      <div className="flex items-center justify-between gap-3">
-
-        <div className="flex items-center gap-3">
-
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-100">
-
-            <Award className="h-5 w-5" />
-
+    <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3">
+      {visible.map((r) => (
+        <li
+          key={r.gradeYear}
+          className="flex items-center justify-between text-xs text-slate-600"
+        >
+          <span>{r.gradeYear}</span>
+          <span className="tabular-nums font-medium text-slate-800">
+            {r.count} ({r.percent}%)
           </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
+function OutstandingPreviewCard({ preview }: { preview: OutstandingBagrutPreview }) {
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-100">
+            <Award className="h-5 w-5" />
+          </span>
           <div>
-
             <h2 className="text-h2 text-slate-900">בגרות מצטיינת</h2>
-
             <p className="text-sm text-slate-500">
-
-              {preview.candidateCount} מועמדים
+              {preview.candidateCount} ({preview.candidatePercent}%) מועמדים
               {preview.greenCount > 0 && ` · ${preview.greenCount} ירוק`}
               {preview.yellowCount > 0 && ` · ${preview.yellowCount} צהוב`}
               {preview.redCount > 0 && ` · ${preview.redCount} אדום`}
-
             </p>
-
           </div>
-
         </div>
-
-        <Link
-
-          href="/admin/outstanding-bagrut"
-
-          className="text-sm font-medium text-primary-600 hover:text-primary-700"
-
-        >
-
-          הכל
-
-        </Link>
-
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Link
+            href="/admin/outstanding-bagrut"
+            className="text-sm font-medium text-primary-600 hover:text-primary-700"
+          >
+            הכל
+          </Link>
+          <Link
+            href="/admin/analytics"
+            className="text-xs font-medium text-slate-500 hover:text-primary-600"
+          >
+            לכל הסטטיסטיקות
+          </Link>
+        </div>
       </div>
 
+      <GradeYearBreakdown rows={preview.byGradeYear} />
+
       {preview.topCandidates.length === 0 ? (
-
         <p className="mt-5 text-sm text-slate-500">אין מועמדים כרגע</p>
-
       ) : (
-
         <ul className="mt-5 space-y-2">
-
           {preview.topCandidates.map((c) => (
-
             <li
-
               key={c.studentId}
-
               className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3"
-
             >
-
               <div className="min-w-0">
-
                 <p className="truncate font-medium text-slate-800">{c.name}</p>
-
                 <p className="text-xs text-slate-500">{c.className}</p>
-
               </div>
-
               <div className="flex shrink-0 items-center gap-2">
-
                 <span
                   className={
                     c.tier === "green"
@@ -483,117 +480,72 @@ function OutstandingPreviewCard({ preview }: { preview: OutstandingBagrutPreview
                 >
                   {c.average.toFixed(1)}
                 </span>
-
                 <OutstandingBagrutBadge size="sm" tier={c.tier} />
-
               </div>
-
             </li>
-
           ))}
-
         </ul>
-
       )}
-
     </Card>
-
   );
-
 }
 
-
-
 function HightechPreviewCard({ preview }: { preview: HightechBagrutPreview }) {
-
   return (
-
     <Card className="p-6">
-
       <div className="flex items-center justify-between gap-3">
-
         <div className="flex items-center gap-3">
-
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50 text-sky-600 ring-1 ring-inset ring-sky-100">
-
             <Cpu className="h-5 w-5" />
-
           </span>
-
           <div>
-
             <h2 className="text-h2 text-slate-900">בגרות הייטק</h2>
-
             <p className="text-sm text-slate-500">
-
-              {preview.candidateCount} מועמדים
-
+              {preview.candidateCount} ({preview.candidatePercent}%) מועמדים
             </p>
-
           </div>
-
         </div>
-
-        <Link
-
-          href="/admin/hightech-bagrut"
-
-          className="text-sm font-medium text-primary-600 hover:text-primary-700"
-
-        >
-
-          הכל
-
-        </Link>
-
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Link
+            href="/admin/hightech-bagrut"
+            className="text-sm font-medium text-primary-600 hover:text-primary-700"
+          >
+            הכל
+          </Link>
+          <Link
+            href="/admin/analytics"
+            className="text-xs font-medium text-slate-500 hover:text-primary-600"
+          >
+            לכל הסטטיסטיקות
+          </Link>
+        </div>
       </div>
 
+      <GradeYearBreakdown rows={preview.byGradeYear} />
+
       {preview.topCandidates.length === 0 ? (
-
         <p className="mt-5 text-sm text-slate-500">אין מועמדים כרגע</p>
-
       ) : (
-
         <ul className="mt-5 space-y-2">
-
           {preview.topCandidates.map((c) => (
-
             <li
-
               key={c.studentId}
-
               className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3"
-
             >
-
               <div className="min-w-0">
-
                 <p className="truncate font-medium text-slate-800">{c.name}</p>
-
                 <p className="text-xs text-slate-500">{c.className}</p>
-
               </div>
-
               <div className="flex shrink-0 items-center gap-2">
-
                 <span className="text-xs text-slate-500">{c.scienceSubjectName}</span>
-
                 <HightechBagrutBadge size="sm" />
-
               </div>
-
             </li>
-
           ))}
-
         </ul>
-
       )}
-
     </Card>
-
   );
-
 }
 
 
@@ -1015,6 +967,22 @@ export default function AdminDashboard() {
           label: "בגרות הייטק",
 
           icon: Cpu,
+
+          variant: "secondary" as const,
+
+        }
+
+      : null,
+
+    canStudents
+
+      ? {
+
+          href: "/admin/analytics",
+
+          label: "סטטיסטיקות",
+
+          icon: BarChart3,
 
           variant: "secondary" as const,
 
