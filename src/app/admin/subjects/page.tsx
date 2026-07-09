@@ -61,6 +61,7 @@ const categories: Record<string, string> = {
   ENGLISH: "אנגלית",
   TRACK: "מגמה",
   EXTENSION: "הרחבה",
+  SOCIAL: "מעורבות חברתית",
 };
 
 async function apiJson<T>(url: string, init?: RequestInit): Promise<{ data?: T; error?: string }> {

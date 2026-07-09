@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Settings2,
   ArrowUpCircle,
+  GraduationCap,
 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -19,6 +20,7 @@ import { Alert } from "@/components/ui/Alert";
 import { useToast } from "@/components/ui/Toast";
 import { invalidateCache } from "@/lib/api-cache";
 import type { GradeReminderSettings } from "@/lib/grade-reminders";
+import type { ResolvedBagrutEligibilitySettings } from "@/lib/bagrut-eligibility";
 
 type SettingsResponse = {
   settings: GradeReminderSettings;
@@ -64,6 +66,11 @@ type ClassPromotionResponse = {
   skippedNames: string[];
 };
 
+type BagrutEligibilityResponse = {
+  settings: ResolvedBagrutEligibilitySettings;
+  defaults: ResolvedBagrutEligibilitySettings;
+};
+
 function formatDateTime(iso?: string): string {
   if (!iso) return "—";
   return new Intl.DateTimeFormat("he-IL", {
@@ -84,6 +91,14 @@ export default function SettingsPage() {
     "/api/settings/class-promotion"
   );
   const [promoting, setPromoting] = useState<"dry" | "run" | null>(null);
+  const { data: eligibilityData, mutate: mutateEligibility } =
+    useApi<BagrutEligibilityResponse>("/api/settings/bagrut-eligibility");
+  const [eligibilityDraft, setEligibilityDraft] =
+    useState<ResolvedBagrutEligibilitySettings | null>(null);
+  const [savingEligibility, setSavingEligibility] = useState(false);
+
+  const eligibilitySettings =
+    eligibilityDraft ?? eligibilityData?.settings ?? null;
 
   const enabled = data?.settings.enabled ?? false;
   const minThreshold = data?.settings.minThreshold ?? 1;
@@ -223,13 +238,35 @@ export default function SettingsPage() {
     [mutatePromo, toast]
   );
 
+  const saveEligibility = useCallback(async () => {
+    if (!eligibilitySettings) return;
+    setSavingEligibility(true);
+    try {
+      const res = await fetch("/api/settings/bagrut-eligibility", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(eligibilitySettings),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "שגיאה בשמירה");
+      invalidateCache("/api/settings/bagrut-eligibility");
+      setEligibilityDraft(null);
+      await mutateEligibility();
+      toast.success("הגדרות זכאות לבגרות נשמרו");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בשמירה");
+    } finally {
+      setSavingEligibility(false);
+    }
+  }, [eligibilitySettings, mutateEligibility, toast]);
+
   if (loading && !data) return <PageLoader />;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="תזכורות הזנת ציונים"
-        subtitle="הפעלה, בדיקות ידניות ומעקב אחרי ריצות אוטומטיות"
+        title="הגדרות מערכת"
+        subtitle="תזכורות ציונים, זכאות לבגרות ועליית כיתות"
       />
 
       {data && !data.smtpConfigured && (
@@ -479,6 +516,112 @@ export default function SettingsPage() {
             curl -H &quot;Authorization: Bearer $CRON_SECRET&quot; &quot;$APP_URL/api/test-email?to=...&quot;
           </code>
         </p>
+      </Card>
+
+      <Card className="space-y-4 p-6">
+        <div className="flex items-center gap-2 text-slate-800">
+          <GraduationCap className="h-5 w-5 text-primary-600" />
+          <h2 className="text-lg font-bold">זכאות לתעודת בגרות</h2>
+        </div>
+        <p className="text-sm text-slate-500">
+          הגדרות לזיהוי תלמידים שאינם זכאים לתעודת בגרות לפי ציון סופי, כישלון
+          בעברית, מעורבות חברתית, או מספר מקצועות נכשלים.
+        </p>
+
+        {eligibilitySettings && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label">סף כישלון כללי (ציון ומטה)</label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={eligibilitySettings.generalFailMax}
+                onChange={(e) =>
+                  setEligibilityDraft({
+                    ...eligibilitySettings,
+                    generalFailMax: Number(e.target.value),
+                  })
+                }
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                ברירת מחדל: 46 (כלומר 46 ומטה = נכשל)
+              </p>
+            </div>
+            <div>
+              <label className="label">סף כישלון בעברית (ציון ומטה)</label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={eligibilitySettings.hebrewFailMax}
+                onChange={(e) =>
+                  setEligibilityDraft({
+                    ...eligibilitySettings,
+                    hebrewFailMax: Number(e.target.value),
+                  })
+                }
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                ברירת מחדל: 55 (כלומר 55 ומטה = נכשל בעברית)
+              </p>
+            </div>
+            <div>
+              <label className="label">מספר מקצועות נכשלים שמבטל זכאות</label>
+              <Input
+                type="number"
+                min={1}
+                max={20}
+                value={eligibilitySettings.maxFailedSubjects}
+                onChange={(e) =>
+                  setEligibilityDraft({
+                    ...eligibilitySettings,
+                    maxFailedSubjects: Number(e.target.value),
+                  })
+                }
+              />
+              <p className="mt-1 text-xs text-slate-500">ברירת מחדל: 2</p>
+            </div>
+            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+              <div>
+                <p className="font-medium text-slate-800">חובת מעבר במעורבות חברתית</p>
+                <p className="text-sm text-slate-500">
+                  תלמיד שלא עבר מעורבות חברתית אינו זכאי
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                className="h-5 w-5"
+                checked={eligibilitySettings.requireSocialInvolvementPass}
+                onChange={(e) =>
+                  setEligibilityDraft({
+                    ...eligibilitySettings,
+                    requireSocialInvolvementPass: e.target.checked,
+                  })
+                }
+              />
+            </label>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-3">
+          <Button
+            variant="primary"
+            disabled={savingEligibility || !eligibilityDraft}
+            onClick={saveEligibility}
+          >
+            {savingEligibility ? "שומר..." : "שמור הגדרות זכאות"}
+          </Button>
+          {eligibilityDraft && (
+            <Button
+              variant="secondary"
+              onClick={() => setEligibilityDraft(null)}
+              disabled={savingEligibility}
+            >
+              ביטול
+            </Button>
+          )}
+        </div>
       </Card>
 
       <Card className="space-y-4 p-6">

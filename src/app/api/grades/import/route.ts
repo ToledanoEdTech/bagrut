@@ -5,6 +5,7 @@ import {
   listStudents,
   listSubjects,
   upsertGradesBulk,
+  listAllGrades,
 } from "@/lib/firestore";
 import { parseImportWorkbook } from "@/lib/excel-import";
 import {
@@ -20,9 +21,12 @@ import {
   expandObligationMatrixTasks,
   resolveObligationGradeScore,
 } from "@/lib/grade-components";
+import {
+  isSocialInvolvementSubject,
+  parseQualitativeLevelInput,
+} from "@/lib/social-involvement";
 import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
-import { listAllGrades } from "@/lib/firestore";
-import type { SubmissionStatus, Subject, Obligation } from "@/lib/types";
+import type { QualitativeLevel, SubmissionStatus, Subject, Obligation } from "@/lib/types";
 
 type ImportRow = {
   className: string;
@@ -31,6 +35,7 @@ type ImportRow = {
   taskName: string;
   studentName: string;
   score: number | null;
+  qualitativeLevel: QualitativeLevel | null;
   status: SubmissionStatus | null;
   hasScoreCol: boolean;
 };
@@ -74,11 +79,6 @@ type TaskTarget =
   | { kind: "ambiguous" }
   | null;
 
-/**
- * מזהה לאיזו תת-מטלה/רכיב הציון בשורה שייך.
- * אם עמודת "רכיב/תת-מטלה" ריקה ולמטלה יש מטלה בודדת — זהו הציון הכללי.
- * אם ריקה ולמטלה כמה רכיבים/תתי-מטלה — לא ניתן לקבוע (ambiguous).
- */
 function resolveTaskTarget(ob: Obligation, taskName: string): TaskTarget {
   const options = expandObligationMatrixTasks(ob, 0);
   const trimmed = taskName.trim().toLowerCase();
@@ -121,6 +121,7 @@ export async function POST(req: NextRequest) {
         "מטלה",
         "שם תלמיד",
         "ציון",
+        "הערכה",
         "סטטוס",
         "רכיב/תת-מטלה",
       ],
@@ -162,7 +163,7 @@ export async function POST(req: NextRequest) {
     const obligationName = findColumn(row, "מטלה", "obligation", "Obligation");
     const taskName = findColumn(row, "רכיב/תת-מטלה", "תת-מטלה", "רכיב", "task", "Task");
     const studentName = findColumn(row, "שם תלמיד", "שם", "name", "Name");
-    const scoreRaw = findColumn(row, "ציון", "score", "Score");
+    const scoreRaw = findColumn(row, "ציון", "הערכה", "score", "Score");
     const statusRaw = findColumn(row, "סטטוס", "status", "Status");
 
     if (!className && !subjectName && !obligationName && !studentName) {
@@ -178,14 +179,32 @@ export async function POST(req: NextRequest) {
       return;
     }
 
-    const score =
-      scoreRaw === "" || scoreRaw === "-"
-        ? null
-        : parseFloat(scoreRaw.replace(",", "."));
+    const subjectHint = subjectByName.get(subjectName.trim().toLowerCase());
+    const looksSocial =
+      (subjectHint && isSocialInvolvementSubject(subjectHint)) ||
+      !!parseQualitativeLevelInput(scoreRaw);
 
-    if (scoreRaw && (isNaN(score!) || !validateScore(score))) {
-      parsedRows.push({ rowNum, data: null, error: "ציון לא חוקי (0–100)" });
-      return;
+    let score: number | null = null;
+    let qualitativeLevel: QualitativeLevel | null = null;
+
+    if (scoreRaw && scoreRaw !== "-") {
+      if (looksSocial) {
+        qualitativeLevel = parseQualitativeLevelInput(scoreRaw);
+        if (!qualitativeLevel) {
+          parsedRows.push({
+            rowNum,
+            data: null,
+            error: `הערכה לא חוקית: ${scoreRaw} (לא עבר / עבר / עבר בהצלחה / עבר בהצטיינות)`,
+          });
+          return;
+        }
+      } else {
+        score = parseFloat(scoreRaw.replace(",", "."));
+        if (isNaN(score) || !validateScore(score)) {
+          parsedRows.push({ rowNum, data: null, error: "ציון לא חוקי (0–100)" });
+          return;
+        }
+      }
     }
 
     const status = statusRaw ? parseStatusInput(statusRaw) : null;
@@ -203,6 +222,7 @@ export async function POST(req: NextRequest) {
         taskName,
         studentName,
         score,
+        qualitativeLevel,
         status,
         hasScoreCol: scoreRaw !== "",
       },
@@ -212,7 +232,6 @@ export async function POST(req: NextRequest) {
   const errors: string[] = [];
   let skipped = 0;
 
-  // מפת ציונים קיימים כדי לשמר שדות שלא עודכנו (רכיבים/תתי-מטלה נפרדים)
   const allGrades = await listAllGrades();
   const existingByKey = new Map(
     allGrades.map((g) => [`${g.studentId}:${g.obligationId}`, g])
@@ -224,7 +243,9 @@ export async function POST(req: NextRequest) {
     classId: string;
     subjectId: string;
     obligation: Obligation;
+    isSocial: boolean;
     score: number | null;
+    qualitativeLevel: QualitativeLevel | null;
     componentScores: Record<number, number | null>;
     subItemScores: Record<number, number | null>;
     status: SubmissionStatus;
@@ -233,7 +254,6 @@ export async function POST(req: NextRequest) {
   };
 
   const aggregates = new Map<string, Aggregate>();
-  // מטמון בדיקות רלוונטיות/הרשאה לכל (תלמיד, מטלה)
   const relevanceCache = new Map<string, boolean>();
 
   for (const { rowNum, data, error: parseError } of parsedRows) {
@@ -268,6 +288,24 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
+    const isSocial = isSocialInvolvementSubject(subject);
+
+    if (data.hasScoreCol && isSocial && !data.qualitativeLevel) {
+      errors.push(
+        `שורה ${rowNum}: למעורבות חברתית יש להזין הערכה (לא עבר / עבר / עבר בהצלחה / עבר בהצטיינות)`
+      );
+      skipped++;
+      continue;
+    }
+
+    if (data.hasScoreCol && !isSocial && data.qualitativeLevel != null && data.score == null) {
+      errors.push(
+        `שורה ${rowNum}: למקצוע זה יש להזין ציון מספרי (0–100), לא הערכה איכותית`
+      );
+      skipped++;
+      continue;
+    }
+
     const obligation = findObligationInSubject(subject, data.obligationName);
     if (!obligation) {
       errors.push(`שורה ${rowNum}: מטלה לא נמצאה — ${data.obligationName}`);
@@ -291,7 +329,6 @@ export async function POST(req: NextRequest) {
         skipped++;
         continue;
       }
-      // שורה ללא ציון וללא רכיב — נחיל רק סטטוס ברמת המטלה
     }
 
     const relevanceKey = `${student.id}:${obligation.id}`;
@@ -332,7 +369,9 @@ export async function POST(req: NextRequest) {
         classId: cls.id,
         subjectId: subject.id,
         obligation,
+        isSocial,
         score: existing?.score ?? null,
+        qualitativeLevel: existing?.qualitativeLevel ?? null,
         componentScores: { ...(existing?.componentScores ?? {}) },
         subItemScores: { ...(existing?.subItemScores ?? {}) },
         status: (existing?.status as SubmissionStatus) ?? "NOT_STARTED",
@@ -343,8 +382,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (data.hasScoreCol && target.kind !== "ambiguous") {
-      if (target.kind === "single") {
+      if (isSocial) {
+        agg.qualitativeLevel = data.qualitativeLevel;
+        agg.score = null;
+      } else if (target.kind === "single") {
         agg.score = data.score;
+        agg.qualitativeLevel = null;
       } else if (target.kind === "component") {
         agg.componentScores[target.sortOrder] = data.score;
       } else {
@@ -363,6 +406,24 @@ export async function POST(req: NextRequest) {
   const toUpsert = Array.from(aggregates.values())
     .filter((agg) => agg.touched)
     .map((agg) => {
+      if (agg.isSocial) {
+        const status = agg.explicitStatus
+          ? agg.status
+          : agg.qualitativeLevel
+            ? autoStatusOnScore(0, agg.status)
+            : agg.status;
+        return {
+          studentId: agg.studentId,
+          obligationId: agg.obligationId,
+          score: null,
+          qualitativeLevel: agg.qualitativeLevel,
+          componentScores: null,
+          subItemScores: null,
+          status,
+          notes: null as null,
+        };
+      }
+
       const resolved = resolveObligationGradeScore(agg.obligation, {
         score: agg.score,
         componentScores: agg.componentScores,
@@ -375,6 +436,7 @@ export async function POST(req: NextRequest) {
         studentId: agg.studentId,
         obligationId: agg.obligationId,
         score: agg.score,
+        qualitativeLevel: null,
         componentScores:
           Object.keys(agg.componentScores).length > 0 ? agg.componentScores : null,
         subItemScores:

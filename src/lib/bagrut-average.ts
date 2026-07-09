@@ -8,7 +8,10 @@
  * מקבל ממוצע (5×100 + 2×80) / (5+2) = 660/7 ≈ 94.3
  *
  * מקצועות ללא ציון (estimatedGrade == null) אינם נכללים במונה ובמכנה.
+ * מעורבות חברתית (קטגוריה SOCIAL) אינה נכללת בממוצע.
  */
+
+import { isSocialCategory } from "@/lib/social-involvement";
 
 export type WeightedAverageSubject = {
   units: number | null;
@@ -27,6 +30,7 @@ export function resolveSubjectUnits(subject: {
   units: number | null;
   category?: string | null;
 }): number {
+  if (isSocialCategory(subject.category)) return 0;
   if (subject.units != null && subject.units > 0) return subject.units;
   return 1;
 }
@@ -39,9 +43,11 @@ export function calcWeightedBagrutAverage(
   let gradedSubjectsCount = 0;
 
   for (const subject of subjects) {
+    if (isSocialCategory(subject.category)) continue;
     const grade = subject.progress.estimatedGrade;
     if (grade == null) continue;
     const units = resolveSubjectUnits(subject);
+    if (units <= 0) continue;
     weightedSum += grade * units;
     totalUnits += units;
     gradedSubjectsCount += 1;

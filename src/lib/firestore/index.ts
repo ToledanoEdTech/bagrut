@@ -7,6 +7,7 @@ import type {
   Obligation,
   Role,
   StaffPermission,
+  QualitativeLevel,
   StaffRecord,
   Student,
   Subject,
@@ -498,6 +499,64 @@ export async function createSubject(data: Omit<Subject, "id">) {
   return subject;
 }
 
+/**
+ * מוודא שמקצוע "מעורבות חברתית" קיים ומשויך לכל תוכניות הבחינות.
+ * בטוח לקריאה חוזרת (idempotent).
+ */
+export async function ensureSocialInvolvementSubject(): Promise<Subject> {
+  const subjects = await listSubjects();
+  let social = subjects.find(
+    (s) =>
+      s.category === "SOCIAL" ||
+      s.name.trim() === "מעורבות חברתית"
+  );
+
+  if (!social) {
+    social = await createSubject({
+      name: "מעורבות חברתית",
+      units: null,
+      category: "SOCIAL",
+      trackId: null,
+      teacherId: null,
+      obligations: [
+        {
+          id: `ob_social_${Date.now()}`,
+          questionnaireNumber: null,
+          name: "מעורבות חברתית",
+          weightPercent: 100,
+          examType: "פנימי",
+          studyMaterial: null,
+          examEvent: null,
+          gradeYear: "שכבת יא",
+          gradeEntryDueDate: `${new Date().getFullYear()}-06-01`,
+          sortOrder: 0,
+          components: [],
+          subItems: [],
+        },
+      ],
+    });
+  } else if (social.category !== "SOCIAL" || social.units != null) {
+    await updateSubject(social.id, {
+      category: "SOCIAL",
+      units: null,
+      name: "מעורבות חברתית",
+    });
+    social = (await getSubjectById(social.id))!;
+  }
+
+  const paths = await listExamPaths();
+  for (const path of paths) {
+    if (!path.subjectIds.includes(social.id)) {
+      await adminDb.collection("examPaths").doc(path.id).update({
+        subjectIds: [...path.subjectIds, social.id],
+      });
+      invalidateServerCache("examPaths");
+    }
+  }
+
+  return social;
+}
+
 export async function updateSubject(id: string, data: Partial<Omit<Subject, "id">>) {
   await adminDb.collection("subjects").doc(id).update({ ...data, updatedAt: FieldValue.serverTimestamp() });
   invalidateServerCache("subjects");
@@ -640,6 +699,7 @@ export async function upsertGrades(
   grades: Array<{
     obligationId: string;
     score?: number | null;
+    qualitativeLevel?: QualitativeLevel | null;
     componentScores?: Record<number, number | null> | null;
     subItemScores?: Record<number, number | null> | null;
     status: SubmissionStatus;
@@ -662,6 +722,7 @@ export async function upsertGrades(
         studentId,
         obligationId: g.obligationId,
         score: g.score ?? null,
+        qualitativeLevel: g.qualitativeLevel ?? null,
         componentScores: g.componentScores ?? null,
         subItemScores: g.subItemScores ?? null,
         status: g.status,
@@ -673,6 +734,7 @@ export async function upsertGrades(
       const doc = existing.docs[0]!;
       const updates = {
         score: g.score ?? null,
+        qualitativeLevel: g.qualitativeLevel ?? null,
         componentScores: g.componentScores ?? null,
         subItemScores: g.subItemScores ?? null,
         status: g.status,
@@ -686,6 +748,7 @@ export async function upsertGrades(
         studentId: gradeData.studentId,
         obligationId: gradeData.obligationId,
         score: g.score ?? null,
+        qualitativeLevel: g.qualitativeLevel ?? null,
         componentScores: g.componentScores ?? null,
         subItemScores: g.subItemScores ?? null,
         status: g.status,
@@ -723,6 +786,7 @@ export async function upsertGradesBulk(
     studentId: string;
     obligationId: string;
     score?: number | null;
+    qualitativeLevel?: QualitativeLevel | null;
     componentScores?: Record<number, number | null> | null;
     subItemScores?: Record<number, number | null> | null;
     status: SubmissionStatus;
@@ -765,10 +829,12 @@ export async function upsertGradesBulk(
   for (const entry of entries) {
     const key = `${entry.studentId}:${entry.obligationId}`;
     const existing = existingMap.get(key);
+    const qualitativeLevel = entry.qualitativeLevel ?? null;
 
     if (existing) {
       batch.update(adminDb.collection("grades").doc(existing.id), {
         score: entry.score ?? null,
+        qualitativeLevel,
         componentScores: entry.componentScores ?? null,
         subItemScores: entry.subItemScores ?? null,
         status: entry.status,
@@ -778,6 +844,7 @@ export async function upsertGradesBulk(
       results.push({
         ...existing,
         score: entry.score ?? null,
+        qualitativeLevel,
         componentScores: entry.componentScores ?? null,
         subItemScores: entry.subItemScores ?? null,
         status: entry.status,
@@ -790,6 +857,7 @@ export async function upsertGradesBulk(
         studentId: entry.studentId,
         obligationId: entry.obligationId,
         score: entry.score ?? null,
+        qualitativeLevel,
         componentScores: entry.componentScores ?? null,
         subItemScores: entry.subItemScores ?? null,
         status: entry.status,

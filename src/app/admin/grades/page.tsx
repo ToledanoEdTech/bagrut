@@ -6,7 +6,7 @@ import { SubjectCard } from "@/components/subjects/SubjectCard";
 import { calcWeightedComponentScore, calcPartialWeightedSubItemScore, normalizeComponents, normalizeSubItems, resolveObligationGradeScore } from "@/lib/grade-components";
 import { calcSubjectProgressForObligations } from "@/lib/progress";
 import { autoStatusOnScore } from "@/lib/grade-status";
-import type { SubmissionStatus } from "@/lib/types";
+import type { QualitativeLevel, SubmissionStatus } from "@/lib/types";
 import { Save, Loader2, ChevronRight, ChevronLeft, ArrowLeft, AlertCircle, Check } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -58,6 +58,7 @@ type Subject = {
 type Grade = {
   obligationId: string;
   score: number | null;
+  qualitativeLevel?: QualitativeLevel | null;
   componentScores?: Record<number, number | null> | null;
   subItemScores?: Record<number, number | null> | null;
   status: string;
@@ -66,6 +67,7 @@ type Grade = {
 type GradeRow = {
   obligationId: string;
   score: number | null;
+  qualitativeLevel?: QualitativeLevel | null;
   componentScores?: Record<number, number | null> | null;
   subItemScores?: Record<number, number | null> | null;
   status: string;
@@ -164,6 +166,7 @@ export default function GradesPage() {
     const initial = gradesData.map((g) => ({
       obligationId: g.obligationId,
       score: g.score,
+      qualitativeLevel: g.qualitativeLevel ?? null,
       componentScores: g.componentScores ?? null,
       subItemScores: g.subItemScores ?? null,
       status: g.status,
@@ -336,6 +339,12 @@ export default function GradesPage() {
             existing.status as SubmissionStatus
           );
         }
+        if (field === "qualitativeLevel") {
+          next.score = null;
+          if (value) {
+            next.status = autoStatusOnScore(0, existing.status as SubmissionStatus);
+          }
+        }
         return prev.map((g) => (g.obligationId === obligationId ? next : g));
       }
       return [
@@ -343,9 +352,15 @@ export default function GradesPage() {
         {
           obligationId,
           score: field === "score" ? (value as number | null) : null,
+          qualitativeLevel: field === "qualitativeLevel" ? (value as QualitativeLevel | null) : null,
           componentScores: null,
           subItemScores: null,
-          status: field === "status" ? (value as string) : "NOT_STARTED",
+          status:
+            field === "status"
+              ? (value as string)
+              : field === "qualitativeLevel" && value
+                ? autoStatusOnScore(0, "NOT_STARTED")
+                : "NOT_STARTED",
         },
       ];
     });
@@ -567,7 +582,8 @@ export default function GradesPage() {
               const progress = calcSubjectProgressForObligations(
                 subject.obligations,
                 subjectGrades,
-                selectedStudent?.class.gradeYear
+                selectedStudent?.class.gradeYear,
+                { name: subject.name, category: subject.category }
               );
 
               return (

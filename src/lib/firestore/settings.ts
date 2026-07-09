@@ -1,4 +1,5 @@
 import { adminDb } from "@/lib/firebase/admin";
+import type { BagrutEligibilitySettings } from "@/lib/bagrut-eligibility";
 import type { GradeReminderSettings } from "@/lib/grade-reminders";
 
 const SETTINGS_DOC = "settings/general";
@@ -13,6 +14,7 @@ export interface ClassPromotionSettings {
 export interface GeneralSettings {
   gradeReminders?: GradeReminderSettings;
   classPromotion?: ClassPromotionSettings;
+  bagrutEligibility?: BagrutEligibilitySettings;
 }
 
 export async function getGeneralSettings(): Promise<GeneralSettings> {
@@ -46,5 +48,19 @@ export async function updateClassPromotionSettings(
   const current = await getClassPromotionSettings();
   const next: ClassPromotionSettings = { ...current, ...patch };
   await adminDb.doc(SETTINGS_DOC).set({ classPromotion: next }, { merge: true });
+  return next;
+}
+
+export async function getBagrutEligibilitySettings(): Promise<BagrutEligibilitySettings> {
+  const settings = await getGeneralSettings();
+  return settings.bagrutEligibility ?? {};
+}
+
+export async function updateBagrutEligibilitySettings(
+  patch: Partial<BagrutEligibilitySettings>
+): Promise<BagrutEligibilitySettings> {
+  const current = await getBagrutEligibilitySettings();
+  const next: BagrutEligibilitySettings = { ...current, ...patch };
+  await adminDb.doc(SETTINGS_DOC).set({ bagrutEligibility: next }, { merge: true });
   return next;
 }

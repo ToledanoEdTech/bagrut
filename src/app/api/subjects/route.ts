@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   createSubject,
   deleteSubject,
+  ensureSocialInvolvementSubject,
   listSubjectsByPath,
   listSubjectsEnriched,
   updateSubject,
@@ -13,6 +14,9 @@ import { validateCanonicalGradeYear } from "@/lib/grade-year";
 export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
   if (error) return error;
+
+  // ודא שמעורבות חברתית קיימת לפני הצגת רשימת המקצועות
+  await ensureSocialInvolvementSubject();
 
   const { searchParams } = new URL(req.url);
   const pathId = searchParams.get("pathId");

@@ -28,6 +28,8 @@ type StatItem = {
   subtitle?: string;
   icon: StatIconName;
   color?: "primary" | "success" | "warning" | "info" | "danger";
+  onClick?: () => void;
+  clickHint?: string;
 };
 
 export function StatCardGrid({

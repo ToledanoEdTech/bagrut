@@ -420,7 +420,8 @@ function computeSchoolProgress(data: ScopedData): SchoolProgress {
       const progress = calcSubjectProgressForObligations(
         subject.obligations,
         subjectGrades,
-        cls.gradeYear
+        cls.gradeYear,
+        { name: subject.name, category: subject.category }
       );
       if (progress.estimatedGrade != null) {
         estimatedGrades.push(progress.estimatedGrade);

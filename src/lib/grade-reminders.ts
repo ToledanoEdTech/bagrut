@@ -191,6 +191,8 @@ export function isGradeEntryIncomplete(
   if (grade.status === "EXEMPT") return false;
   if (isMissingGradeStatus(grade.status)) return true;
   if (grade.status === "NOT_STARTED" || grade.status === "IN_PROGRESS") return true;
+  // מעורבות חברתית — הערכה איכותית במקום ציון מספרי
+  if (grade.qualitativeLevel) return false;
   const subItems = normalizeSubItems(obligation.subItems ?? []);
   if (subItems.length > 0) {
     return !isObligationSubItemsComplete(obligation, grade, studentGradeYear);

@@ -265,7 +265,8 @@ export function computeAnalyticsSegments(input: AnalyticsInput): AnalyticsResult
         progress: calcSubjectProgressForObligations(
           subject.obligations,
           subjectGrades,
-          cls.gradeYear
+          cls.gradeYear,
+          { name: subject.name, category: subject.category }
         ),
       };
     });

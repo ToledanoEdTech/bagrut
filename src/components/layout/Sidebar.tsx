@@ -45,7 +45,7 @@ const dailyWorkLinks: NavLink[] = [
   { href: "/admin/hightech-bagrut", label: "בגרות הייטק", icon: Cpu },
   { href: "/admin/analytics", label: "סטטיסטיקות", icon: BarChart3 },
   { href: "/admin/grades", label: "הזנת ציונים", icon: ClipboardList },
-  { href: "/admin/reports", label: "דוחות משימות", icon: FileSpreadsheet },
+  { href: "/admin/reports", label: "מרכז חוסרים", icon: FileSpreadsheet },
   { href: "/admin/missing-entries", label: "מורים ומטלות שלא הוזנו", icon: AlertTriangle },
 ];
 
@@ -55,7 +55,7 @@ const managementLinks: NavLink[] = [
   { href: "/admin/obligations", label: "לוח מטלות וציונים", icon: CalendarDays },
   { href: "/admin/import", label: "ייבוא תלמידים", icon: Upload },
   { href: "/admin/staff", label: "צוות והרשאות", icon: UserCog },
-  { href: "/admin/settings", label: "תזכורות ציונים", icon: Bell },
+  { href: "/admin/settings", label: "הגדרות מערכת", icon: Bell },
 ];
 
 function getInitials(name: string): string {

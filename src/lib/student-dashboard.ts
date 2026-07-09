@@ -10,8 +10,10 @@ import {
   getTrackById,
   listExamPaths,
 } from "@/lib/firestore";
+import { getBagrutEligibilitySettings } from "@/lib/firestore/settings";
 import { evaluateOutstandingBagrut } from "@/lib/outstanding-bagrut";
 import { evaluateHightechBagrut } from "@/lib/hightech-bagrut";
+import { evaluateBagrutEligibility } from "@/lib/bagrut-eligibility";
 import { attachPathLabels, buildPathLabelsBySubjectId } from "@/lib/subject-display";
 
 export async function buildStudentDashboard(studentId: string) {
@@ -19,12 +21,13 @@ export async function buildStudentDashboard(studentId: string) {
   if (!student) return null;
 
   const trackIds = getStudentTrackIds(student);
-  const [studentWithRelations, grades, tracks] = await Promise.all([
+  const [studentWithRelations, grades, tracks, eligibilitySettings] = await Promise.all([
     buildStudentWithRelations(student),
     getGradesByStudent(student.id),
     Promise.all(trackIds.map((id) => getTrackById(id))).then((items) =>
       items.filter(Boolean)
     ),
+    getBagrutEligibilitySettings(),
   ]);
   const [subjects, examPaths] = await Promise.all([
     getRelevantSubjects(studentWithRelations),
@@ -41,7 +44,8 @@ export async function buildStudentDashboard(studentId: string) {
     const progress = calcSubjectProgressForObligations(
       subject.obligations,
       subjectGrades,
-      studentGradeYear
+      studentGradeYear,
+      { name: subject.name, category: subject.category }
     );
     return { ...subject, progress, grades: subjectGrades };
   });
@@ -54,6 +58,10 @@ export async function buildStudentDashboard(studentId: string) {
 
   const outstandingBagrut = evaluateOutstandingBagrut(student, subjectsWithProgress);
   const hightechBagrut = evaluateHightechBagrut(student, subjectsWithProgress);
+  const bagrutEligibility = evaluateBagrutEligibility(
+    subjectsWithProgress,
+    eligibilitySettings
+  );
 
   return {
     student: {
@@ -67,5 +75,6 @@ export async function buildStudentDashboard(studentId: string) {
     overallProgress,
     outstandingBagrut,
     hightechBagrut,
+    bagrutEligibility,
   };
 }

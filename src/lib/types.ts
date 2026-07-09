@@ -29,7 +29,20 @@ export interface StaffRecord {
 
 export type ExamPathType = "REGULAR" | "BEIT_MIDRASH" | "MEUBAR_HINUCH";
 
-export type SubjectCategory = "MANDATORY" | "MATH" | "ENGLISH" | "TRACK" | "EXTENSION";
+export type SubjectCategory =
+  | "MANDATORY"
+  | "MATH"
+  | "ENGLISH"
+  | "TRACK"
+  | "EXTENSION"
+  | "SOCIAL";
+
+/** רמות הערכה למעורבות חברתית (ללא ציון מספרי) */
+export type QualitativeLevel =
+  | "FAILED"
+  | "PASSED"
+  | "PASSED_WELL"
+  | "PASSED_WITH_EXCELLENCE";
 
 export type SubmissionStatus =
   | "NOT_STARTED"
@@ -130,6 +143,8 @@ export interface Grade {
   studentId: string;
   obligationId: string;
   score: number | null;
+  /** הערכה איכותית (מעורבות חברתית) — במקום ציון מספרי */
+  qualitativeLevel?: QualitativeLevel | null;
   componentScores?: Record<number, number | null> | null;
   subItemScores?: Record<number, number | null> | null;
   status: SubmissionStatus;

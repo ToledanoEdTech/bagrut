@@ -1,4 +1,5 @@
 import {
+  ensureSocialInvolvementSubject,
   getClassById,
   getExamPathById,
   getStudentTrackIds,
@@ -59,6 +60,12 @@ export function resolveRelevantSubjects(
     (s) => s.category === "ENGLISH" && s.units === student.englishUnits
   );
 
+  // מעורבות חברתית — מקצוע חובה לכל תלמיד (לא תלוי בתוכנית בחינות)
+  const social =
+    allSubjects.find((s) => s.category === "SOCIAL") ??
+    pathSubjects.find((s) => s.category === "SOCIAL") ??
+    allSubjects.find((s) => s.name.trim() === "מעורבות חברתית");
+
   const trackIds = getStudentTrackIds(student);
   const trackSubjects: Subject[] = [];
   for (const trackId of trackIds) {
@@ -87,6 +94,7 @@ export function resolveRelevantSubjects(
     ...(math ? [math] : []),
     ...(english ? [english] : []),
     ...trackSubjects,
+    ...(social ? [social] : []),
   ];
 
   const seen = new Set<string>();
@@ -100,6 +108,7 @@ export function resolveRelevantSubjects(
 export async function getRelevantSubjects(
   student: StudentWithRelations
 ): Promise<SubjectWithObligations[]> {
+  await ensureSocialInvolvementSubject();
   const [examPath, ctx] = await Promise.all([
     getExamPathById(student.class.examPathId),
     loadSubjectContext(),

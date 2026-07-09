@@ -32,6 +32,14 @@ import {
   resolveSubItemGradeYear,
   type ObligationTiming,
 } from "@/lib/grade-year";
+import {
+  SOCIAL_INVOLVEMENT_LABELS,
+  SOCIAL_INVOLVEMENT_LEVELS,
+  formatQualitativeLevel,
+  isSocialInvolvementSubject,
+  isSocialInvolvementPassed,
+} from "@/lib/social-involvement";
+import type { QualitativeLevel } from "@/lib/types";
 
 type Obligation = {
   id: string;
@@ -54,6 +62,7 @@ type Obligation = {
 type Grade = {
   obligationId: string;
   score: number | null;
+  qualitativeLevel?: QualitativeLevel | null;
   componentScores?: Record<number, number | null> | null;
   subItemScores?: Record<number, number | null> | null;
   status: string;
@@ -70,6 +79,7 @@ function isObligationOpenForStudent(
     return false;
   }
   if (isMissingGradeStatus(grade.status)) return true;
+  if (grade.qualitativeLevel) return false;
   const usesSubItems = hasSubItemGrades(normalizeSubItems(obligation.subItems));
   if (usesSubItems) {
     return !isObligationSubItemsComplete(obligation, grade, studentGradeYear);
@@ -121,29 +131,40 @@ export function SubjectCard({
   units?: number | null;
   obligations: Obligation[];
   grades: Grade[];
-  progress: { progressPercent: number; estimatedGrade: number | null; isFinal?: boolean };
+  progress: {
+    progressPercent: number;
+    estimatedGrade: number | null;
+    isFinal?: boolean;
+    qualitativeLevel?: QualitativeLevel | null;
+  };
   readOnly?: boolean;
   onGradeChange?: (obligationId: string, field: string, value: string | number | null) => void;
   /** שכבת התלמיד — לסימון מטלות עתידיות */
   studentGradeYear?: string | null;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const isSocial = isSocialInvolvementSubject({ name, category });
   const gradeMap = new Map(grades.map((g) => [g.obligationId, g]));
   const missingObligations = obligations.filter((o) =>
     isMissingGradeStatus(gradeMap.get(o.id)?.status)
   );
-  const negativeObligations = obligations
-    .filter((o) => isObligationRelevantForStudent(o, studentGradeYear))
-    .map((o) => ({
-      obligation: o,
-      score: getNegativeGradeScore(o, gradeMap.get(o.id)),
-    }))
-    .filter((entry): entry is { obligation: Obligation; score: number } => entry.score != null);
+  const negativeObligations = isSocial
+    ? []
+    : obligations
+        .filter((o) => isObligationRelevantForStudent(o, studentGradeYear))
+        .map((o) => ({
+          obligation: o,
+          score: getNegativeGradeScore(o, gradeMap.get(o.id)),
+        }))
+        .filter((entry): entry is { obligation: Obligation; score: number } => entry.score != null);
   const hasMissingGrades = missingObligations.length > 0;
   const hasNegativeGrades = negativeObligations.length > 0;
   const displayName = formatSubjectDisplayName(name, { pathLabels, units, category });
   const showUnitsSeparately =
-    units != null && category !== "MATH" && category !== "ENGLISH";
+    units != null &&
+    category !== "MATH" &&
+    category !== "ENGLISH" &&
+    category !== "SOCIAL";
   const openCurrentYear = obligations.filter((o) =>
     hasOpenTiming(o, gradeMap.get(o.id), studentGradeYear, "current")
   );
@@ -164,8 +185,20 @@ export function SubjectCard({
   const hasOpenPast = openPastYear.length > 0;
 
   const estGrade = progress.estimatedGrade;
-  const gradeTone =
-    estGrade == null
+  const qualitativeLevel =
+    progress.qualitativeLevel ??
+    obligations
+      .map((o) => gradeMap.get(o.id)?.qualitativeLevel)
+      .find((l): l is QualitativeLevel => !!l) ??
+    null;
+  const qualitativeLabel = formatQualitativeLevel(qualitativeLevel);
+  const gradeTone = isSocial
+    ? qualitativeLevel == null
+      ? "text-slate-400"
+      : isSocialInvolvementPassed(qualitativeLevel)
+        ? "text-emerald-600"
+        : "text-red-600"
+    : estGrade == null
       ? "text-slate-400"
       : estGrade >= 70
         ? "text-emerald-600"
@@ -287,7 +320,9 @@ export function SubjectCard({
             <div
               className={clsx(
                 "grid w-full shrink-0 grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-200/70 ring-1 ring-slate-200/80",
-                estGrade != null ? "sm:grid-cols-3 lg:w-auto lg:min-w-[22rem]" : "lg:w-auto lg:min-w-[14rem]"
+                estGrade != null || qualitativeLabel != null
+                  ? "sm:grid-cols-3 lg:w-auto lg:min-w-[22rem]"
+                  : "lg:w-auto lg:min-w-[14rem]"
               )}
             >
               <div className="flex flex-col items-center justify-center bg-white px-4 py-3 text-center">
@@ -303,7 +338,22 @@ export function SubjectCard({
                   <span className="text-base font-bold text-slate-400">%</span>
                 </span>
               </div>
-              {estGrade != null && (
+              {isSocial && qualitativeLabel != null && (
+                <div className="col-span-2 flex flex-col items-center justify-center bg-white px-4 py-3 text-center sm:col-span-1">
+                  <span
+                    className={clsx(
+                      "text-xs font-medium tracking-wide",
+                      progress.isFinal ? "font-semibold text-emerald-600" : "text-slate-500"
+                    )}
+                  >
+                    {progress.isFinal ? "הערכה סופית" : "הערכה"}
+                  </span>
+                  <span className={clsx("mt-0.5 text-lg font-extrabold leading-tight", gradeTone)}>
+                    {qualitativeLabel}
+                  </span>
+                </div>
+              )}
+              {!isSocial && estGrade != null && (
                 <div className="col-span-2 flex flex-col items-center justify-center bg-white px-4 py-3 text-center sm:col-span-1">
                   <span
                     className={clsx(
@@ -402,9 +452,12 @@ export function SubjectCard({
                     studentGradeYear !== undefined &&
                     !isObligationRelevantForStudent(o, studentGradeYear);
                   // השלמת מטלה לפי כל תתי-המטלות של הבגרות (לא רק השנה)
-                  const obligationDone =
-                    grade?.status === "EXEMPT" ||
-                    calcObligationProgressContribution(o, grade, undefined).isComplete;
+                  const obligationDone = isSocial
+                    ? grade?.status === "EXEMPT" ||
+                      (!!grade?.qualitativeLevel &&
+                        (grade.status === "GRADED" || grade.status === "SUBMITTED"))
+                    : grade?.status === "EXEMPT" ||
+                      calcObligationProgressContribution(o, grade, undefined).isComplete;
 
                   return (
                     <div
@@ -532,7 +585,26 @@ export function SubjectCard({
                                 </option>
                               ))}
                             </select>
-                            {!usesSubItems && multiComponent ? (
+                            {isSocial ? (
+                              <select
+                                className="input w-44 py-2 text-base"
+                                value={grade?.qualitativeLevel ?? ""}
+                                onChange={(e) =>
+                                  onGradeChange(
+                                    o.id,
+                                    "qualitativeLevel",
+                                    e.target.value || null
+                                  )
+                                }
+                              >
+                                <option value="">בחר הערכה</option>
+                                {SOCIAL_INVOLVEMENT_LEVELS.map((level) => (
+                                  <option key={level} value={level}>
+                                    {SOCIAL_INVOLVEMENT_LABELS[level]}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : !usesSubItems && multiComponent ? (
                               <div className="flex flex-wrap items-center gap-2">
                                 {o.components.map((c, i) => {
                                   const sortOrder = c.sortOrder ?? i;
@@ -618,6 +690,19 @@ export function SubjectCard({
                                 )}
                               </div>
                             ) : null}
+                          </div>
+                        ) : isSocial && grade?.qualitativeLevel ? (
+                          <div
+                            className={clsx(
+                              "flex min-h-16 min-w-16 shrink-0 flex-col items-center justify-center rounded-xl px-3 py-2 text-center font-bold",
+                              isSocialInvolvementPassed(grade.qualitativeLevel)
+                                ? "bg-emerald-50 text-emerald-700 ring-2 ring-emerald-200"
+                                : "bg-red-50 text-red-700 ring-2 ring-red-200"
+                            )}
+                          >
+                            <span className="text-base leading-tight">
+                              {formatQualitativeLevel(grade.qualitativeLevel)}
+                            </span>
                           </div>
                         ) : (
                           (displayScore != null || partialProgressLabel) && (

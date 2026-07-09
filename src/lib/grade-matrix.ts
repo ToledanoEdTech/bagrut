@@ -323,6 +323,7 @@ export async function getMatrixData(
                   : null,
               componentScores: grade.componentScores ?? null,
               subItemScores: grade.subItemScores ?? null,
+              qualitativeLevel: grade.qualitativeLevel ?? null,
               status: grade.status,
               notes: grade.notes,
             }

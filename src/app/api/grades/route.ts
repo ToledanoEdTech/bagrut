@@ -3,7 +3,8 @@ import { getGradesByStudent, upsertGrades } from "@/lib/firestore";
 import { checkPermission, requireAuth, requireGradeWrite, requireStaff, requireStudentView } from "@/lib/api-auth";
 import { validateComponentScores, validateSubItemScores } from "@/lib/grade-components";
 import { isValidSubmissionStatus, validateScore } from "@/lib/grade-status";
-import type { SubmissionStatus } from "@/lib/types";
+import { isValidQualitativeLevel } from "@/lib/social-involvement";
+import type { QualitativeLevel, SubmissionStatus } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
   const { error, session } = await requireAuth();
@@ -47,6 +48,7 @@ export async function PUT(req: NextRequest) {
     grades: Array<{
       obligationId: string;
       score?: number | null;
+      qualitativeLevel?: QualitativeLevel | null;
       componentScores?: Record<number, number | null> | null;
       subItemScores?: Record<number, number | null> | null;
       status: string;
@@ -71,6 +73,13 @@ export async function PUT(req: NextRequest) {
     if (!validateScore(g.score)) {
       return NextResponse.json({ error: "ציון לא חוקי (0–100)" }, { status: 400 });
     }
+    if (
+      g.qualitativeLevel != null &&
+      g.qualitativeLevel !== undefined &&
+      !isValidQualitativeLevel(g.qualitativeLevel)
+    ) {
+      return NextResponse.json({ error: "רמת הערכה לא חוקית" }, { status: 400 });
+    }
     if (!validateComponentScores(g.componentScores)) {
       return NextResponse.json({ error: "ציון רכיב לא חוקי (0–100)" }, { status: 400 });
     }
@@ -84,6 +93,7 @@ export async function PUT(req: NextRequest) {
     grades.map((g) => ({
       obligationId: g.obligationId,
       score: g.score,
+      qualitativeLevel: g.qualitativeLevel ?? null,
       componentScores: g.componentScores,
       subItemScores: g.subItemScores,
       status: g.status as SubmissionStatus,

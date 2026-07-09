@@ -1,5 +1,6 @@
 import { LucideIcon } from "lucide-react";
 import clsx from "clsx";
+import type { KeyboardEvent, MouseEvent } from "react";
 
 export function StatCard({
   title,
@@ -7,12 +8,16 @@ export function StatCard({
   subtitle,
   icon: Icon,
   color = "primary",
+  onClick,
+  clickHint,
 }: {
   title: string;
   value: string | number;
   subtitle?: string;
   icon: LucideIcon;
   color?: "primary" | "success" | "warning" | "info" | "danger";
+  onClick?: () => void;
+  clickHint?: string;
 }) {
   const styles = {
     primary: {
@@ -42,8 +47,35 @@ export function StatCard({
     },
   }[color];
 
+  const interactive = !!onClick;
+
+  function handleKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (!onClick) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick();
+    }
+  }
+
+  function handleClick(e: MouseEvent<HTMLDivElement>) {
+    if (!onClick) return;
+    e.preventDefault();
+    onClick();
+  }
+
   return (
-    <div className="group relative h-full w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200/70 bg-white p-5 shadow-card transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-card-hover">
+    <div
+      className={clsx(
+        "group relative h-full w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200/70 bg-white p-5 shadow-card transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-card-hover",
+        interactive &&
+          "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2"
+      )}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? clickHint ?? title : undefined}
+      onClick={interactive ? handleClick : undefined}
+      onKeyDown={interactive ? handleKeyDown : undefined}
+    >
       <span
         className={clsx(
           "absolute inset-x-0 top-0 h-1 bg-gradient-to-l opacity-80",
@@ -64,6 +96,11 @@ export function StatCard({
           </p>
           {subtitle && (
             <p className="mt-1.5 truncate text-sm text-slate-400">{subtitle}</p>
+          )}
+          {interactive && (
+            <p className="mt-1.5 text-xs font-medium text-sky-600 opacity-80 group-hover:opacity-100">
+              {clickHint ?? "לחץ לפירוט"}
+            </p>
           )}
         </div>
         <div

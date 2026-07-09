@@ -1,18 +1,33 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { SubjectCard } from "@/components/subjects/SubjectCard";
 import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
 import { HightechBagrutBadge } from "@/components/students/HightechBagrutBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Modal } from "@/components/ui/Modal";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatCardGrid } from "@/components/ui/StatCardGrid";
 import { StaggerChildren, StaggerItem } from "@/components/motion/StaggerChildren";
 import { OUTSTANDING_BAGRUT_TIER_LABELS, type OutstandingBagrutResult } from "@/lib/outstanding-bagrut-core";
 import type { HightechBagrutResult } from "@/lib/hightech-bagrut-core";
+import {
+  formatBagrutIneligibilityMessage,
+  formatBagrutIneligibilityMessageForStaff,
+  type BagrutEligibilityResult,
+} from "@/lib/bagrut-eligibility";
 import { calcWeightedBagrutAverage } from "@/lib/bagrut-average";
-import { collectMissingGrades, collectNegativeGrades } from "@/lib/missing-grades";
+import { calcObligationProgressContribution } from "@/lib/grade-components";
+import {
+  collectMissingGrades,
+  collectNegativeGrades,
+  formatObligationLabel,
+} from "@/lib/missing-grades";
 import { filterObligationsDueForStudent } from "@/lib/grade-year";
-import { BookOpen, AlertCircle } from "lucide-react";
+import { formatSubjectDisplayName } from "@/lib/subject-display";
+import { isSocialInvolvementSubject } from "@/lib/social-involvement";
+import type { QualitativeLevel } from "@/lib/types";
+import { BookOpen, AlertCircle, CheckCircle2, Circle } from "lucide-react";
 
 export type StudentDashboardData = {
   student: {
@@ -38,19 +53,41 @@ export type StudentDashboardData = {
       studyMaterial: string | null;
       examEvent: string | null;
       gradeYear: string | null;
-      components: Array<{ name: string; weightPercent: number }>;
+      components: Array<{ name: string; weightPercent: number; sortOrder?: number }>;
       subItems: Array<{
         name: string;
         weightPercent: number;
+        sortOrder?: number;
         gradeYear?: string | null;
       }>;
     }>;
-    progress: { progressPercent: number; estimatedGrade: number | null; isFinal?: boolean };
-    grades: Array<{ obligationId: string; score: number | null; status: string }>;
+    progress: {
+      progressPercent: number;
+      estimatedGrade: number | null;
+      isFinal?: boolean;
+      qualitativeLevel?: QualitativeLevel | null;
+    };
+    grades: Array<{
+      obligationId: string;
+      score: number | null;
+      qualitativeLevel?: QualitativeLevel | null;
+      status: string;
+      componentScores?: Record<number, number | null> | null;
+      subItemScores?: Record<number, number | null> | null;
+    }>;
   }>;
   overallProgress: number;
   outstandingBagrut?: OutstandingBagrutResult;
   hightechBagrut?: HightechBagrutResult;
+  bagrutEligibility?: BagrutEligibilityResult;
+};
+
+type ObligationBreakdownItem = {
+  subjectId: string;
+  subjectLabel: string;
+  obligationId: string;
+  obligationLabel: string;
+  done: boolean;
 };
 
 type StudentDashboardContentProps = {
@@ -61,28 +98,89 @@ type StudentDashboardContentProps = {
   audience?: "student" | "staff";
 };
 
+function buildObligationBreakdown(
+  subjects: StudentDashboardData["subjects"],
+  studentGradeYear: string | null
+): ObligationBreakdownItem[] {
+  const items: ObligationBreakdownItem[] = [];
+
+  for (const subject of subjects) {
+    if (isSocialInvolvementSubject(subject)) {
+      const subjectLabel = formatSubjectDisplayName(subject.name, {
+        pathLabels: subject.pathLabels,
+        units: subject.units,
+        category: subject.category,
+      });
+      const due = filterObligationsDueForStudent(subject.obligations, studentGradeYear);
+      for (const obligation of due) {
+        const grade = subject.grades.find((g) => g.obligationId === obligation.id);
+        const done =
+          grade?.status === "EXEMPT" ||
+          (!!grade?.qualitativeLevel &&
+            (grade.status === "GRADED" || grade.status === "SUBMITTED"));
+        items.push({
+          subjectId: subject.id,
+          subjectLabel,
+          obligationId: obligation.id,
+          obligationLabel: formatObligationLabel(obligation),
+          done,
+        });
+      }
+      continue;
+    }
+
+    const subjectLabel = formatSubjectDisplayName(subject.name, {
+      pathLabels: subject.pathLabels,
+      units: subject.units,
+      category: subject.category,
+    });
+    const due = filterObligationsDueForStudent(subject.obligations, studentGradeYear);
+
+    for (const obligation of due) {
+      const grade = subject.grades.find((g) => g.obligationId === obligation.id);
+      // כמו ב-SubjectCard: השלמה לפי כל תתי-המטלות של הבגרות (לא רק השנה)
+      const done =
+        grade?.status === "EXEMPT" ||
+        calcObligationProgressContribution(obligation, grade, undefined).isComplete;
+
+      items.push({
+        subjectId: subject.id,
+        subjectLabel,
+        obligationId: obligation.id,
+        obligationLabel: formatObligationLabel(obligation),
+        done,
+      });
+    }
+  }
+
+  return items;
+}
+
 export function StudentDashboardContent({
   data,
   hero,
   subjectsTitle = "המקצועות שלי",
   audience = "student",
 }: StudentDashboardContentProps) {
+  const [obligationsModalOpen, setObligationsModalOpen] = useState(false);
   const studentGradeYear = data.student.class.gradeYear;
 
-  const completedObligations = data.subjects.reduce((sum, s) => {
-    const due = filterObligationsDueForStudent(s.obligations, studentGradeYear);
-    const graded = s.grades.filter(
-      (g) =>
-        due.some((o) => o.id === g.obligationId) &&
-        (g.status === "GRADED" || g.status === "SUBMITTED")
-    ).length;
-    return sum + graded;
-  }, 0);
-
-  const totalObligations = data.subjects.reduce(
-    (sum, s) => sum + filterObligationsDueForStudent(s.obligations, studentGradeYear).length,
-    0
+  const obligationBreakdown = useMemo(
+    () => buildObligationBreakdown(data.subjects, studentGradeYear),
+    [data.subjects, studentGradeYear]
   );
+
+  const completedItems = useMemo(
+    () => obligationBreakdown.filter((item) => item.done),
+    [obligationBreakdown]
+  );
+  const remainingItems = useMemo(
+    () => obligationBreakdown.filter((item) => !item.done),
+    [obligationBreakdown]
+  );
+
+  const completedObligations = completedItems.length;
+  const totalObligations = obligationBreakdown.length;
 
   const weightedAverage = calcWeightedBagrutAverage(
     data.subjects.map((s) => ({
@@ -95,6 +193,14 @@ export function StudentDashboardContent({
 
   const missingGrades = collectMissingGrades(data.subjects);
   const negativeGrades = collectNegativeGrades(data.subjects, studentGradeYear);
+
+  const eligibility = data.bagrutEligibility;
+  const ineligibilityMessage =
+    eligibility && eligibility.isEligible === false
+      ? audience === "staff"
+        ? formatBagrutIneligibilityMessageForStaff(eligibility)
+        : formatBagrutIneligibilityMessage(eligibility)
+      : null;
 
   const trackLabel =
     data.student.tracks?.length > 0
@@ -147,6 +253,28 @@ export function StudentDashboardContent({
   return (
     <>
       {hero ?? defaultHero}
+
+      {ineligibilityMessage && (
+        <div className="mt-4 rounded-xl border-2 border-red-600 bg-red-50 px-4 py-4 text-red-900">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-6 w-6 shrink-0 text-red-700" />
+            <div className="min-w-0 flex-1">
+              <p className="text-lg font-extrabold leading-snug">{ineligibilityMessage}</p>
+              {eligibility && eligibility.reasons.length > 0 && (
+                <ul className="mt-2 space-y-1 text-base font-semibold text-red-800">
+                  {eligibility.reasons
+                    .filter((r) => r.code !== "MULTIPLE_FAILS")
+                    .map((reason) => (
+                      <li key={`${reason.code}-${reason.subjectName ?? reason.message}`}>
+                        {reason.message}
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {missingGrades.length > 0 && (
         <div className="mt-4 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-red-700">
@@ -216,6 +344,8 @@ export function StudentDashboardContent({
               value: `${completedObligations}/${totalObligations}`,
               icon: "target",
               color: "info",
+              onClick: () => setObligationsModalOpen(true),
+              clickHint: "לחץ לפירוט מה הושלם ומה נשאר",
             },
             {
               title: "ממוצע בגרות משוקלל",
@@ -257,6 +387,82 @@ export function StudentDashboardContent({
           ]}
         />
       </div>
+
+      <Modal
+        open={obligationsModalOpen}
+        onClose={() => setObligationsModalOpen(false)}
+        title="פירוט חובות"
+        size="lg"
+      >
+        <p className="mb-4 text-sm text-slate-500">
+          {completedObligations} מתוך {totalObligations} חובות הושלמו
+          {remainingItems.length > 0
+            ? ` · נותרו ${remainingItems.length}`
+            : totalObligations > 0
+              ? " · הכל הושלם"
+              : ""}
+        </p>
+
+        <div className="space-y-6">
+          <section>
+            <div className="mb-2 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <h3 className="text-sm font-semibold text-emerald-800">
+                הושלמו ({completedItems.length})
+              </h3>
+            </div>
+            {completedItems.length === 0 ? (
+              <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                עדיין לא הושלמה אף חובה
+              </p>
+            ) : (
+              <ul className="divide-y divide-emerald-100 overflow-hidden rounded-xl border border-emerald-200 bg-emerald-50/50">
+                {completedItems.map((item) => (
+                  <li
+                    key={`done-${item.subjectId}-${item.obligationId}`}
+                    className="flex items-start gap-2 px-3 py-2.5 text-sm"
+                  >
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-800">{item.obligationLabel}</p>
+                      <p className="text-slate-500">{item.subjectLabel}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section>
+            <div className="mb-2 flex items-center gap-2">
+              <Circle className="h-4 w-4 text-amber-500" />
+              <h3 className="text-sm font-semibold text-amber-800">
+                נשאר לעשות ({remainingItems.length})
+              </h3>
+            </div>
+            {remainingItems.length === 0 ? (
+              <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                {totalObligations === 0 ? "אין חובות רלוונטיות לשכבה הנוכחית" : "אין חובות שנותרו"}
+              </p>
+            ) : (
+              <ul className="divide-y divide-amber-100 overflow-hidden rounded-xl border border-amber-200 bg-amber-50/50">
+                {remainingItems.map((item) => (
+                  <li
+                    key={`left-${item.subjectId}-${item.obligationId}`}
+                    className="flex items-start gap-2 px-3 py-2.5 text-sm"
+                  >
+                    <Circle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-800">{item.obligationLabel}</p>
+                      <p className="text-slate-500">{item.subjectLabel}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      </Modal>
 
       <div className="mt-8">
         <div className="mb-4 flex items-center gap-3">

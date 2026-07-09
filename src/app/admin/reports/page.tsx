@@ -67,26 +67,26 @@ const GROUP_OPTIONS: Array<{
 }> = [
   {
     id: "gradeYear",
-    label: "לפי שכבת מטלה",
-    description: "משימות פתוחות לפי שנתון השכבה של המטלה",
+    label: "לפי שכבה",
+    description: "חוסרים לפי שכבת המטלה — מי עדיין חייב מה בשכבה",
     icon: Layers,
   },
   {
     id: "class",
     label: "לפי כיתה",
-    description: "משימות פתוחות לכל תלמידי כיתה",
+    description: "למי בכיתה חסר מה — כל התלמידים עם חובות פתוחות",
     icon: School,
   },
   {
     id: "subject",
     label: "לפי מקצוע",
-    description: "משימות חסרות במקצוע נבחר בכל הכיתות",
+    description: "חוסרים במקצוע נבחר בכל הכיתות והתלמידים",
     icon: BookOpen,
   },
   {
     id: "student",
     label: "לפי תלמיד",
-    description: "רשימת משימות שנותרו לתלמיד מסוים",
+    description: "מה חסר לתלמיד מסוים — רשימת חובות שנותרו",
     icon: User,
   },
 ];
@@ -192,7 +192,7 @@ export default function ReportsPage() {
 
   const filterLabel = useMemo(() => {
     if (!filterValue) return "";
-    if (groupBy === "gradeYear") return `שכבה ${filterValue}`;
+    if (groupBy === "gradeYear") return filterValue;
     if (groupBy === "class") {
       return sortedClasses.find((c) => c.id === filterValue)?.name ?? "";
     }
@@ -200,7 +200,7 @@ export default function ReportsPage() {
       return sortedSubjects.find((s) => s.id === filterValue)?.name ?? "";
     }
     return students.find((s) => s.id === filterValue)?.user.name ?? "";
-  }, [groupBy, filterValue, gradeYears, sortedClasses, sortedSubjects, students]);
+  }, [groupBy, filterValue, sortedClasses, sortedSubjects, students]);
 
   const canPreview = !!filterValue;
 
@@ -240,7 +240,7 @@ export default function ReportsPage() {
 
     const data = json as PendingTasksResponse;
     const exportRows = pendingTaskRowsToExport(data.entries);
-    const title = `משימות לביצוע — ${filterLabel} (${data.total})`;
+    const title = `חוסרים — ${filterLabel} (${data.total})`;
     const sheets = [
       buildPendingTasksSheet({
         title,
@@ -261,7 +261,7 @@ export default function ReportsPage() {
     }
 
     const safeName = filterLabel.replace(/[^\w\u0590-\u05FF]+/g, "_").slice(0, 40);
-    await downloadExcel(`משימות_${safeName}_${exportTimestamp()}.xlsx`, sheets);
+    await downloadExcel(`חוסרים_${safeName}_${exportTimestamp()}.xlsx`, sheets);
   }
 
   function handleGroupChange(next: PendingTasksGroupBy) {
@@ -274,9 +274,9 @@ export default function ReportsPage() {
   if (!canAccess) {
     return (
       <>
-        <PageHeader title="דוחות משימות" />
+        <PageHeader title="מרכז חוסרים" />
         <Alert variant="error" className="mt-6">
-          אין הרשאה לצפייה בדוחות משימות
+          אין הרשאה לצפייה במרכז החוסרים
         </Alert>
       </>
     );
@@ -286,8 +286,8 @@ export default function ReportsPage() {
     return (
       <>
         <PageHeader
-          title="דוחות משימות"
-          subtitle="ייצוא לאקסל של משימות וציונים שטרם הושלמו"
+          title="מרכז חוסרים"
+          subtitle="ריכוז חובות וציונים שטרם הושלמו — לפי מקצוע, כיתה, שכבה או תלמיד"
         />
         <div className="mt-8">
           <PageLoader variant="table" />
@@ -299,8 +299,8 @@ export default function ReportsPage() {
   return (
     <>
       <PageHeader
-        title="דוחות משימות"
-        subtitle="ייצוא לאקסל של משימות וציונים שטרם הושלמו — לפי שכבה, כיתה, מקצוע או תלמיד"
+        title="מרכז חוסרים"
+        subtitle="בחרו איך לחלק את התצוגה — וראו למי חסר מה. אפשר גם לייצא לאקסל"
       >
         <ExportButton
           onExport={handleExport}
@@ -345,7 +345,7 @@ export default function ReportsPage() {
       </div>
 
       <Card variant="flat" className="mt-6 p-5">
-        <h2 className="text-base font-semibold text-slate-800">בחירת פרמטרים</h2>
+        <h2 className="text-base font-semibold text-slate-800">בחרו איך לרכז את החוסרים</h2>
 
         <div className="mt-4 flex flex-wrap items-end gap-4">
           {groupBy === "gradeYear" && (
@@ -361,7 +361,7 @@ export default function ReportsPage() {
                 <option value="">— בחר שכבה —</option>
                 {gradeYears.map((y) => (
                   <option key={y} value={y}>
-                    שכבה {y}
+                    {y}
                   </option>
                 ))}
               </Select>
@@ -382,7 +382,7 @@ export default function ReportsPage() {
                 {sortedClasses.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
-                    {c.gradeYear ? ` (שכבה ${c.gradeYear})` : ""}
+                    {c.gradeYear ? ` (${c.gradeYear})` : ""}
                   </option>
                 ))}
               </Select>
@@ -431,7 +431,7 @@ export default function ReportsPage() {
             disabled={!canPreview || previewLoading}
           >
             <ClipboardList className="h-4 w-4" />
-            {previewLoading ? "טוען..." : "הצג תצוגה מקדימה"}
+            {previewLoading ? "טוען..." : "הצג חוסרים"}
           </Button>
         </div>
       </Card>
@@ -446,11 +446,11 @@ export default function ReportsPage() {
         <div className="mt-6 space-y-4">
           <div className="flex flex-wrap gap-4 text-sm">
             <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-              <span className="text-slate-500">סה״כ משימות: </span>
+              <span className="text-slate-500">סה״כ חוסרים: </span>
               <strong className="text-slate-900">{preview.total}</strong>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-              <span className="text-slate-500">תלמידים: </span>
+              <span className="text-slate-500">תלמידים עם חוסרים: </span>
               <strong className="text-slate-900">{preview.studentCount}</strong>
             </div>
             {groupBy !== "student" && (
@@ -463,7 +463,7 @@ export default function ReportsPage() {
               <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-800">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>
-                  <strong>{preview.overdueCount}</strong> משימות באיחור
+                  <strong>{preview.overdueCount}</strong> באיחור
                 </span>
               </div>
             )}
@@ -472,8 +472,8 @@ export default function ReportsPage() {
           {preview.entries.length === 0 ? (
             <EmptyState
               icon={ClipboardList}
-              title="אין משימות פתוחות"
-              description="לא נמצאו משימות שטרם הושלמו עבור הבחירה הנוכחית"
+              title="אין חוסרים"
+              description="לא נמצאו חובות או ציונים שטרם הושלמו עבור הבחירה הנוכחית"
             />
           ) : (
             <Card variant="flat" className="overflow-hidden">
@@ -487,7 +487,7 @@ export default function ReportsPage() {
                       <th className="px-4 py-3 text-right text-xs font-semibold">כיתה</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold">שכבת מטלה</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold">מקצוע</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold">מטלה</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold">מה חסר</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold">תאריך יעד</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold">סטטוס</th>
                     </tr>
@@ -533,7 +533,7 @@ export default function ReportsPage() {
               </div>
               {preview.entries.length > 100 && (
                 <p className="border-t border-slate-100 px-4 py-3 text-sm text-slate-500">
-                  מוצגות 100 שורות ראשונות מתוך {preview.entries.length}. ייצא לאקסל לקבלת הדוח המלא.
+                  מוצגות 100 שורות ראשונות מתוך {preview.entries.length}. ייצא לאקסל לקבלת הרשימה המלאה.
                 </p>
               )}
             </Card>

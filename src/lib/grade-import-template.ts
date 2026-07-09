@@ -5,6 +5,10 @@ import {
 import { STATUS_LABELS } from "@/lib/grade-status";
 import { attachPathLabels } from "@/lib/subject-display";
 import { resolveRelevantSubjects } from "@/lib/student-subjects";
+import {
+  formatQualitativeLevel,
+  isSocialInvolvementSubject,
+} from "@/lib/social-involvement";
 import type { FullGradesTemplateRow } from "@/lib/excel-export";
 import type { ExamPath, Grade, Student, Subject, Track } from "@/lib/types";
 
@@ -71,6 +75,7 @@ export function buildGradeImportTemplateRows(params: {
         const grade = gradeByKey.get(`${student.id}:${ob.id}`);
         const statusLabel = grade ? STATUS_LABELS[grade.status]?.label ?? "" : "";
         const tasks = expandObligationMatrixTasks(ob, 0);
+        const isSocial = isSocialInvolvementSubject(subject);
 
         for (const task of tasks) {
           const displayTaskName =
@@ -85,7 +90,9 @@ export function buildGradeImportTemplateRows(params: {
 
           let score: number | string = "";
           if (grade) {
-            if (task.taskKind === "single") {
+            if (isSocial) {
+              score = formatQualitativeLevel(grade.qualitativeLevel) ?? "";
+            } else if (task.taskKind === "single") {
               score = grade.score ?? "";
             } else if (task.taskKind === "component") {
               score = grade.componentScores?.[task.sortOrder] ?? "";

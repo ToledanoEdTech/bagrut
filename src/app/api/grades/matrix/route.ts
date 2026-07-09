@@ -20,8 +20,12 @@ import {
   type MatrixTaskKind,
 } from "@/lib/grade-components";
 import { isValidSubmissionStatus, validateScore } from "@/lib/grade-status";
+import {
+  isSocialInvolvementSubject,
+  isValidQualitativeLevel,
+} from "@/lib/social-involvement";
 import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
-import type { SubmissionStatus } from "@/lib/types";
+import type { QualitativeLevel, SubmissionStatus } from "@/lib/types";
 
 function parseTaskKind(value: string | null): MatrixTaskKind | undefined {
   if (value === "subItem" || value === "component" || value === "single") return value;
@@ -79,6 +83,7 @@ export async function PUT(req: NextRequest) {
     entries: Array<{
       studentId: string;
       score?: number | null;
+      qualitativeLevel?: QualitativeLevel | null;
       componentScores?: Record<number, number | null> | null;
       subItemScores?: Record<number, number | null> | null;
       status: string;
@@ -95,6 +100,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "מטלה לא נמצאה" }, { status: 404 });
   }
 
+  const isSocial = isSocialInvolvementSubject(found.subject);
   const subItems = normalizeSubItems(found.obligation.subItems);
   const components = normalizeComponents(found.obligation.components);
   const usesSubItems = hasSubItemGrades(subItems);
@@ -110,6 +116,7 @@ export async function PUT(req: NextRequest) {
     studentId: string;
     obligationId: string;
     score: number | null;
+    qualitativeLevel: QualitativeLevel | null;
     componentScores: Record<number, number | null> | null;
     subItemScores: Record<number, number | null> | null;
     status: SubmissionStatus;
@@ -145,6 +152,24 @@ export async function PUT(req: NextRequest) {
 
     if (!isValidSubmissionStatus(entry.status)) {
       return NextResponse.json({ error: "סטטוס לא חוקי" }, { status: 400 });
+    }
+
+    if (isSocial) {
+      const qualitativeLevel = entry.qualitativeLevel ?? null;
+      if (qualitativeLevel != null && !isValidQualitativeLevel(qualitativeLevel)) {
+        return NextResponse.json({ error: "רמת הערכה לא חוקית" }, { status: 400 });
+      }
+      validated.push({
+        studentId: entry.studentId,
+        obligationId,
+        score: null,
+        qualitativeLevel,
+        componentScores: null,
+        subItemScores: null,
+        status: entry.status as SubmissionStatus,
+        notes: entry.notes ?? null,
+      });
+      continue;
     }
 
     const score = entry.score ?? null;
@@ -200,9 +225,10 @@ export async function PUT(req: NextRequest) {
       studentId: entry.studentId,
       obligationId,
       score: resolvedScore,
+      qualitativeLevel: null,
       componentScores: multiComponent && !usesSubItems ? componentScores : null,
       subItemScores: usesSubItems ? subItemScores : null,
-      status: entry.status,
+      status: entry.status as SubmissionStatus,
       notes: entry.notes ?? null,
     });
   }

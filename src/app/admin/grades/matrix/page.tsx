@@ -24,7 +24,14 @@ import {
   parseMatrixTaskKey,
 } from "@/lib/grade-components";
 import { autoStatusOnScore } from "@/lib/grade-status";
-import type { SubmissionStatus } from "@/lib/types";
+import {
+  SOCIAL_INVOLVEMENT_LABELS,
+  SOCIAL_INVOLVEMENT_LEVELS,
+  formatQualitativeLevel,
+  isSocialInvolvementSubject,
+  isValidQualitativeLevel,
+} from "@/lib/social-involvement";
+import type { QualitativeLevel, SubmissionStatus } from "@/lib/types";
 
 type ClassItem = { id: string; name: string; gradeYear: string | null };
 
@@ -76,6 +83,7 @@ type MatrixData = {
     studentName: string;
     grade: {
       score: number | null;
+      qualitativeLevel?: QualitativeLevel | null;
       componentScores?: Record<number, number | null> | null;
       subItemScores?: Record<number, number | null> | null;
       status: SubmissionStatus;
@@ -85,7 +93,14 @@ type MatrixData = {
   notRelevantCount: number;
 };
 
-type RowState = Record<string, { score: number | null; status: SubmissionStatus }>;
+type RowState = Record<
+  string,
+  {
+    score: number | null;
+    qualitativeLevel: QualitativeLevel | null;
+    status: SubmissionStatus;
+  }
+>;
 
 export default function GradesMatrixPage() {
   const toast = useToast();
@@ -98,6 +113,7 @@ export default function GradesMatrixPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [bulkScore, setBulkScore] = useState("");
+  const [bulkLevel, setBulkLevel] = useState<QualitativeLevel | "">("");
 
   const parsedTask = parseMatrixTaskKey(taskKey);
 
@@ -112,6 +128,9 @@ export default function GradesMatrixPage() {
     useApi<MatrixData>(matrixKey);
 
   const components = matrixData?.obligation.components ?? [];
+  const isSocial = matrixData
+    ? isSocialInvolvementSubject(matrixData.subject)
+    : false;
 
   useEffect(() => {
     setSubjectId("");
@@ -136,12 +155,15 @@ export default function GradesMatrixPage() {
     for (const row of matrixData.rows) {
       initial[row.studentId] = {
         score: row.grade?.score ?? null,
+        qualitativeLevel: row.grade?.qualitativeLevel ?? null,
         status: row.grade?.status ?? "NOT_STARTED",
       };
     }
     setRowState(initial);
     setSavedSnapshot(JSON.stringify(initial));
     setSaveError(null);
+    setBulkScore("");
+    setBulkLevel("");
   }, [matrixData]);
 
   const selectedSubject = options?.subjects.find((s) => s.id === subjectId);
@@ -160,6 +182,7 @@ export default function GradesMatrixPage() {
       studentId: r.studentId,
       studentName: r.studentName,
       score: rowState[r.studentId]?.score ?? null,
+      qualitativeLevel: rowState[r.studentId]?.qualitativeLevel ?? null,
       status: rowState[r.studentId]?.status ?? "NOT_STARTED",
     }));
   }, [matrixData, rowState]);
@@ -168,14 +191,32 @@ export default function GradesMatrixPage() {
 
   function handleChange(
     studentId: string,
-    field: "score" | "status" | `componentScore:${number}`,
-    value: number | null | SubmissionStatus
+    field: "score" | "status" | "qualitativeLevel" | `componentScore:${number}`,
+    value: number | null | SubmissionStatus | QualitativeLevel | ""
   ) {
     setRowState((prev) => {
       const current = prev[studentId] ?? {
         score: null,
+        qualitativeLevel: null,
         status: "NOT_STARTED" as SubmissionStatus,
       };
+
+      if (field === "qualitativeLevel") {
+        const level =
+          value && isValidQualitativeLevel(String(value))
+            ? (value as QualitativeLevel)
+            : null;
+        return {
+          ...prev,
+          [studentId]: {
+            score: null,
+            qualitativeLevel: level,
+            status: level
+              ? autoStatusOnScore(0, current.status)
+              : current.status,
+          },
+        };
+      }
 
       if (field === "score" || field.startsWith("componentScore:")) {
         const score = value as number | null;
@@ -183,6 +224,7 @@ export default function GradesMatrixPage() {
           ...prev,
           [studentId]: {
             score,
+            qualitativeLevel: null,
             status: autoStatusOnScore(score, current.status),
           },
         };
@@ -197,6 +239,24 @@ export default function GradesMatrixPage() {
   }
 
   function applyBulkScore() {
+    if (isSocial) {
+      if (!bulkLevel || !isValidQualitativeLevel(bulkLevel)) return;
+      setRowState((prev) => {
+        const next = { ...prev };
+        for (const row of tableRows) {
+          if (next[row.studentId]?.qualitativeLevel == null) {
+            next[row.studentId] = {
+              score: null,
+              qualitativeLevel: bulkLevel,
+              status: "GRADED",
+            };
+          }
+        }
+        return next;
+      });
+      return;
+    }
+
     const score = parseFloat(bulkScore);
     if (isNaN(score) || score < 0 || score > 100) return;
 
@@ -204,7 +264,11 @@ export default function GradesMatrixPage() {
       const next = { ...prev };
       for (const row of tableRows) {
         if (next[row.studentId]?.score == null) {
-          next[row.studentId] = { score, status: "GRADED" };
+          next[row.studentId] = {
+            score,
+            qualitativeLevel: null,
+            status: "GRADED",
+          };
         }
       }
       return next;
@@ -225,7 +289,10 @@ export default function GradesMatrixPage() {
           taskSortOrder: parsedTask.sortOrder,
           entries: matrixData.rows.map((r) => ({
             studentId: r.studentId,
-            score: rowState[r.studentId]?.score ?? null,
+            score: isSocial ? null : (rowState[r.studentId]?.score ?? null),
+            qualitativeLevel: isSocial
+              ? (rowState[r.studentId]?.qualitativeLevel ?? null)
+              : null,
             status: rowState[r.studentId]?.status ?? "NOT_STARTED",
           })),
         }),
@@ -253,7 +320,7 @@ export default function GradesMatrixPage() {
       ? matrixTaskLabel({
           name: matrixData.obligation.name,
           questionnaireNumber: matrixData.obligation.questionnaireNumber,
-          taskName: matrixData.obligation.components[0]?.name ?? "ציון",
+          taskName: matrixData.obligation.components[0]?.name ?? (isSocial ? "הערכה" : "ציון"),
         })
       : "");
 
@@ -265,9 +332,12 @@ export default function GradesMatrixPage() {
         className: matrixData.class.name,
         subjectName: matrixData.subject.displayName ?? matrixData.subject.name,
         taskLabel: taskHeaderLabel,
+        scoreHeader: isSocial ? "הערכה" : "ציון",
         rows: tableRows.map((r) => ({
           studentName: r.studentName,
-          score: r.score,
+          score: isSocial
+            ? formatQualitativeLevel(r.qualitativeLevel) ?? null
+            : r.score,
           status: r.status,
         })),
       }),
@@ -308,7 +378,8 @@ export default function GradesMatrixPage() {
                   {s.displayName ?? s.name}
                   {s.units &&
                   s.category !== "MATH" &&
-                  s.category !== "ENGLISH"
+                  s.category !== "ENGLISH" &&
+                  s.category !== "SOCIAL"
                     ? ` (${s.units} יח"ל)`
                     : ""}
                 </option>
@@ -354,7 +425,8 @@ export default function GradesMatrixPage() {
                 {matrixData.subject.displayName ?? matrixData.subject.name}
                 {matrixData.subject.units &&
                 matrixData.subject.category !== "MATH" &&
-                matrixData.subject.category !== "ENGLISH"
+                matrixData.subject.category !== "ENGLISH" &&
+                matrixData.subject.category !== "SOCIAL"
                   ? ` (${matrixData.subject.units} יח"ל)`
                   : ""}
                 {" — "}
@@ -365,16 +437,33 @@ export default function GradesMatrixPage() {
             <div className="flex flex-wrap items-center gap-2">
               {isDirty && <span className="badge-warning">שינויים לא שמורים</span>}
               <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  inputMode="decimal"
-                  className="w-20 py-1.5 text-xs"
-                  placeholder="ציון"
-                  value={bulkScore}
-                  onChange={(e) => setBulkScore(e.target.value)}
-                />
+                {isSocial ? (
+                  <select
+                    className="input w-40 py-1.5 text-xs"
+                    value={bulkLevel}
+                    onChange={(e) =>
+                      setBulkLevel((e.target.value || "") as QualitativeLevel | "")
+                    }
+                  >
+                    <option value="">הערכה</option>
+                    {SOCIAL_INVOLVEMENT_LEVELS.map((level) => (
+                      <option key={level} value={level}>
+                        {SOCIAL_INVOLVEMENT_LABELS[level]}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    inputMode="decimal"
+                    className="w-20 py-1.5 text-xs"
+                    placeholder="ציון"
+                    value={bulkScore}
+                    onChange={(e) => setBulkScore(e.target.value)}
+                  />
+                )}
                 <Button type="button" variant="secondary" size="sm" onClick={applyBulkScore}>
                   החל לכל הריקים
                 </Button>
@@ -403,7 +492,12 @@ export default function GradesMatrixPage() {
           )}
 
           <div className="mt-4">
-            <GradeMatrixTable rows={tableRows} components={components} onChange={handleChange} />
+            <GradeMatrixTable
+              rows={tableRows}
+              components={components}
+              qualitative={isSocial}
+              onChange={handleChange}
+            />
           </div>
         </>
       )}

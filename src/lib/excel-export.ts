@@ -418,14 +418,16 @@ export function buildMatrixSheet(input: {
   className: string;
   subjectName: string;
   taskLabel: string;
-  rows: Array<{ studentName: string; score: number | null; status: string }>;
+  scoreHeader?: string;
+  rows: Array<{ studentName: string; score: number | string | null; status: string }>;
 }): ExportSheet {
+  const scoreHeader = input.scoreHeader ?? "ציון";
   return {
     name: "ציונים",
     title: `${input.className} — ${input.subjectName} — ${input.taskLabel}`,
     columns: [
       { header: "שם תלמיד", key: "studentName" },
-      { header: "ציון", key: "score" },
+      { header: scoreHeader, key: "score" },
       { header: "סטטוס", key: "status" },
     ],
     rows: input.rows.map((r) => ({

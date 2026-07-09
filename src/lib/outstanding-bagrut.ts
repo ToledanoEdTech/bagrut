@@ -55,7 +55,8 @@ function buildSubjectsWithProgress(
       progress: calcSubjectProgressForObligations(
         subject.obligations,
         subjectGrades,
-        student.class.gradeYear
+        student.class.gradeYear,
+        { name: subject.name, category: subject.category }
       ),
     };
   });
