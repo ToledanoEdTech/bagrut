@@ -193,11 +193,11 @@ export function SubjectCard({
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-3 p-5 text-right"
+        className="flex w-full items-center gap-3 p-5 text-right sm:gap-5"
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-3">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-6">
+            <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
               <span
                 className={clsx(
                   "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-base font-extrabold ring-1 ring-inset",
@@ -210,7 +210,7 @@ export function SubjectCard({
               >
                 {name.slice(0, 2)}
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <h3 className="text-xl font-bold text-slate-900">
                   {displayName}
                   {showUnitsSeparately && (
@@ -219,9 +219,6 @@ export function SubjectCard({
                     </span>
                   )}
                 </h3>
-                <p className="mt-0.5 text-sm text-slate-500">
-                  {obligations.length} חובות • {progress.progressPercent.toFixed(0)}% הושלם
-                </p>
                 {(hasOpenCurrent || hasOpenPast || futureCount > 0) && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {hasOpenCurrent && (
@@ -286,20 +283,47 @@ export function SubjectCard({
                 )}
               </div>
             </div>
-            {estGrade != null && (
-              <div className="shrink-0 text-end">
-                <p className={clsx("text-4xl font-extrabold tabular-nums", gradeTone)}>
-                  {estGrade.toFixed(0)}
-                </p>
-                <p className={clsx("text-caption", progress.isFinal && "font-semibold text-emerald-600")}>
-                  {progress.isFinal ? "ציון סופי" : "ציון ביניים"}
-                </p>
+
+            <div
+              className={clsx(
+                "grid w-full shrink-0 grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-200/70 ring-1 ring-slate-200/80",
+                estGrade != null ? "sm:grid-cols-3 lg:w-auto lg:min-w-[22rem]" : "lg:w-auto lg:min-w-[14rem]"
+              )}
+            >
+              <div className="flex flex-col items-center justify-center bg-white px-4 py-3 text-center">
+                <span className="text-xs font-medium tracking-wide text-slate-500">חובות</span>
+                <span className="mt-0.5 text-2xl font-extrabold tabular-nums text-slate-900">
+                  {obligations.length}
+                </span>
               </div>
-            )}
+              <div className="flex flex-col items-center justify-center bg-white px-4 py-3 text-center">
+                <span className="text-xs font-medium tracking-wide text-slate-500">הושלם</span>
+                <span className="mt-0.5 text-2xl font-extrabold tabular-nums text-slate-900">
+                  {progress.progressPercent.toFixed(0)}
+                  <span className="text-base font-bold text-slate-400">%</span>
+                </span>
+              </div>
+              {estGrade != null && (
+                <div className="col-span-2 flex flex-col items-center justify-center bg-white px-4 py-3 text-center sm:col-span-1">
+                  <span
+                    className={clsx(
+                      "text-xs font-medium tracking-wide",
+                      progress.isFinal ? "font-semibold text-emerald-600" : "text-slate-500"
+                    )}
+                  >
+                    {progress.isFinal ? "ציון סופי" : "ציון ביניים"}
+                  </span>
+                  <span className={clsx("mt-0.5 text-2xl font-extrabold tabular-nums", gradeTone)}>
+                    {estGrade.toFixed(0)}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
+
           <ProgressBar
             value={progress.progressPercent}
-            className="mt-3 h-2.5"
+            className="mt-4 h-2.5"
             color={progress.progressPercent >= 70 ? "success" : "primary"}
           />
         </div>
