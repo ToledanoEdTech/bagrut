@@ -39,7 +39,11 @@ export type StudentDashboardData = {
       examEvent: string | null;
       gradeYear: string | null;
       components: Array<{ name: string; weightPercent: number }>;
-      subItems: Array<{ name: string; weightPercent: number }>;
+      subItems: Array<{
+        name: string;
+        weightPercent: number;
+        gradeYear?: string | null;
+      }>;
     }>;
     progress: { progressPercent: number; estimatedGrade: number | null; isFinal?: boolean };
     grades: Array<{ obligationId: string; score: number | null; status: string }>;

@@ -24,7 +24,13 @@ import {
 } from "@/lib/grade-status";
 import { formatSubjectDisplayName } from "@/lib/subject-display";
 import { formatObligationLabel, getNegativeGradeScore } from "@/lib/missing-grades";
-import { isObligationDueForStudent } from "@/lib/grade-year";
+import {
+  getObligationTiming,
+  getSubItemTiming,
+  isObligationRelevantForStudent,
+  resolveSubItemGradeYear,
+  type ObligationTiming,
+} from "@/lib/grade-year";
 
 type Obligation = {
   id: string;
@@ -36,7 +42,12 @@ type Obligation = {
   examEvent: string | null;
   gradeYear: string | null;
   components: Array<{ name: string; weightPercent: number; sortOrder?: number }>;
-  subItems: Array<{ name: string; weightPercent: number; sortOrder?: number }>;
+  subItems: Array<{
+    name: string;
+    weightPercent: number;
+    sortOrder?: number;
+    gradeYear?: string | null;
+  }>;
 };
 
 type Grade = {
@@ -47,6 +58,49 @@ type Grade = {
   status: string;
   notes?: string | null;
 };
+
+function isObligationOpenForStudent(
+  obligation: Obligation,
+  grade: Grade | undefined,
+  studentGradeYear?: string | null
+): boolean {
+  if (!grade) return true;
+  if (grade.status === "EXEMPT" || grade.status === "GRADED" || grade.status === "SUBMITTED") {
+    return false;
+  }
+  if (isMissingGradeStatus(grade.status)) return true;
+  const usesSubItems = hasSubItemGrades(normalizeSubItems(obligation.subItems));
+  if (usesSubItems) {
+    return !isObligationSubItemsComplete(obligation, grade, studentGradeYear);
+  }
+  return grade.score == null;
+}
+
+/** האם יש תת-מטלה פתוחה עם תזמון נתון (או המטלה עצמה כשאין תתי-מטלות). */
+function hasOpenTiming(
+  obligation: Obligation,
+  grade: Grade | undefined,
+  studentGradeYear: string | null | undefined,
+  timing: "past" | "current"
+): boolean {
+  if (studentGradeYear === undefined) return false;
+  if (!isObligationOpenForStudent(obligation, grade, studentGradeYear)) return false;
+
+  const subItems = obligation.subItems ?? [];
+  if (subItems.length === 0) {
+    return getObligationTiming(obligation.gradeYear, studentGradeYear) === timing;
+  }
+
+  return subItems.some((si, i) => {
+    if (getSubItemTiming(si.gradeYear, obligation.gradeYear, studentGradeYear) !== timing) {
+      return false;
+    }
+    const sortOrder = si.sortOrder ?? i;
+    if (!grade) return true;
+    if (grade.status === "EXEMPT") return false;
+    return grade.subItemScores?.[sortOrder] == null;
+  });
+}
 
 export function SubjectCard({
   name,
@@ -78,7 +132,7 @@ export function SubjectCard({
     isMissingGradeStatus(gradeMap.get(o.id)?.status)
   );
   const negativeObligations = obligations
-    .filter((o) => isObligationDueForStudent(o.gradeYear, studentGradeYear))
+    .filter((o) => isObligationRelevantForStudent(o, studentGradeYear))
     .map((o) => ({
       obligation: o,
       score: getNegativeGradeScore(o, gradeMap.get(o.id)),
@@ -91,8 +145,27 @@ export function SubjectCard({
     units != null && category !== "MATH" && category !== "ENGLISH";
   const dueObligations =
     studentGradeYear !== undefined
-      ? obligations.filter((o) => isObligationDueForStudent(o.gradeYear, studentGradeYear))
+      ? obligations.filter((o) => isObligationRelevantForStudent(o, studentGradeYear))
       : obligations;
+
+  const openCurrentYear = obligations.filter((o) =>
+    hasOpenTiming(o, gradeMap.get(o.id), studentGradeYear, "current")
+  );
+  const openPastYear = obligations.filter((o) =>
+    hasOpenTiming(o, gradeMap.get(o.id), studentGradeYear, "past")
+  );
+  const futureCount = obligations.filter((o) => {
+    if (studentGradeYear === undefined) return false;
+    const subItems = o.subItems ?? [];
+    if (subItems.length === 0) {
+      return getObligationTiming(o.gradeYear, studentGradeYear) === "future";
+    }
+    return subItems.some(
+      (si) => getSubItemTiming(si.gradeYear, o.gradeYear, studentGradeYear) === "future"
+    );
+  }).length;
+  const hasOpenCurrent = openCurrentYear.length > 0;
+  const hasOpenPast = openPastYear.length > 0;
 
   const estGrade = progress.estimatedGrade;
   const gradeTone =
@@ -109,7 +182,16 @@ export function SubjectCard({
       className={clsx(
         "card group overflow-hidden",
         hasMissingGrades && "border-red-300 ring-2 ring-red-200",
-        !hasMissingGrades && hasNegativeGrades && "border-amber-400 ring-2 ring-amber-200"
+        !hasMissingGrades && hasNegativeGrades && "border-amber-400 ring-2 ring-amber-200",
+        !hasMissingGrades &&
+          !hasNegativeGrades &&
+          hasOpenCurrent &&
+          "border-primary-300 ring-2 ring-primary-200",
+        !hasMissingGrades &&
+          !hasNegativeGrades &&
+          !hasOpenCurrent &&
+          hasOpenPast &&
+          "border-sky-300 ring-2 ring-sky-200"
       )}
     >
       <button
@@ -120,7 +202,16 @@ export function SubjectCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary-50 to-brand-50 text-base font-extrabold text-primary-600 ring-1 ring-inset ring-primary-100">
+              <span
+                className={clsx(
+                  "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-base font-extrabold ring-1 ring-inset",
+                  hasOpenCurrent
+                    ? "bg-gradient-to-br from-primary-100 to-primary-50 text-primary-700 ring-primary-200"
+                    : hasOpenPast
+                      ? "bg-gradient-to-br from-sky-100 to-sky-50 text-sky-700 ring-sky-200"
+                      : "bg-gradient-to-br from-primary-50 to-brand-50 text-primary-600 ring-primary-100"
+                )}
+              >
                 {name.slice(0, 2)}
               </span>
               <div className="min-w-0">
@@ -135,6 +226,41 @@ export function SubjectCard({
                 <p className="mt-0.5 text-sm text-slate-500">
                   {dueObligations.length} חובות • {progress.progressPercent.toFixed(0)}% הושלם
                 </p>
+                {(hasOpenCurrent || hasOpenPast || futureCount > 0) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {hasOpenCurrent && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-600 px-3 py-1 text-sm font-bold text-white shadow-sm">
+                        להגיש השנה
+                        <span className="rounded-full bg-white/25 px-1.5 py-0.5 text-xs tabular-nums">
+                          {openCurrentYear.length}
+                        </span>
+                      </span>
+                    )}
+                    {hasOpenPast && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-600 px-3 py-1 text-sm font-bold text-white shadow-sm">
+                        היה עליך לעשות
+                        <span className="rounded-full bg-white/25 px-1.5 py-0.5 text-xs tabular-nums">
+                          {openPastYear.length}
+                        </span>
+                      </span>
+                    )}
+                    {futureCount > 0 && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                        לשנים הבאות · {futureCount}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {hasOpenCurrent && openCurrentYear.length <= 3 && (
+                  <p className="mt-1.5 text-sm font-semibold text-primary-700">
+                    {openCurrentYear.map(formatObligationLabel).join(" · ")}
+                  </p>
+                )}
+                {!hasOpenCurrent && hasOpenPast && openPastYear.length <= 3 && (
+                  <p className="mt-1.5 text-sm font-semibold text-sky-700">
+                    {openPastYear.map(formatObligationLabel).join(" · ")}
+                  </p>
+                )}
                 {hasMissingGrades && (
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-red-600">
                     <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
@@ -210,10 +336,17 @@ export function SubjectCard({
                   const usesSubItems = hasSubItemGrades(normalizedSubItems);
                   const multiComponent =
                     !usesSubItems && hasSeparateComponentGrades(normalizedComponents);
-                  const displayScore = resolveObligationGradeScore(o, grade ?? {});
-                  const subItemProgress = getObligationSubItemProgress(o, grade);
+                  const displayScore = resolveObligationGradeScore(o, grade ?? {}, {
+                    studentGradeYear,
+                  });
+                  const subItemProgress = getObligationSubItemProgress(
+                    o,
+                    grade,
+                    studentGradeYear
+                  );
                   const subItemsComplete =
-                    !usesSubItems || isObligationSubItemsComplete(o, grade ?? {});
+                    !usesSubItems ||
+                    isObligationSubItemsComplete(o, grade ?? {}, studentGradeYear);
                   const showPartialSubItemProgress =
                     usesSubItems &&
                     subItemProgress != null &&
@@ -226,7 +359,7 @@ export function SubjectCard({
                       )
                     : null;
                   const earnedSubjectPoints = usesSubItems
-                    ? calcObligationEarnedSubjectPoints(o, grade)
+                    ? calcObligationEarnedSubjectPoints(o, grade, studentGradeYear)
                     : null;
                   const earnedScoreLabel =
                     earnedSubjectPoints != null
@@ -237,11 +370,19 @@ export function SubjectCard({
                       : null;
 
                   const isMissing = statusKey === "MISSING";
-                  const negativeScore = subItemsComplete ? getNegativeGradeScore(o, grade) : null;
+                  const negativeScore = subItemsComplete
+                    ? getNegativeGradeScore(o, grade)
+                    : null;
                   const isNegative = negativeScore != null;
+                  const timing: ObligationTiming =
+                    studentGradeYear !== undefined
+                      ? getObligationTiming(o.gradeYear, studentGradeYear)
+                      : "unknown";
                   const isFuture =
                     studentGradeYear !== undefined &&
-                    !isObligationDueForStudent(o.gradeYear, studentGradeYear);
+                    !isObligationRelevantForStudent(o, studentGradeYear);
+                  const isPastDue =
+                    !isFuture && (timing === "past" || timing === "current");
 
                   return (
                     <div
@@ -250,13 +391,19 @@ export function SubjectCard({
                         "rounded-xl border p-5 transition",
                         isFuture
                           ? "border-slate-200 bg-slate-50/80 opacity-75"
-                          : "bg-white hover:bg-slate-50",
+                          : timing === "past"
+                            ? "border-sky-300 bg-sky-50/50 ring-1 ring-sky-200"
+                            : timing === "current"
+                              ? "border-primary-300 bg-primary-50/40 ring-1 ring-primary-200"
+                              : "bg-white hover:bg-slate-50",
                         !isFuture &&
                           (isMissing
                             ? "border-red-300 bg-red-50/40 ring-1 ring-red-200"
                             : isNegative
                               ? "border-amber-400 bg-amber-50/40 ring-1 ring-amber-200"
-                              : "border-slate-200")
+                              : timing === "past" || timing === "current"
+                                ? null
+                                : "border-slate-200")
                       )}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -280,9 +427,24 @@ export function SubjectCard({
                               </span>
                             )}
                             <span className={status.className}>{status.label}</span>
+                            {timing === "past" && (
+                              <span className="rounded-full bg-sky-600 px-2.5 py-0.5 text-xs font-bold text-white">
+                                היה עליך לעשות
+                              </span>
+                            )}
+                            {timing === "current" && (
+                              <span className="rounded-full bg-primary-600 px-2.5 py-0.5 text-xs font-bold text-white">
+                                להגיש השנה
+                              </span>
+                            )}
                             {isFuture && (
-                              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
-                                בעתיד
+                              <span className="rounded-full bg-slate-400 px-2.5 py-0.5 text-xs font-bold text-white">
+                                לשנים הבאות
+                              </span>
+                            )}
+                            {isPastDue && !isMissing && statusKey === "NOT_STARTED" && (
+                              <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-xs font-bold text-white">
+                                טרם הוגש
                               </span>
                             )}
                           </div>
@@ -500,16 +662,57 @@ export function SubjectCard({
                             {o.subItems.map((si, i) => {
                               const sortOrder = si.sortOrder ?? i;
                               const subItemScore = grade?.subItemScores?.[sortOrder];
+                              const subTiming =
+                                studentGradeYear !== undefined
+                                  ? getSubItemTiming(
+                                      si.gradeYear,
+                                      o.gradeYear,
+                                      studentGradeYear
+                                    )
+                                  : "unknown";
+                              const effectiveGy = resolveSubItemGradeYear(
+                                si.gradeYear,
+                                o.gradeYear
+                              );
                               return (
                                 <div
                                   key={sortOrder}
-                                  className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-4 py-2.5 text-base"
+                                  className={clsx(
+                                    "flex items-center justify-between gap-3 rounded-lg px-4 py-2.5 text-base",
+                                    subTiming === "future"
+                                      ? "bg-slate-100/80 opacity-70"
+                                      : subTiming === "past"
+                                        ? "bg-sky-50 ring-1 ring-sky-100"
+                                        : subTiming === "current"
+                                          ? "bg-primary-50 ring-1 ring-primary-100"
+                                          : "bg-slate-50"
+                                  )}
                                 >
                                   <div className="min-w-0">
-                                    <span className="font-medium text-slate-800">{si.name}</span>
-                                    <span className="me-2 text-sm text-primary-600">
-                                      ({si.weightPercent}%)
-                                    </span>
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <span className="font-medium text-slate-800">{si.name}</span>
+                                      <span className="text-sm text-primary-600">
+                                        ({si.weightPercent}%)
+                                      </span>
+                                      {subTiming === "past" && (
+                                        <span className="rounded bg-sky-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                          היה עליך
+                                        </span>
+                                      )}
+                                      {subTiming === "current" && (
+                                        <span className="rounded bg-primary-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                          השנה
+                                        </span>
+                                      )}
+                                      {subTiming === "future" && (
+                                        <span className="rounded bg-slate-400 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                          בעתיד
+                                        </span>
+                                      )}
+                                    </div>
+                                    {effectiveGy && (
+                                      <p className="mt-0.5 text-xs text-slate-500">{effectiveGy}</p>
+                                    )}
                                   </div>
                                   {!readOnly && onGradeChange ? (
                                     <input

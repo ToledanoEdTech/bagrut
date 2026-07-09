@@ -51,6 +51,11 @@ export interface ObligationSubItem {
   sortOrder: number;
   /** תאריך אחרון להזנת ציון לתת-מטלה (YYYY-MM-DD) */
   gradeEntryDueDate?: string | null;
+  /**
+   * שכבה שבה יש לבצע את תת-המטלה.
+   * null/undefined = יורש את שכבת המטלה האב.
+   */
+  gradeYear?: string | null;
 }
 
 export interface Obligation {

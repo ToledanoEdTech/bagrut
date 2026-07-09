@@ -7,6 +7,7 @@ import { STATUS_LABELS } from "@/lib/grade-status";
 import {
   gradeYearOrder,
   isObligationDueForStudent,
+  isSubItemDueForStudent,
   normalizeGradeYear,
 } from "@/lib/grade-year";
 import {
@@ -187,18 +188,28 @@ export function collectPendingTasks(
       });
 
       for (const obligation of subject.obligations) {
-        if (!isObligationDueForStudent(obligation.gradeYear, cls.gradeYear)) continue;
-
-        const obligationGY = normalizeGradeYear(obligation.gradeYear);
-        if (filter.groupBy === "gradeYear" && filterGradeYear) {
-          if (obligationGY !== filterGradeYear) continue;
-        }
-
         const grade = gradeMap.get(`${student.id}::${obligation.id}`);
         const targets = getGradeEntryTargets(obligation);
 
         for (const target of targets) {
-          if (!isTargetIncomplete(obligation, grade, target)) continue;
+          if (target.subItemSortOrder !== undefined) {
+            const si = obligation.subItems.find(
+              (s, i) => (s.sortOrder ?? i) === target.subItemSortOrder
+            );
+            if (!isSubItemDueForStudent(si?.gradeYear, obligation.gradeYear, cls.gradeYear)) {
+              continue;
+            }
+          } else if (!isObligationDueForStudent(obligation.gradeYear, cls.gradeYear)) {
+            continue;
+          }
+
+          const obligationGY =
+            target.gradeYear ?? normalizeGradeYear(obligation.gradeYear);
+          if (filter.groupBy === "gradeYear" && filterGradeYear) {
+            if (obligationGY !== filterGradeYear) continue;
+          }
+
+          if (!isTargetIncomplete(obligation, grade, target, cls.gradeYear)) continue;
 
           entries.push({
             studentId: student.id,

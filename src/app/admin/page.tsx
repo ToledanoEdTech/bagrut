@@ -1438,7 +1438,20 @@ export default function AdminDashboard() {
 
       {teacherAlerts &&
         (teacherAlerts.upcoming.length > 0 || teacherAlerts.overdue.length > 0) && (
-          <div className="mt-8 grid gap-6 lg:grid-cols-2">
+          <div className="mt-8">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-slate-500">
+                סיכום מורים עם מועדי הזנה פתוחים
+              </p>
+              <Link
+                href="/admin/missing-entries"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-primary-600 hover:text-primary-700"
+              >
+                פירוט מלא — מורים ומטלות שלא הוזנו
+                <ChevronLeft className="h-4 w-4" />
+              </Link>
+            </div>
+          <div className="grid gap-6 lg:grid-cols-2">
             <Card className="p-6">
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-100">
@@ -1507,6 +1520,7 @@ export default function AdminDashboard() {
                 )}
               </div>
             </Card>
+          </div>
           </div>
         )}
 

@@ -26,7 +26,10 @@ import {
 import { defaultGradeEntryDueDate, resolveGradeEntryDueDate } from "@/lib/grade-due-date";
 
 type WeightedItem = { name: string; weightPercent: number };
-type SubItem = WeightedItem & { gradeEntryDueDate?: string | null };
+type SubItem = WeightedItem & {
+  gradeEntryDueDate?: string | null;
+  gradeYear?: string | null;
+};
 
 type Obligation = {
   id: string;
@@ -82,10 +85,11 @@ function obligationToDraft(o?: Obligation): ObligationDraft {
     gradeYear: o.gradeYear ?? "",
     gradeEntryDueDate: resolveGradeEntryDueDate(o.gradeEntryDueDate),
     components: o.components.map(({ name, weightPercent }) => ({ name, weightPercent })),
-    subItems: o.subItems.map(({ name, weightPercent, gradeEntryDueDate }) => ({
+    subItems: o.subItems.map(({ name, weightPercent, gradeEntryDueDate, gradeYear }) => ({
       name,
       weightPercent,
       gradeEntryDueDate: resolveGradeEntryDueDate(gradeEntryDueDate),
+      gradeYear: gradeYear ?? "",
     })),
   };
 }
@@ -103,7 +107,12 @@ function draftToPayload(draft: ObligationDraft, subjectId: string, sortOrder: nu
     gradeEntryDueDate: draft.gradeEntryDueDate || defaultGradeEntryDueDate(),
     sortOrder,
     components: draft.components,
-    subItems: draft.subItems,
+    subItems: draft.subItems.map((si) => ({
+      name: si.name,
+      weightPercent: si.weightPercent,
+      gradeEntryDueDate: si.gradeEntryDueDate,
+      gradeYear: si.gradeYear || null,
+    })),
   };
 }
 
@@ -200,7 +209,12 @@ export default function SubjectsPage() {
           gradeYear: o.gradeYear || null,
           gradeEntryDueDate: o.gradeEntryDueDate || null,
           components: o.components,
-          subItems: o.subItems,
+          subItems: o.subItems.map((si) => ({
+            name: si.name,
+            weightPercent: si.weightPercent,
+            gradeEntryDueDate: si.gradeEntryDueDate,
+            gradeYear: si.gradeYear || null,
+          })),
         })),
       }),
     });
@@ -760,10 +774,19 @@ export default function SubjectsPage() {
                                     {o.subItems.map((si, i) => (
                                       <div
                                         key={i}
-                                        className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-2.5 text-base"
+                                        className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-4 py-2.5 text-base"
                                       >
-                                        <span className="font-medium text-slate-800">{si.name}</span>
-                                        <span className="font-semibold text-primary-600">
+                                        <div className="min-w-0">
+                                          <span className="font-medium text-slate-800">
+                                            {si.name}
+                                          </span>
+                                          {si.gradeYear && (
+                                            <span className="me-2 text-xs text-slate-500">
+                                              · {si.gradeYear}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <span className="shrink-0 font-semibold text-primary-600">
                                           {si.weightPercent}%
                                         </span>
                                       </div>

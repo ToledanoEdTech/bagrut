@@ -90,14 +90,28 @@ export async function PATCH(req: NextRequest) {
     if (Array.isArray(u.patch.subItems)) {
       patch.subItems = u.patch.subItems.map(
         (
-          si: { name: string; weightPercent: number; sortOrder?: number; gradeEntryDueDate?: string },
+          si: {
+            name: string;
+            weightPercent: number;
+            sortOrder?: number;
+            gradeEntryDueDate?: string;
+            gradeYear?: string | null;
+          },
           i: number
-        ) => ({
-          name: si.name,
-          weightPercent: si.weightPercent,
-          sortOrder: si.sortOrder ?? i,
-          gradeEntryDueDate: si.gradeEntryDueDate ?? defaultGradeEntryDueDate(),
-        })
+        ) => {
+          let gradeYear: string | null = null;
+          if (si.gradeYear != null && si.gradeYear !== "") {
+            const check = validateCanonicalGradeYear(si.gradeYear);
+            if (check.ok) gradeYear = check.value;
+          }
+          return {
+            name: si.name,
+            weightPercent: si.weightPercent,
+            sortOrder: si.sortOrder ?? i,
+            gradeEntryDueDate: si.gradeEntryDueDate ?? defaultGradeEntryDueDate(),
+            gradeYear,
+          };
+        }
       );
     }
     if (Object.keys(patch).length > 0) {

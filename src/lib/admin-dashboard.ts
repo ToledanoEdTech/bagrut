@@ -11,7 +11,7 @@ import {
   type OverdueGradeItem,
 } from "@/lib/grade-reminders";
 import { isNegativeGradeEntry } from "@/lib/missing-grades";
-import { isObligationDueForStudent } from "@/lib/grade-year";
+import { isObligationRelevantForStudent } from "@/lib/grade-year";
 import {
   listAllGrades,
   listClasses,
@@ -288,11 +288,11 @@ function computeGradeGaps(data: ScopedData): GradeGaps {
       if (allowedSubjects && !allowedSubjects.has(subject.id)) continue;
 
       for (const obligation of subject.obligations) {
-        if (!isObligationDueForStudent(obligation.gradeYear, cls.gradeYear)) continue;
+        if (!isObligationRelevantForStudent(obligation, cls.gradeYear)) continue;
 
         classEntry.total += 1;
         const grade = gradeMap.get(`${student.id}::${obligation.id}`);
-        if (isGradeEntryIncomplete(obligation, grade)) {
+        if (isGradeEntryIncomplete(obligation, grade, cls.gradeYear)) {
           totalMissing += 1;
           classEntry.missing += 1;
           const sub = missingBySubject.get(subject.id) ?? { name: subject.name, count: 0 };
@@ -398,7 +398,7 @@ function computeSchoolProgress(data: ScopedData): SchoolProgress {
       if (allowedSubjects && !allowedSubjects.has(subject.id)) continue;
 
       const dueObligations = subject.obligations.filter((o) =>
-        isObligationDueForStudent(o.gradeYear, cls.gradeYear)
+        isObligationRelevantForStudent(o, cls.gradeYear)
       );
 
       const subjectGrades = dueObligations

@@ -7,7 +7,11 @@ import { CANONICAL_GRADE_YEARS } from "@/lib/grade-year";
 
 export type WeightedItem = { name: string; weightPercent: number };
 
-export type SubItemDraft = WeightedItem & { gradeEntryDueDate: string };
+export type SubItemDraft = WeightedItem & {
+  gradeEntryDueDate: string;
+  /** ריק = יורש את שכבת המטלה */
+  gradeYear: string;
+};
 
 export type ObligationDraft = {
   id?: string;
@@ -135,7 +139,12 @@ function SubItemsListEditor({
           onClick={() =>
             onChange([
               ...items,
-              { name: "", weightPercent: 0, gradeEntryDueDate: defaultGradeEntryDueDate() },
+              {
+                name: "",
+                weightPercent: 0,
+                gradeEntryDueDate: defaultGradeEntryDueDate(),
+                gradeYear: "",
+              },
             ])
           }
           className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700"
@@ -177,6 +186,23 @@ function SubItemsListEditor({
                   onChange(next);
                 }}
               />
+              <select
+                className="input w-32 py-1.5 text-sm"
+                title="שכבה לתת-מטלה (ריק = כמו המטלה)"
+                value={item.gradeYear || ""}
+                onChange={(e) => {
+                  const next = [...items];
+                  next[i] = { ...next[i], gradeYear: e.target.value };
+                  onChange(next);
+                }}
+              >
+                <option value="">כמו המטלה</option>
+                {CANONICAL_GRADE_YEARS.map((gy) => (
+                  <option key={gy} value={gy}>
+                    {gy}
+                  </option>
+                ))}
+              </select>
               <input
                 type="date"
                 className="input w-36 py-1.5 text-sm"

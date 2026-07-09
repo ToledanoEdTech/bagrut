@@ -6,7 +6,7 @@ import {
   normalizeSubItems,
 } from "@/lib/grade-components";
 import { resolveGradeEntryDueDate } from "@/lib/grade-due-date";
-import { isObligationDueForStudent, normalizeGradeYear } from "@/lib/grade-year";
+import { isObligationDueForStudent, isSubItemDueForStudent, normalizeGradeYear } from "@/lib/grade-year";
 import { isMissingGradeStatus } from "@/lib/grade-status";
 import { LEGACY_TEACHER_PERMISSIONS } from "@/lib/permissions";
 import { ADMIN_EMAILS } from "@/lib/roles";
@@ -183,8 +183,9 @@ export function filterUnsentReminderItems(
 }
 
 export function isGradeEntryIncomplete(
-  obligation: Pick<Obligation, "components" | "subItems">,
-  grade: Grade | undefined
+  obligation: Pick<Obligation, "components" | "subItems" | "gradeYear">,
+  grade: Grade | undefined,
+  studentGradeYear?: string | null
 ): boolean {
   if (!grade) return true;
   if (grade.status === "EXEMPT") return false;
@@ -192,9 +193,12 @@ export function isGradeEntryIncomplete(
   if (grade.status === "NOT_STARTED" || grade.status === "IN_PROGRESS") return true;
   const subItems = normalizeSubItems(obligation.subItems ?? []);
   if (subItems.length > 0) {
-    return !isObligationSubItemsComplete({ subItems: obligation.subItems ?? [] }, grade);
+    return !isObligationSubItemsComplete(obligation, grade, studentGradeYear);
   }
-  const score = resolveObligationGradeScore(obligation, grade, { requireComplete: true });
+  const score = resolveObligationGradeScore(obligation, grade, {
+    requireComplete: true,
+    studentGradeYear,
+  });
   return score == null;
 }
 
@@ -209,6 +213,8 @@ export type GradeEntryTarget = {
   subItemSortOrder?: number;
   label: string;
   dueDate: string;
+  /** שכבה אפקטיבית של היעד (תת-מטלה או מטלה) */
+  gradeYear: string | null;
 };
 
 /** מחזיר יעדי הזנה — תת-מטלה נפרדת לכל תת-מטלה, אחרת המטלה כולה */
@@ -221,6 +227,7 @@ export function getGradeEntryTargets(obligation: Obligation): GradeEntryTarget[]
       subItemSortOrder: si.sortOrder ?? i,
       label: `${baseLabel} — ${si.name || "תת-מטלה"}`,
       dueDate: resolveGradeEntryDueDate(si.gradeEntryDueDate),
+      gradeYear: normalizeGradeYear(si.gradeYear) ?? normalizeGradeYear(obligation.gradeYear),
     }));
   }
   return [
@@ -228,6 +235,7 @@ export function getGradeEntryTargets(obligation: Obligation): GradeEntryTarget[]
       obligationId: obligation.id,
       label: baseLabel,
       dueDate: resolveGradeEntryDueDate(obligation.gradeEntryDueDate),
+      gradeYear: normalizeGradeYear(obligation.gradeYear),
     },
   ];
 }
@@ -235,12 +243,24 @@ export function getGradeEntryTargets(obligation: Obligation): GradeEntryTarget[]
 export function isTargetIncomplete(
   obligation: Obligation,
   grade: Grade | undefined,
-  target: GradeEntryTarget
+  target: GradeEntryTarget,
+  studentGradeYear?: string | null
 ): boolean {
   if (target.subItemSortOrder !== undefined) {
+    if (
+      studentGradeYear !== undefined &&
+      !isSubItemDueForStudent(
+        obligation.subItems.find((si, i) => (si.sortOrder ?? i) === target.subItemSortOrder)
+          ?.gradeYear,
+        obligation.gradeYear,
+        studentGradeYear
+      )
+    ) {
+      return false;
+    }
     return isSubItemScoreMissing(grade, target.subItemSortOrder);
   }
-  return isGradeEntryIncomplete(obligation, grade);
+  return isGradeEntryIncomplete(obligation, grade, studentGradeYear);
 }
 
 type TargetCollectorOptions = {
@@ -289,10 +309,21 @@ function collectGradeItemsMatchingDue(
           );
           const matchedSubject = relevant.find((s) => s.id === subject.id);
           if (!matchedSubject?.obligations.some((o) => o.id === obligation.id)) continue;
-          if (!isObligationDueForStudent(obligation.gradeYear, cls.gradeYear)) continue;
+
+          // תת-מטלה: בודקים שכבה של התת-מטלה; מטלה שלמה: שכבת המטלה
+          if (target.subItemSortOrder !== undefined) {
+            const si = obligation.subItems.find(
+              (s, i) => (s.sortOrder ?? i) === target.subItemSortOrder
+            );
+            if (!isSubItemDueForStudent(si?.gradeYear, obligation.gradeYear, cls.gradeYear)) {
+              continue;
+            }
+          } else if (!isObligationDueForStudent(obligation.gradeYear, cls.gradeYear)) {
+            continue;
+          }
 
           const grade = gradeMap.get(`${student.id}::${obligation.id}`);
-          if (!isTargetIncomplete(obligation, grade, target)) continue;
+          if (!isTargetIncomplete(obligation, grade, target, cls.gradeYear)) continue;
 
           missingTotal += 1;
           const entry = missingByClass.get(cls.id) ?? {
@@ -315,7 +346,10 @@ function collectGradeItemsMatchingDue(
           ),
         ];
         const obligationGradeYear =
-          normalizeGradeYear(obligation.gradeYear) ?? affectedGradeYears[0] ?? null;
+          target.gradeYear ??
+          normalizeGradeYear(obligation.gradeYear) ??
+          affectedGradeYears[0] ??
+          null;
 
         items.push({
           obligationId: obligation.id,

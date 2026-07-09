@@ -22,6 +22,7 @@ import {
   Cpu,
   CalendarDays,
   FileSpreadsheet,
+  AlertTriangle,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { SiteLogos } from "@/components/ui/SiteLogos";
@@ -43,6 +44,7 @@ const dailyWorkLinks: NavLink[] = [
   { href: "/admin/hightech-bagrut", label: "בגרות הייטק", icon: Cpu },
   { href: "/admin/grades", label: "הזנת ציונים", icon: ClipboardList },
   { href: "/admin/reports", label: "דוחות משימות", icon: FileSpreadsheet },
+  { href: "/admin/missing-entries", label: "מורים ומטלות שלא הוזנו", icon: AlertTriangle },
 ];
 
 const managementLinks: NavLink[] = [
@@ -141,12 +143,13 @@ export function Sidebar({
       ? [{ href: "/student", label: "הדשבורד שלי", icon: GraduationCap, exact: true }]
       : [];
 
-  const filteredDaily =
+      const filteredDaily =
     role === "STUDENT"
       ? []
       : dailyWorkLinks.filter((l) => {
           if (l.href === "/admin/grades" && session && !hasAnyGradeWrite(session)) return false;
           if (l.href === "/admin/reports" && session && !hasAnyGradeWrite(session)) return false;
+          if (l.href === "/admin/missing-entries" && role !== "ADMIN") return false;
           if (
             (l.href === "/admin/students" ||
               l.href === "/admin/outstanding-bagrut" ||

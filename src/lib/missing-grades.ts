@@ -13,7 +13,12 @@ type ObligationLike = {
   questionnaireNumber: string | null;
   gradeYear?: string | null;
   components?: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
-  subItems?: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
+  subItems?: Array<{
+    weightPercent: number;
+    sortOrder?: number;
+    name?: string;
+    gradeYear?: string | null;
+  }>;
 };
 
 type GradeLike = {
