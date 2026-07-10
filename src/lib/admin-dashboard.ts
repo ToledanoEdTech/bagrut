@@ -25,10 +25,10 @@ import { getGradeReminderSettings } from "@/lib/firestore/settings";
 import { cached } from "@/lib/server-cache";
 import {
   canViewOutstandingBagrut,
-  getAllowedClassIds,
   getAllowedSubjectIds,
   hasAnyGradeWrite,
   isFullAdmin,
+  studentMatchesPermissionScopes,
 } from "@/lib/permissions";
 import {
   computeOutstandingBagrutForStudents,
@@ -205,28 +205,28 @@ function filterStudentsForScope(
   const classById = new Map(classes.map((c) => [c.id, c]));
   const examPathById = new Map(examPaths.map((p) => [p.id, p]));
   const tracksById = new Map(tracks.map((t) => [t.id, t]));
+  const classRefs = classes.map((c) => ({ id: c.id, gradeYear: c.gradeYear }));
 
-  const allowedSubjectIds = getAllowedSubjectIds(session);
-  if (allowedSubjectIds !== null) {
-    const allowed = new Set(allowedSubjectIds);
-    return students.filter((student) => {
-      const cls = classById.get(student.classId);
-      if (!cls) return false;
-      const relevant = resolveRelevantSubjects(
-        withClass(student, cls),
-        subjects,
-        examPathById.get(cls.examPathId) ?? null,
-        tracksById
-      );
-      return relevant.some((s) => allowed.has(s.id));
-    });
-  }
+  return students.filter((student) => {
+    if (studentMatchesPermissionScopes(session, { classId: student.classId }, classRefs, [])) {
+      return true;
+    }
 
-  const allowedClassIds = getAllowedClassIds(session, classes);
-  if (allowedClassIds === null) return students;
-
-  const allowed = new Set(allowedClassIds);
-  return students.filter((s) => allowed.has(s.classId));
+    const cls = classById.get(student.classId);
+    if (!cls) return false;
+    const relevant = resolveRelevantSubjects(
+      withClass(student, cls),
+      subjects,
+      examPathById.get(cls.examPathId) ?? null,
+      tracksById
+    );
+    return studentMatchesPermissionScopes(
+      session,
+      { classId: student.classId },
+      classRefs,
+      relevant.map((s) => s.id)
+    );
+  });
 }
 
 function filterSubjectsForScope(session: AuthSession, subjects: Subject[]): Subject[] {

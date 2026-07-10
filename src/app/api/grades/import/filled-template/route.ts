@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getClassById,
   listAllGrades,
   listClassesSimple,
   listExamPaths,
@@ -11,6 +10,8 @@ import {
 import { buildGradeImportTemplateRows } from "@/lib/grade-import-template";
 import { STATUS_LABELS, SUBMISSION_STATUSES } from "@/lib/grade-status";
 import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
+import { getAllowedClassIdsForListing } from "@/lib/permissions";
+import { normalizeGradeYear } from "@/lib/grade-year";
 import { buildPathLabelsBySubjectId } from "@/lib/subject-display";
 import type { Track } from "@/lib/types";
 
@@ -24,6 +25,8 @@ export async function GET(req: NextRequest) {
 
   const params = new URL(req.url).searchParams;
   const classId = params.get("classId");
+  const gradeYearRaw = params.get("gradeYear");
+  const gradeYear = normalizeGradeYear(gradeYearRaw);
   const subjectId = params.get("subjectId") || undefined;
   const obligationId = params.get("obligationId") || undefined;
   const taskSortOrderRaw = params.get("taskSortOrder");
@@ -35,16 +38,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "תת-מטלה לא חוקית" }, { status: 400 });
   }
 
-  if (!classId) {
-    return NextResponse.json({ error: "חסר מזהה כיתה" }, { status: 400 });
+  if (!classId && !gradeYear) {
+    return NextResponse.json(
+      { error: "חסר מזהה כיתה או שכבה" },
+      { status: 400 }
+    );
   }
-
-  const accessError = await requireGradeWrite(session, {
-    classId,
-    subjectId,
-    obligationId,
-  });
-  if (accessError) return accessError;
 
   const [classes, students, subjects, examPaths, tracks, grades] =
     await Promise.all([
@@ -55,11 +54,6 @@ export async function GET(req: NextRequest) {
       listTracks(),
       listAllGrades(),
     ]);
-
-  const cls = classes.find((c) => c.id === classId);
-  if (!cls) {
-    return NextResponse.json({ error: "כיתה לא נמצאה" }, { status: 404 });
-  }
 
   if (subjectId && !subjects.some((s) => s.id === subjectId)) {
     return NextResponse.json({ error: "מקצוע לא נמצא" }, { status: 404 });
@@ -74,31 +68,80 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const fullClass = await getClassById(classId);
-  const examPathId = fullClass?.examPathId ?? "";
-  const examPath = examPaths.find((p) => p.id === examPathId) ?? null;
   const pathLabelsBySubjectId = buildPathLabelsBySubjectId(examPaths);
   const tracksById = new Map<string, Track>(tracks.map((t) => [t.id, t]));
+  const examPathById = new Map(examPaths.map((p) => [p.id, p]));
+  const allowedClassIds = getAllowedClassIdsForListing(session, classes);
 
-  const classStudents = students
-    .filter((s) => s.classId === classId)
-    .sort((a, b) => a.name.localeCompare(b.name, "he"));
+  let targetClasses = classId
+    ? classes.filter((c) => c.id === classId)
+    : classes.filter((c) => normalizeGradeYear(c.gradeYear) === gradeYear);
 
-  const rows = buildGradeImportTemplateRows({
-    className: cls.name,
-    examPathId,
-    gradeYear: cls.gradeYear,
-    students: classStudents,
-    subjects,
-    examPath,
-    tracksById,
-    grades,
-    pathLabelsBySubjectId,
-    filters: { subjectId, obligationId, taskSortOrder },
+  if (allowedClassIds) {
+    const allowed = new Set(allowedClassIds);
+    targetClasses = targetClasses.filter((c) => allowed.has(c.id));
+  }
+
+  if (targetClasses.length === 0) {
+    return NextResponse.json(
+      { error: classId ? "כיתה לא נמצאה" : "לא נמצאו כיתות בשכבה זו" },
+      { status: 404 }
+    );
+  }
+
+  if (classId) {
+    const accessError = await requireGradeWrite(session, {
+      classId,
+      subjectId,
+      obligationId,
+    });
+    if (accessError) return accessError;
+  } else {
+    const accessError = await requireGradeWrite(session, {
+      gradeYear,
+      subjectId,
+      obligationId,
+    });
+    if (accessError) {
+      const classAccess = await Promise.all(
+        targetClasses.map((c) =>
+          requireGradeWrite(session, {
+            classId: c.id,
+            subjectId,
+            obligationId,
+          })
+        )
+      );
+      if (classAccess.every((e) => e != null)) return accessError;
+    }
+  }
+
+  const rows = targetClasses.flatMap((cls) => {
+    const classStudents = students
+      .filter((s) => s.classId === cls.id)
+      .sort((a, b) => a.name.localeCompare(b.name, "he"));
+
+    return buildGradeImportTemplateRows({
+      className: cls.name,
+      examPathId: cls.examPathId,
+      gradeYear: cls.gradeYear,
+      students: classStudents,
+      subjects,
+      examPath: examPathById.get(cls.examPathId) ?? null,
+      tracksById,
+      grades,
+      pathLabelsBySubjectId,
+      filters: { subjectId, obligationId, taskSortOrder },
+    });
   });
 
+  const scopeName = classId
+    ? targetClasses[0]!.name
+    : gradeYear!;
+
   return NextResponse.json({
-    className: cls.name,
+    className: scopeName,
+    gradeYear: gradeYear ?? targetClasses[0]?.gradeYear ?? null,
     statuses: SUBMISSION_STATUSES.map((s) => STATUS_LABELS[s].label),
     rows,
   });

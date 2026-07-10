@@ -3,9 +3,14 @@ import {
   findObligation,
   getGradesByStudentsAndObligation,
   getStudentById,
+  listClassesSimple,
   upsertGradesBulk,
 } from "@/lib/firestore";
-import { getMatrixData, isObligationRelevantForStudent } from "@/lib/grade-matrix";
+import {
+  getMatrixData,
+  getMatrixDataByGradeYear,
+  isObligationRelevantForStudent,
+} from "@/lib/grade-matrix";
 import {
   calcPartialWeightedSubItemScore,
   calcWeightedComponentScore,
@@ -25,6 +30,8 @@ import {
   isValidQualitativeLevel,
 } from "@/lib/social-involvement";
 import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
+import { getAllowedClassIds } from "@/lib/permissions";
+import { normalizeGradeYear } from "@/lib/grade-year";
 import type { QualitativeLevel, SubmissionStatus } from "@/lib/types";
 
 function parseTaskKind(value: string | null): MatrixTaskKind | undefined {
@@ -42,22 +49,65 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const classId = searchParams.get("classId");
+  const gradeYearRaw = searchParams.get("gradeYear");
+  const gradeYear = normalizeGradeYear(gradeYearRaw);
   const obligationId = searchParams.get("obligationId");
   const taskKind = parseTaskKind(searchParams.get("taskKind"));
   const taskSortOrderRaw = searchParams.get("taskSortOrder");
   const taskSortOrder =
     taskSortOrderRaw != null && taskSortOrderRaw !== "" ? Number(taskSortOrderRaw) : undefined;
 
-  if (!classId || !obligationId) {
+  if ((!classId && !gradeYear) || !obligationId) {
     return NextResponse.json({ error: "חסרים פרמטרים" }, { status: 400 });
   }
 
-  const readError = await requireGradeWrite(session, { classId, obligationId });
-  if (readError) return readError;
-
   try {
+    if (classId) {
+      const readError = await requireGradeWrite(session, { classId, obligationId });
+      if (readError) return readError;
+      return NextResponse.json(
+        await getMatrixData(classId, obligationId, taskKind, taskSortOrder)
+      );
+    }
+
+    const classes = await listClassesSimple();
+    const allowedClassIds = getAllowedClassIds(session, classes);
+    const layerClasses = classes.filter(
+      (c) => normalizeGradeYear(c.gradeYear) === gradeYear
+    );
+    const accessible =
+      allowedClassIds === null
+        ? layerClasses
+        : layerClasses.filter((c) => allowedClassIds.includes(c.id));
+
+    if (accessible.length === 0) {
+      return NextResponse.json(
+        { error: "אין הרשאה או אין כיתות בשכבה זו" },
+        { status: 403 }
+      );
+    }
+
+    const accessError = await requireGradeWrite(session, {
+      gradeYear,
+      obligationId,
+    });
+    if (accessError) {
+      const classAccess = await Promise.all(
+        accessible.map((c) =>
+          requireGradeWrite(session, { classId: c.id, obligationId })
+        )
+      );
+      if (classAccess.every((e) => e != null)) return accessError;
+    }
+
     return NextResponse.json(
-      await getMatrixData(classId, obligationId, taskKind, taskSortOrder)
+      await getMatrixDataByGradeYear(
+        gradeYear!,
+        obligationId,
+        taskKind,
+        taskSortOrder,
+        allowedClassIds
+      )
     );
   } catch (e) {
     return NextResponse.json(

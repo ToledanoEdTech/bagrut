@@ -24,6 +24,7 @@ import {
   parseMatrixTaskKey,
 } from "@/lib/grade-components";
 import { autoStatusOnScore } from "@/lib/grade-status";
+import { CANONICAL_GRADE_YEARS, normalizeGradeYear } from "@/lib/grade-year";
 import {
   SOCIAL_INVOLVEMENT_LABELS,
   SOCIAL_INVOLVEMENT_LEVELS,
@@ -32,6 +33,8 @@ import {
   isValidQualitativeLevel,
 } from "@/lib/social-involvement";
 import type { QualitativeLevel, SubmissionStatus } from "@/lib/types";
+
+type ScopeMode = "class" | "gradeYear";
 
 type ClassItem = { id: string; name: string; gradeYear: string | null };
 
@@ -59,7 +62,8 @@ type MatrixOptions = {
 };
 
 type MatrixData = {
-  class: { id: string; name: string; gradeYear: string | null };
+  class: { id: string; name: string; gradeYear: string | null } | null;
+  gradeYear?: string | null;
   subject: {
     id: string;
     name: string;
@@ -81,6 +85,8 @@ type MatrixData = {
   rows: Array<{
     studentId: string;
     studentName: string;
+    classId?: string;
+    className?: string;
     grade: {
       score: number | null;
       qualitativeLevel?: QualitativeLevel | null;
@@ -105,7 +111,9 @@ type RowState = Record<
 export default function GradesMatrixPage() {
   const toast = useToast();
   const { data: classes = [], loading: classesLoading } = useApi<ClassItem[]>("/api/classes/list");
+  const [scopeMode, setScopeMode] = useState<ScopeMode>("gradeYear");
   const [classId, setClassId] = useState("");
+  const [gradeYear, setGradeYear] = useState("");
   const [subjectId, setSubjectId] = useState("");
   const [taskKey, setTaskKey] = useState("");
   const [rowState, setRowState] = useState<RowState>({});
@@ -117,12 +125,30 @@ export default function GradesMatrixPage() {
 
   const parsedTask = parseMatrixTaskKey(taskKey);
 
-  const optionsKey = classId ? `/api/grades/matrix/options?classId=${classId}` : null;
+  const availableGradeYears = useMemo(() => {
+    const present = new Set(
+      classes
+        .map((c) => normalizeGradeYear(c.gradeYear))
+        .filter((gy): gy is string => !!gy)
+    );
+    return CANONICAL_GRADE_YEARS.filter((gy) => present.has(gy));
+  }, [classes]);
+
+  const scopeReady =
+    scopeMode === "class" ? !!classId : !!gradeYear;
+
+  const optionsKey = scopeReady
+    ? scopeMode === "class"
+      ? `/api/grades/matrix/options?classId=${encodeURIComponent(classId)}`
+      : `/api/grades/matrix/options?gradeYear=${encodeURIComponent(gradeYear)}`
+    : null;
   const { data: options, loading: optionsLoading } = useApi<MatrixOptions>(optionsKey);
 
   const matrixKey =
-    classId && parsedTask
-      ? `/api/grades/matrix?classId=${classId}&obligationId=${parsedTask.obligationId}&taskKind=${parsedTask.taskKind}&taskSortOrder=${parsedTask.sortOrder}`
+    scopeReady && parsedTask
+      ? scopeMode === "class"
+        ? `/api/grades/matrix?classId=${encodeURIComponent(classId)}&obligationId=${parsedTask.obligationId}&taskKind=${parsedTask.taskKind}&taskSortOrder=${parsedTask.sortOrder}`
+        : `/api/grades/matrix?gradeYear=${encodeURIComponent(gradeYear)}&obligationId=${parsedTask.obligationId}&taskKind=${parsedTask.taskKind}&taskSortOrder=${parsedTask.sortOrder}`
       : null;
   const { data: matrixData, loading: matrixLoading, mutate: refreshMatrix } =
     useApi<MatrixData>(matrixKey);
@@ -131,13 +157,23 @@ export default function GradesMatrixPage() {
   const isSocial = matrixData
     ? isSocialInvolvementSubject(matrixData.subject)
     : false;
+  const showClass = scopeMode === "gradeYear";
+
+  useEffect(() => {
+    setClassId("");
+    setGradeYear("");
+    setSubjectId("");
+    setTaskKey("");
+    setRowState({});
+    setSavedSnapshot("");
+  }, [scopeMode]);
 
   useEffect(() => {
     setSubjectId("");
     setTaskKey("");
     setRowState({});
     setSavedSnapshot("");
-  }, [classId]);
+  }, [classId, gradeYear]);
 
   useEffect(() => {
     setTaskKey("");
@@ -181,6 +217,7 @@ export default function GradesMatrixPage() {
     return matrixData.rows.map((r) => ({
       studentId: r.studentId,
       studentName: r.studentName,
+      className: r.className ?? null,
       score: rowState[r.studentId]?.score ?? null,
       qualitativeLevel: rowState[r.studentId]?.qualitativeLevel ?? null,
       status: rowState[r.studentId]?.status ?? "NOT_STARTED",
@@ -324,17 +361,24 @@ export default function GradesMatrixPage() {
         })
       : "");
 
+  const scopeLabel =
+    scopeMode === "class"
+      ? matrixData?.class?.name ?? "כיתה"
+      : matrixData?.gradeYear ?? gradeYear;
+
   async function handleExport() {
     if (!matrixData) return;
-    const safeName = matrixData.class.name.replace(/[/\\?*[\]]/g, "-");
+    const safeName = scopeLabel.replace(/[/\\?*[\]]/g, "-");
     await downloadExcel(`ציונים_${safeName}_${exportTimestamp()}.xlsx`, [
       buildMatrixSheet({
-        className: matrixData.class.name,
+        className: scopeLabel,
         subjectName: matrixData.subject.displayName ?? matrixData.subject.name,
         taskLabel: taskHeaderLabel,
         scoreHeader: isSocial ? "הערכה" : "ציון",
+        showClass,
         rows: tableRows.map((r) => ({
           studentName: r.studentName,
+          className: r.className,
           score: isSocial
             ? formatQualitativeLevel(r.qualitativeLevel) ?? null
             : r.score,
@@ -351,39 +395,73 @@ export default function GradesMatrixPage() {
   return (
     <>
       <Card className="p-6">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Select
-            label="כיתה"
-            value={classId}
-            onChange={(e) => setClassId(e.target.value)}
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={scopeMode === "gradeYear" ? "primary" : "secondary"}
+            onClick={() => setScopeMode("gradeYear")}
           >
-            <option value="">— בחר כיתה —</option>
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.gradeYear ? ` (${c.gradeYear})` : ""}
-              </option>
-            ))}
-          </Select>
+            לפי שכבה
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={scopeMode === "class" ? "primary" : "secondary"}
+            onClick={() => setScopeMode("class")}
+          >
+            לפי כיתה
+          </Button>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          {scopeMode === "gradeYear" ? (
+            <Select
+              label="שכבה"
+              value={gradeYear}
+              onChange={(e) => setGradeYear(e.target.value)}
+            >
+              <option value="">— בחר שכבה —</option>
+              {availableGradeYears.map((gy) => (
+                <option key={gy} value={gy}>
+                  {gy}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <Select
+              label="כיתה"
+              value={classId}
+              onChange={(e) => setClassId(e.target.value)}
+            >
+              <option value="">— בחר כיתה —</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.gradeYear ? ` (${c.gradeYear})` : ""}
+                </option>
+              ))}
+            </Select>
+          )}
 
           <Select
             label="מקצוע"
             value={subjectId}
             onChange={(e) => setSubjectId(e.target.value)}
-            disabled={!classId || optionsLoading}
+            disabled={!scopeReady || optionsLoading}
           >
             <option value="">— בחר מקצוע —</option>
-              {(options?.subjects ?? []).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.displayName ?? s.name}
-                  {s.units &&
-                  s.category !== "MATH" &&
-                  s.category !== "ENGLISH" &&
-                  s.category !== "SOCIAL"
-                    ? ` (${s.units} יח"ל)`
-                    : ""}
-                </option>
-              ))}
+            {(options?.subjects ?? []).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.displayName ?? s.name}
+                {s.units &&
+                s.category !== "MATH" &&
+                s.category !== "ENGLISH" &&
+                s.category !== "SOCIAL"
+                  ? ` (${s.units} יח"ל)`
+                  : ""}
+              </option>
+            ))}
           </Select>
 
           <Select
@@ -418,10 +496,13 @@ export default function GradesMatrixPage() {
               <span className="font-medium">{matrixData.rows.length} תלמידים</span>
               {matrixData.notRelevantCount > 0 && (
                 <span className="me-2 text-slate-400">
-                  • {matrixData.notRelevantCount} לא רלוונטיים לכיתה זו
+                  • {matrixData.notRelevantCount} לא רלוונטיים{" "}
+                  {scopeMode === "gradeYear" ? "לשכבה זו" : "לכיתה זו"}
                 </span>
               )}
               <span className="block text-slate-500">
+                {scopeLabel}
+                {" — "}
                 {matrixData.subject.displayName ?? matrixData.subject.name}
                 {matrixData.subject.units &&
                 matrixData.subject.category !== "MATH" &&
@@ -496,6 +577,7 @@ export default function GradesMatrixPage() {
               rows={tableRows}
               components={components}
               qualitative={isSocial}
+              showClass={showClass}
               onChange={handleChange}
             />
           </div>

@@ -419,19 +419,28 @@ export function buildMatrixSheet(input: {
   subjectName: string;
   taskLabel: string;
   scoreHeader?: string;
-  rows: Array<{ studentName: string; score: number | string | null; status: string }>;
+  showClass?: boolean;
+  rows: Array<{
+    studentName: string;
+    className?: string | null;
+    score: number | string | null;
+    status: string;
+  }>;
 }): ExportSheet {
   const scoreHeader = input.scoreHeader ?? "ציון";
+  const showClass = input.showClass ?? false;
   return {
     name: "ציונים",
     title: `${input.className} — ${input.subjectName} — ${input.taskLabel}`,
     columns: [
       { header: "שם תלמיד", key: "studentName" },
+      ...(showClass ? [{ header: "כיתה", key: "className" }] : []),
       { header: scoreHeader, key: "score" },
       { header: "סטטוס", key: "status" },
     ],
     rows: input.rows.map((r) => ({
       studentName: r.studentName,
+      ...(showClass ? { className: r.className ?? "—" } : {}),
       score: r.score ?? "—",
       status: statusLabel(r.status),
     })),

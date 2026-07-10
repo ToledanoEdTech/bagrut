@@ -23,6 +23,8 @@ import {
   buildPermissionsFromForm,
   parsePermissionsToForm,
   summarizePermissions,
+  type PermissionFormInput,
+  type PermissionScopeKind,
 } from "@/lib/permissions";
 import type { StaffPermission, StaffRole } from "@/lib/types";
 import { formatSubjectWithPathLinks } from "@/lib/subject-display";
@@ -47,23 +49,23 @@ type SubjectItem = {
 
 type SubjectPickerItem = { id: string; name: string };
 
-type PermissionForm = {
-  scopeMode: "all" | "gradeYear" | "class" | "subject";
-  gradeYears: string[];
-  classIds: string[];
-  subjectIds: string[];
-  includeStudentView: boolean;
-  includeStudentEdit: boolean;
-};
+type PermissionForm = PermissionFormInput;
 
 const emptyPermissionForm = (): PermissionForm => ({
-  scopeMode: "all",
+  scopes: ["all"],
   gradeYears: [],
   classIds: [],
   subjectIds: [],
   includeStudentView: true,
   includeStudentEdit: false,
 });
+
+const SCOPE_OPTIONS: { value: PermissionScopeKind; label: string; hint: string }[] = [
+  { value: "all", label: "כל המערכת", hint: "גישה מלאה (בלעדי)" },
+  { value: "gradeYear", label: "רכז שכבה", hint: "לפי שכבה" },
+  { value: "class", label: "מחנך כיתה", hint: "לפי כיתה" },
+  { value: "subject", label: "מורה מקצועי", hint: "לפי מקצוע" },
+];
 
 function PermissionFields({
   form,
@@ -78,35 +80,62 @@ function PermissionFields({
   subjects: SubjectPickerItem[];
   gradeYears: string[];
 }) {
+  const scopes = new Set(form.scopes);
+  const hasAll = scopes.has("all");
+  const hasNonSubject =
+    scopes.has("gradeYear") || scopes.has("class") || scopes.has("all");
+
+  function toggleScope(value: PermissionScopeKind, checked: boolean) {
+    if (value === "all") {
+      setForm({
+        ...form,
+        scopes: checked ? ["all"] : [],
+        gradeYears: [],
+        classIds: [],
+        subjectIds: [],
+      });
+      return;
+    }
+
+    let next = form.scopes.filter((s) => s !== "all" && s !== value);
+    if (checked) next = [...next, value];
+    setForm({
+      ...form,
+      scopes: next,
+      ...(value === "gradeYear" && !checked ? { gradeYears: [] } : {}),
+      ...(value === "class" && !checked ? { classIds: [] } : {}),
+      ...(value === "subject" && !checked ? { subjectIds: [] } : {}),
+    });
+  }
+
   return (
     <div className="mt-4 space-y-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
       <div>
         <label className="label">היקף הרשאות</label>
+        <p className="mt-1 text-xs text-slate-500">
+          ניתן לשלב כמה תפקידים יחד (למשל מחנך + מורה מקצועי + רכז שכבה)
+        </p>
         <div className="mt-2 flex flex-wrap gap-3">
-          {(
-            [
-              ["all", "כל המערכת"],
-              ["gradeYear", "לפי שכבה"],
-              ["class", "לפי כיתה"],
-              ["subject", "לפי מקצוע"],
-            ] as const
-          ).map(([value, label]) => (
+          {SCOPE_OPTIONS.map(({ value, label, hint }) => (
             <label key={value} className="flex items-center gap-2 text-sm">
               <input
-                type="radio"
-                name="scopeMode"
-                checked={form.scopeMode === value}
-                onChange={() => setForm({ ...form, scopeMode: value })}
+                type="checkbox"
+                checked={scopes.has(value)}
+                disabled={hasAll && value !== "all"}
+                onChange={(e) => toggleScope(value, e.target.checked)}
               />
-              {label}
+              <span>
+                {label}
+                <span className="mr-1 text-xs text-slate-400">({hint})</span>
+              </span>
             </label>
           ))}
         </div>
       </div>
 
-      {form.scopeMode === "gradeYear" && (
+      {scopes.has("gradeYear") && (
         <div>
-          <label className="label">שכבות</label>
+          <label className="label">שכבות (רכז שכבה)</label>
           <div className="mt-2 flex flex-wrap gap-2">
             {gradeYears.map((gy) => (
               <label key={gy} className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm">
@@ -127,9 +156,9 @@ function PermissionFields({
         </div>
       )}
 
-      {form.scopeMode === "class" && (
+      {scopes.has("class") && (
         <div>
-          <label className="label">כיתות</label>
+          <label className="label">כיתות (מחנך)</label>
           <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border bg-white p-2">
             {classes.map((c) => (
               <label key={c.id} className="flex items-center gap-2 px-2 py-1 text-sm">
@@ -151,9 +180,9 @@ function PermissionFields({
         </div>
       )}
 
-      {form.scopeMode === "subject" && (
+      {scopes.has("subject") && (
         <div>
-          <label className="label">מקצועות</label>
+          <label className="label">מקצועות (מורה מקצועי)</label>
           <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border bg-white p-2">
             {subjects.map((s) => (
               <label key={s.id} className="flex items-center gap-2 px-2 py-1 text-sm">
@@ -171,16 +200,13 @@ function PermissionFields({
               </label>
             ))}
           </div>
+          <p className="mt-2 text-sm text-slate-600">
+            למקצועות שנבחרו: הזנת ציונים + צפייה בתלמידים הרלוונטיים (ללא עריכת נתוני תלמידים).
+          </p>
         </div>
       )}
 
-      {form.scopeMode === "subject" && (
-        <p className="text-sm text-slate-600">
-          מורה מקצועי: הזנת ציונים + צפייה בתלמידים הרלוונטיים למקצוע בלבד (ללא עריכת נתוני תלמידים).
-        </p>
-      )}
-
-      {form.scopeMode !== "subject" && (
+      {hasNonSubject && (
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -188,7 +214,7 @@ function PermissionFields({
               checked={form.includeStudentView}
               onChange={(e) => setForm({ ...form, includeStudentView: e.target.checked })}
             />
-            גישה לצפייה בתלמידים (באותו היקף)
+            גישה לצפייה בתלמידים (בהיקף שכבה/כיתה)
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -196,7 +222,7 @@ function PermissionFields({
               checked={form.includeStudentEdit}
               onChange={(e) => setForm({ ...form, includeStudentEdit: e.target.checked })}
             />
-            הרשאה לעריכת נתוני תלמידים (באותו היקף)
+            הרשאה לעריכת נתוני תלמידים (בהיקף שכבה/כיתה)
           </label>
         </div>
       )}
@@ -218,22 +244,32 @@ function formatPermissionSummary(
   if (grades.some((p) => p.scope === "all")) {
     parts.push("ציונים: כל המערכת");
   } else {
-    const items: string[] = [];
-    for (const p of grades) {
-      if (p.scope === "gradeYear") items.push(`שכבת ${p.gradeYear}`);
-      if (p.scope === "class") {
-        const cls = classes.find((c) => c.id === p.classId);
-        items.push(cls?.name ?? "כיתה");
-      }
-      if (p.scope === "subject") {
-        const sub = subjects.find((s) => s.id === p.subjectId);
-        items.push(sub?.name ?? "מקצוע");
-      }
+    const roleParts: string[] = [];
+    const years = [
+      ...new Set(
+        grades
+          .filter((p) => p.scope === "gradeYear")
+          .map((p) => (p as { gradeYear: string }).gradeYear)
+      ),
+    ];
+    if (years.length) roleParts.push(`רכז ${years.join(", ")}`);
+
+    const classNames = grades
+      .filter((p) => p.scope === "class")
+      .map((p) => classes.find((c) => c.id === p.classId)?.name ?? "כיתה");
+    if (classNames.length) roleParts.push(`מחנך ${[...new Set(classNames)].join(", ")}`);
+
+    const subjectNames = grades
+      .filter((p) => p.scope === "subject")
+      .map((p) => subjects.find((s) => s.id === p.subjectId)?.name ?? "מקצוע");
+    if (subjectNames.length) {
+      roleParts.push(`מקצועי: ${[...new Set(subjectNames)].join(", ")}`);
     }
-    if (items.length) parts.push(`ציונים: ${items.join(", ")}`);
+
+    if (roleParts.length) parts.push(roleParts.join(" · "));
   }
 
-  if (member.permissions.some((p) => p.action === "students:view")) {
+  if (member.permissions.some((p) => p.action === "students:view" && p.scope !== "subject")) {
     parts.push("צפייה בתלמידים");
   }
   if (member.permissions.some((p) => p.action === "students:edit")) {
@@ -244,13 +280,17 @@ function formatPermissionSummary(
 }
 
 function validatePermissionForm(form: PermissionForm): string | null {
-  if (form.scopeMode === "gradeYear" && form.gradeYears.length === 0) {
+  if (form.scopes.length === 0) {
+    return "יש לבחור לפחות היקף הרשאות אחד";
+  }
+  if (form.scopes.includes("all")) return null;
+  if (form.scopes.includes("gradeYear") && form.gradeYears.length === 0) {
     return "יש לבחור לפחות שכבה אחת";
   }
-  if (form.scopeMode === "class" && form.classIds.length === 0) {
+  if (form.scopes.includes("class") && form.classIds.length === 0) {
     return "יש לבחור לפחות כיתה אחת";
   }
-  if (form.scopeMode === "subject" && form.subjectIds.length === 0) {
+  if (form.scopes.includes("subject") && form.subjectIds.length === 0) {
     return "יש לבחור לפחות מקצוע אחד";
   }
   return null;
@@ -433,7 +473,7 @@ export default function StaffPage() {
     <>
       <PageHeader
         title="ניהול צוות והרשאות"
-        subtitle="הוספת מנהלים, רכזי שכבות ומורים עם הרשאות מותאמות"
+        subtitle="הוספת מנהלים ומורים עם הרשאות מותאמות — כולל שילוב תפקידים"
       >
         <ExportButton onExport={handleExport} disabled={staff.length === 0} />
       </PageHeader>

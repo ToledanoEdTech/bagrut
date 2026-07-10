@@ -6,7 +6,8 @@ import {
 } from "@/lib/grade-components";
 import { STATUS_LABELS, SUBMISSION_STATUSES } from "@/lib/grade-status";
 import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
-import { getAllowedClassIds, getAllowedSubjectIds } from "@/lib/permissions";
+import { getAllowedClassIdsForListing, getAllowedSubjectIds } from "@/lib/permissions";
+import { normalizeGradeYear } from "@/lib/grade-year";
 import { attachPathLabels, buildPathLabelsBySubjectId } from "@/lib/subject-display";
 
 export async function GET(req: NextRequest) {
@@ -17,7 +18,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "אין הרשאה" }, { status: 403 });
   }
 
-  const classId = new URL(req.url).searchParams.get("classId");
+  const params = new URL(req.url).searchParams;
+  const classId = params.get("classId");
+  const gradeYear = normalizeGradeYear(params.get("gradeYear"));
 
   const [allClasses, subjects, students, examPaths] = await Promise.all([
     listClassesSimple(),
@@ -28,7 +31,7 @@ export async function GET(req: NextRequest) {
   const pathLabelsBySubjectId = buildPathLabelsBySubjectId(examPaths);
   const subjectsWithPaths = attachPathLabels(subjects, pathLabelsBySubjectId);
 
-  const allowedClassIds = getAllowedClassIds(session, allClasses);
+  const allowedClassIds = getAllowedClassIdsForListing(session, allClasses);
   const classes =
     allowedClassIds === null
       ? allClasses
@@ -43,6 +46,23 @@ export async function GET(req: NextRequest) {
   if (classId) {
     const accessError = await requireGradeWrite(session, { classId });
     if (accessError) return accessError;
+  } else if (gradeYear) {
+    const layerClasses = classes.filter(
+      (c) => normalizeGradeYear(c.gradeYear) === gradeYear
+    );
+    if (layerClasses.length === 0) {
+      return NextResponse.json(
+        { error: "לא נמצאו כיתות בשכבה זו" },
+        { status: 404 }
+      );
+    }
+    const accessError = await requireGradeWrite(session, { gradeYear });
+    if (accessError) {
+      const classAccess = await Promise.all(
+        layerClasses.map((c) => requireGradeWrite(session, { classId: c.id }))
+      );
+      if (classAccess.every((e) => e != null)) return accessError;
+    }
   }
 
   const classNames = classes
@@ -85,6 +105,8 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => a.name.localeCompare(b.name, "he"));
 
   let classStudents: string[] | undefined;
+  let studentCount = 0;
+
   if (classId) {
     const cls = classes.find((c) => c.id === classId);
     if (!cls) {
@@ -94,6 +116,18 @@ export async function GET(req: NextRequest) {
       .filter((s) => s.classId === classId)
       .map((s) => s.name)
       .sort((a, b) => a.localeCompare(b, "he"));
+    studentCount = classStudents.length;
+  } else if (gradeYear) {
+    const layerClassIds = new Set(
+      classes
+        .filter((c) => normalizeGradeYear(c.gradeYear) === gradeYear)
+        .map((c) => c.id)
+    );
+    classStudents = students
+      .filter((s) => layerClassIds.has(s.classId))
+      .map((s) => s.name)
+      .sort((a, b) => a.localeCompare(b, "he"));
+    studentCount = classStudents.length;
   }
 
   return NextResponse.json({
@@ -103,5 +137,6 @@ export async function GET(req: NextRequest) {
     statuses,
     subjectOptions,
     classStudents,
+    studentCount,
   });
 }

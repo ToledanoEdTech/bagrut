@@ -18,6 +18,7 @@ export type MatrixComponent = {
 export type MatrixRow = {
   studentId: string;
   studentName: string;
+  className?: string | null;
   score: number | null;
   qualitativeLevel?: QualitativeLevel | null;
   componentScores?: Record<number, number | null> | null;
@@ -29,6 +30,8 @@ type Props = {
   components?: MatrixComponent[];
   /** מעורבות חברתית — בחירת הערכה איכותית במקום ציון מספרי */
   qualitative?: boolean;
+  /** הצגת עמודת כיתה (הזנה לפי שכבה) */
+  showClass?: boolean;
   onChange: (
     studentId: string,
     field: "score" | "status" | "qualitativeLevel" | `componentScore:${number}`,
@@ -40,6 +43,7 @@ export function GradeMatrixTable({
   rows,
   components = [],
   qualitative = false,
+  showClass = false,
   onChange,
 }: Props) {
   const multiComponent = !qualitative && hasSeparateComponentGrades(components);
@@ -78,6 +82,9 @@ export function GradeMatrixTable({
           <tr className="border-b border-slate-200 bg-slate-50 text-right">
             <th className="px-4 py-3 text-sm font-semibold text-slate-600">#</th>
             <th className="px-4 py-3 text-sm font-semibold text-slate-600">שם תלמיד</th>
+            {showClass && (
+              <th className="px-4 py-3 text-sm font-semibold text-slate-600">כיתה</th>
+            )}
             <th className="px-4 py-3 text-sm font-semibold text-slate-600">סטטוס</th>
             {qualitative ? (
               <th className="px-4 py-3 text-sm font-semibold text-slate-600">הערכה</th>
@@ -118,6 +125,9 @@ export function GradeMatrixTable({
               >
                 <td className="px-4 py-2.5 text-slate-400">{index + 1}</td>
                 <td className="px-4 py-2.5 font-medium text-slate-900">{row.studentName}</td>
+                {showClass && (
+                  <td className="px-4 py-2.5 text-slate-600">{row.className ?? "—"}</td>
+                )}
                 <td className="px-4 py-2.5">
                   <select
                     className="input w-36 py-1.5 text-sm"

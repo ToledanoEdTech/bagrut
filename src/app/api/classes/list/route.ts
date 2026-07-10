@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { listClassesSimple } from "@/lib/firestore";
 import { checkPermission, requireStaff } from "@/lib/api-auth";
-import { getAllowedClassIds } from "@/lib/permissions";
+import { getAllowedClassIdsForListing } from "@/lib/permissions";
 
 export async function GET() {
   const { error, session } = await requireStaff();
@@ -12,7 +12,7 @@ export async function GET() {
   }
 
   const classes = await listClassesSimple();
-  const allowedClassIds = getAllowedClassIds(session, classes);
+  const allowedClassIds = getAllowedClassIdsForListing(session, classes);
   if (allowedClassIds === null) {
     return NextResponse.json(classes);
   }

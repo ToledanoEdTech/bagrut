@@ -883,6 +883,7 @@ export async function listClassesSimple() {
       id: cls.id,
       name: cls.name,
       gradeYear: cls.gradeYear,
+      examPathId: cls.examPathId,
     }));
   });
 }

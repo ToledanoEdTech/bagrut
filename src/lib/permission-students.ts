@@ -2,9 +2,9 @@ import { getStudentById } from "@/lib/firestore";
 import { buildStudentWithRelations, getRelevantSubjects } from "@/lib/student-subjects";
 import type { AuthSession } from "@/lib/types";
 import {
-  getAllowedClassIds,
   getEffectivePermissions,
   isFullAdmin,
+  studentMatchesPermissionScopes,
   type ResolvedPermissionContext,
 } from "@/lib/permissions";
 import { resolvePermissionContext } from "@/lib/permission-resolve";
@@ -65,16 +65,16 @@ export async function canViewStudentAccess(
     return true;
   }
 
-  const subjectIds = getSubjectIdsFromPermissions(session, ["students:view", "grades:write"]);
-  if (subjectIds.length > 0 && ctx.studentId) {
-    return studentHasRelevantSubject(ctx.studentId, subjectIds);
-  }
-
   const gradePerms = perms.filter(
     (p) => p.action === "grades:write" && p.scope !== "subject"
   );
   if (gradePerms.some((p) => matchesNonSubjectScope(p, resolved))) {
     return true;
+  }
+
+  const subjectIds = getSubjectIdsFromPermissions(session, ["students:view", "grades:write"]);
+  if (subjectIds.length > 0 && ctx.studentId) {
+    return studentHasRelevantSubject(ctx.studentId, subjectIds);
   }
 
   return false;
@@ -85,28 +85,41 @@ export async function filterStudentsForSession<
 >(session: AuthSession, students: T[]): Promise<T[]> {
   if (isFullAdmin(session)) return students;
 
+  const classRefs = students
+    .filter((s) => s.class)
+    .map((s) => ({ id: s.class!.id, gradeYear: s.class!.gradeYear }));
+
+  const uniqueClasses = [...new Map(classRefs.map((c) => [c.id, c])).values()];
   const subjectIds = getSubjectIdsFromPermissions(session, [
     "students:view",
     "grades:write",
   ]);
 
-  if (subjectIds.length > 0) {
-    const allowed: T[] = [];
-    for (const student of students) {
-      if (await studentHasRelevantSubject(student.id, subjectIds)) {
-        allowed.push(student);
-      }
+  const allowed: T[] = [];
+  for (const student of students) {
+    const classId = student.class?.id;
+    // התאמה לפי כיתה/שכבה (ללא צורך במקצועות)
+    if (studentMatchesPermissionScopes(session, { classId }, uniqueClasses, [])) {
+      allowed.push(student);
+      continue;
     }
-    return allowed;
+
+    if (subjectIds.length === 0) continue;
+
+    const full = await getStudentById(student.id);
+    if (!full) continue;
+    const withRelations = await buildStudentWithRelations(full);
+    const relevant = await getRelevantSubjects(withRelations);
+    if (
+      studentMatchesPermissionScopes(
+        session,
+        { classId },
+        uniqueClasses,
+        relevant.map((s) => s.id)
+      )
+    ) {
+      allowed.push(student);
+    }
   }
-
-  const classRefs = students
-    .filter((s) => s.class)
-    .map((s) => ({ id: s.class!.id, gradeYear: s.class!.gradeYear }));
-
-  const allowedClassIds = getAllowedClassIds(session, classRefs);
-  if (allowedClassIds === null) return students;
-
-  const allowed = new Set(allowedClassIds);
-  return students.filter((s) => s.class && allowed.has(s.class.id));
+  return allowed;
 }

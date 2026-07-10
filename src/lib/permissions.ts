@@ -145,6 +145,38 @@ export function canViewOutstandingBagrut(session: AuthSession): boolean {
 
 type ClassRef = { id: string; gradeYear: string | null };
 
+/** מזהי מקצועות מהרשאות (ריק = אין הרשאת מקצוע) */
+export function getSubjectIdsFromSession(
+  session: AuthSession,
+  actions: Array<"students:view" | "grades:write"> = ["students:view", "grades:write"]
+): string[] {
+  const perms = getEffectivePermissions(session);
+  const ids = new Set<string>();
+  for (const action of actions) {
+    for (const p of perms) {
+      if (p.action === action && p.scope === "subject") {
+        ids.add(p.subjectId);
+      }
+    }
+  }
+  return [...ids];
+}
+
+function hasClassOrGradeYearScope(session: AuthSession): boolean {
+  return getEffectivePermissions(session).some(
+    (p) =>
+      (p.action === "grades:write" ||
+        p.action === "students:view" ||
+        p.action === "students:edit") &&
+      (p.scope === "class" || p.scope === "gradeYear")
+  );
+}
+
+/**
+ * כיתות מורשות לפי היקף כיתה/שכבה.
+ * null = ללא הגבלת כיתה (מנהל / כל המערכת / מורה מקצועי בלבד).
+ * מערך = כיתות מהרשאות כיתה/שכבה (גם כשיש בנוסף הרשאת מקצוע).
+ */
 export function getAllowedClassIds(
   session: AuthSession,
   classes: ClassRef[]
@@ -158,20 +190,49 @@ export function getAllowedClassIds(
       p.action === "students:edit"
   );
   if (perms.some((p) => p.scope === "all")) return null;
-  if (perms.some((p) => p.scope === "subject")) return null;
 
   const allowed = new Set<string>();
+  let hasClassOrGrade = false;
   for (const p of perms) {
-    if (p.scope === "class") allowed.add(p.classId);
+    if (p.scope === "class") {
+      hasClassOrGrade = true;
+      allowed.add(p.classId);
+    }
     if (p.scope === "gradeYear") {
+      hasClassOrGrade = true;
       for (const c of classes) {
         if (c.gradeYear === p.gradeYear) allowed.add(c.id);
       }
     }
   }
-  return [...allowed];
+  if (hasClassOrGrade) return [...allowed];
+
+  // מורה מקצועי בלבד — ללא סינון כיתות (הסינון לפי מקצוע במקום אחר)
+  if (perms.some((p) => p.scope === "subject")) return null;
+
+  return [];
 }
 
+/**
+ * לסינון רשימות כיתות ב-UI/API.
+ * מורה מקצועי (גם בשילוב עם מחנך/רכז) רואה את כל הכיתות — כדי לגשת למקצוע שלו בכיתות אחרות.
+ * סינון כתיבה נשאר לפי canWriteGrades.
+ */
+export function getAllowedClassIdsForListing(
+  session: AuthSession,
+  classes: ClassRef[]
+): string[] | null {
+  if (getSubjectIdsFromSession(session, ["grades:write"]).length > 0) {
+    return null;
+  }
+  return getAllowedClassIds(session, classes);
+}
+
+/**
+ * מקצועות מורשים להזנת ציונים.
+ * null = כל המקצועות (מנהל / כל המערכת / מחנך / רכז — כולל בשילוב עם מקצוע).
+ * מערך = מורה מקצועי בלבד.
+ */
 export function getAllowedSubjectIds(session: AuthSession): string[] | null {
   if (isFullAdmin(session)) return null;
 
@@ -187,6 +248,44 @@ export function getAllowedSubjectIds(session: AuthSession): string[] | null {
     .map((p) => (p as { subjectId: string }).subjectId);
 
   return subjectIds.length > 0 ? [...new Set(subjectIds)] : null;
+}
+
+/**
+ * האם תלמיד נגיש לפי איחוד הרשאות (כיתה/שכבה או מקצוע).
+ * studentSubjectIds = מקצועות רלוונטיים לתלמיד (לסינון מורה מקצועי).
+ */
+export function studentMatchesPermissionScopes(
+  session: AuthSession,
+  student: { classId?: string | null },
+  classes: ClassRef[],
+  studentSubjectIds: string[]
+): boolean {
+  if (isFullAdmin(session)) return true;
+
+  const perms = getEffectivePermissions(session).filter(
+    (p) =>
+      p.action === "grades:write" ||
+      p.action === "students:view" ||
+      p.action === "students:edit"
+  );
+  if (perms.length === 0) return false;
+  if (perms.some((p) => p.scope === "all")) return true;
+
+  if (hasClassOrGradeYearScope(session)) {
+    const allowedClassIds = getAllowedClassIds(session, classes);
+    if (
+      allowedClassIds !== null &&
+      student.classId &&
+      allowedClassIds.includes(student.classId)
+    ) {
+      return true;
+    }
+  }
+
+  const subjectIds = getSubjectIdsFromSession(session);
+  if (subjectIds.length === 0) return false;
+  const allowed = new Set(subjectIds);
+  return studentSubjectIds.some((id) => allowed.has(id));
 }
 
 export function summarizePermissions(
@@ -207,12 +306,15 @@ export function summarizePermissions(
     parts.push("ציונים: כל המערכת");
   } else {
     const gradeParts: string[] = [];
-    for (const p of grades) {
-      if (p.scope === "gradeYear") gradeParts.push(`שכבת ${p.gradeYear}`);
-      if (p.scope === "class") gradeParts.push(`כיתה`);
-      if (p.scope === "subject") gradeParts.push(`מקצוע`);
-    }
-    if (gradeParts.length) parts.push(`ציונים: ${gradeParts.join(", ")}`);
+    const years = grades
+      .filter((p) => p.scope === "gradeYear")
+      .map((p) => (p as { gradeYear: string }).gradeYear);
+    if (years.length) gradeParts.push(`שכבות ${[...new Set(years)].join(", ")}`);
+    const classCount = grades.filter((p) => p.scope === "class").length;
+    if (classCount) gradeParts.push(`${classCount} כיתות`);
+    const subjectCount = grades.filter((p) => p.scope === "subject").length;
+    if (subjectCount) gradeParts.push(`${subjectCount} מקצועות`);
+    if (gradeParts.length) parts.push(`ציונים: ${gradeParts.join(" + ")}`);
   }
 
   if (views.some((p) => p.scope === "all")) {
@@ -228,24 +330,30 @@ export function summarizePermissions(
   return parts.length > 0 ? parts.join(" · ") : "ללא הרשאות";
 }
 
-export function buildPermissionsFromForm(input: {
-  scopeMode: "all" | "gradeYear" | "class" | "subject";
+export type PermissionScopeKind = "all" | "gradeYear" | "class" | "subject";
+
+export type PermissionFormInput = {
+  /** היקפים פעילים — ניתן לשלב שכבה + כיתה + מקצוע; "כל המערכת" בלעדי */
+  scopes: PermissionScopeKind[];
   gradeYears: string[];
   classIds: string[];
   subjectIds: string[];
   includeStudentView: boolean;
   includeStudentEdit: boolean;
-}): StaffPermission[] {
-  const perms: StaffPermission[] = [];
+};
 
-  if (input.scopeMode === "all") {
+export function buildPermissionsFromForm(input: PermissionFormInput): StaffPermission[] {
+  const perms: StaffPermission[] = [];
+  const scopes = new Set(input.scopes);
+
+  if (scopes.has("all")) {
     perms.push({ action: "grades:write", scope: "all" });
     if (input.includeStudentView) perms.push({ action: "students:view", scope: "all" });
     if (input.includeStudentEdit) perms.push({ action: "students:edit", scope: "all" });
     return perms;
   }
 
-  if (input.scopeMode === "gradeYear") {
+  if (scopes.has("gradeYear")) {
     for (const gradeYear of input.gradeYears) {
       perms.push({ action: "grades:write", scope: "gradeYear", gradeYear });
       if (input.includeStudentView) {
@@ -255,10 +363,9 @@ export function buildPermissionsFromForm(input: {
         perms.push({ action: "students:edit", scope: "gradeYear", gradeYear });
       }
     }
-    return perms;
   }
 
-  if (input.scopeMode === "class") {
+  if (scopes.has("class")) {
     for (const classId of input.classIds) {
       perms.push({ action: "grades:write", scope: "class", classId });
       if (input.includeStudentView) {
@@ -268,27 +375,22 @@ export function buildPermissionsFromForm(input: {
         perms.push({ action: "students:edit", scope: "class", classId });
       }
     }
-    return perms;
   }
 
-  for (const subjectId of input.subjectIds) {
-    perms.push({ action: "grades:write", scope: "subject", subjectId });
-    perms.push({ action: "students:view", scope: "subject", subjectId });
+  if (scopes.has("subject")) {
+    for (const subjectId of input.subjectIds) {
+      perms.push({ action: "grades:write", scope: "subject", subjectId });
+      perms.push({ action: "students:view", scope: "subject", subjectId });
+    }
   }
+
   return perms;
 }
 
-export function parsePermissionsToForm(permissions?: StaffPermission[]): {
-  scopeMode: "all" | "gradeYear" | "class" | "subject";
-  gradeYears: string[];
-  classIds: string[];
-  subjectIds: string[];
-  includeStudentView: boolean;
-  includeStudentEdit: boolean;
-} {
+export function parsePermissionsToForm(permissions?: StaffPermission[]): PermissionFormInput {
   if (!permissions || permissions.length === 0) {
     return {
-      scopeMode: "all",
+      scopes: ["all"],
       gradeYears: [],
       classIds: [],
       subjectIds: [],
@@ -303,7 +405,7 @@ export function parsePermissionsToForm(permissions?: StaffPermission[]): {
 
   if (grades.some((p) => p.scope === "all")) {
     return {
-      scopeMode: "all",
+      scopes: ["all"],
       gradeYears: [],
       classIds: [],
       subjectIds: [],
@@ -312,40 +414,30 @@ export function parsePermissionsToForm(permissions?: StaffPermission[]): {
     };
   }
 
-  if (grades.some((p) => p.scope === "gradeYear")) {
-    return {
-      scopeMode: "gradeYear",
-      gradeYears: grades
-        .filter((p) => p.scope === "gradeYear")
-        .map((p) => (p as { gradeYear: string }).gradeYear),
-      classIds: [],
-      subjectIds: [],
-      includeStudentView: views.length > 0,
-      includeStudentEdit: edits.length > 0,
-    };
-  }
+  const scopes: PermissionScopeKind[] = [];
+  const gradeYears = grades
+    .filter((p) => p.scope === "gradeYear")
+    .map((p) => (p as { gradeYear: string }).gradeYear);
+  const classIds = grades
+    .filter((p) => p.scope === "class")
+    .map((p) => (p as { classId: string }).classId);
+  const subjectIds = grades
+    .filter((p) => p.scope === "subject")
+    .map((p) => (p as { subjectId: string }).subjectId);
 
-  if (grades.some((p) => p.scope === "class")) {
-    return {
-      scopeMode: "class",
-      gradeYears: [],
-      classIds: grades
-        .filter((p) => p.scope === "class")
-        .map((p) => (p as { classId: string }).classId),
-      subjectIds: [],
-      includeStudentView: views.length > 0,
-      includeStudentEdit: edits.length > 0,
-    };
-  }
+  if (gradeYears.length > 0) scopes.push("gradeYear");
+  if (classIds.length > 0) scopes.push("class");
+  if (subjectIds.length > 0) scopes.push("subject");
+
+  const hasNonSubject = scopes.includes("gradeYear") || scopes.includes("class");
+  const nonSubjectViews = views.filter((p) => p.scope !== "subject");
 
   return {
-    scopeMode: "subject",
-    gradeYears: [],
-    classIds: [],
-    subjectIds: grades
-      .filter((p) => p.scope === "subject")
-      .map((p) => (p as { subjectId: string }).subjectId),
-    includeStudentView: views.length > 0,
-    includeStudentEdit: false,
+    scopes: scopes.length > 0 ? scopes : ["subject"],
+    gradeYears: [...new Set(gradeYears)],
+    classIds: [...new Set(classIds)],
+    subjectIds: [...new Set(subjectIds)],
+    includeStudentView: hasNonSubject ? nonSubjectViews.length > 0 : views.length > 0,
+    includeStudentEdit: edits.length > 0,
   };
 }
