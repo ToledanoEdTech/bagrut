@@ -81,18 +81,86 @@ export function normalizeSubmissionStatus(
   return parseStatusInput(value) ?? "NOT_STARTED";
 }
 
-/** When a score is entered, auto-upgrade status from NOT_STARTED/IN_PROGRESS to GRADED */
+/** When a score is entered, auto-upgrade status from NOT_STARTED/IN_PROGRESS to GRADED.
+ *  When a score is cleared, revert GRADED/SUBMITTED back to NOT_STARTED (EXEMPT/MISSING kept). */
 export function autoStatusOnScore(
   score: number | null,
   currentStatus: SubmissionStatus
 ): SubmissionStatus {
-  if (
-    score != null &&
-    (currentStatus === "NOT_STARTED" ||
+  if (currentStatus === "EXEMPT") return currentStatus;
+
+  if (score != null) {
+    if (
+      currentStatus === "NOT_STARTED" ||
       currentStatus === "IN_PROGRESS" ||
-      currentStatus === "MISSING")
-  ) {
-    return "GRADED";
+      currentStatus === "MISSING"
+    ) {
+      return "GRADED";
+    }
+    return currentStatus;
+  }
+
+  if (currentStatus === "GRADED" || currentStatus === "SUBMITTED") {
+    return "NOT_STARTED";
   }
   return currentStatus;
+}
+
+type GradeContentFields = {
+  score?: number | null;
+  qualitativeLevel?: string | null;
+  componentScores?: Record<number, number | null> | null;
+  subItemScores?: Record<number, number | null> | null;
+  notes?: string | null;
+};
+
+function mapHasEnteredScore(
+  scores: Record<number, number | null> | null | undefined
+): boolean {
+  if (!scores) return false;
+  return Object.values(scores).some((s) => s != null);
+}
+
+/** אין ציון/הערכה/הערות — רק שדות תוכן (בלי סטטוס) */
+export function isGradeContentEmpty(grade: GradeContentFields): boolean {
+  if (grade.score != null) return false;
+  if (grade.qualitativeLevel) return false;
+  if (grade.notes) return false;
+  if (mapHasEnteredScore(grade.componentScores)) return false;
+  if (mapHasEnteredScore(grade.subItemScores)) return false;
+  return true;
+}
+
+/** האם הוזן משהו שכדאי לאפשר לנקות (כולל סטטוס שאינו «לא התחיל») */
+export function hasClearableGradeEntry(
+  grade: GradeContentFields & { status?: SubmissionStatus | string | null } | null | undefined
+): boolean {
+  if (!grade) return false;
+  if (grade.status && grade.status !== "NOT_STARTED") return true;
+  return !isGradeContentEmpty(grade);
+}
+
+/** מצב ראשוני שלא הוזן ציון — מתאים למחיקת המסמך מ-Firestore */
+export function shouldDeleteEmptyGrade(
+  grade: GradeContentFields & { status: SubmissionStatus }
+): boolean {
+  return grade.status === "NOT_STARTED" && isGradeContentEmpty(grade);
+}
+
+export function emptyGradeFields(): {
+  score: null;
+  qualitativeLevel: null;
+  componentScores: null;
+  subItemScores: null;
+  status: "NOT_STARTED";
+  notes: null;
+} {
+  return {
+    score: null,
+    qualitativeLevel: null,
+    componentScores: null,
+    subItemScores: null,
+    status: "NOT_STARTED",
+    notes: null,
+  };
 }

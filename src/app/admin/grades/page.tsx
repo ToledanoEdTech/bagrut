@@ -5,7 +5,7 @@ import Link from "next/link";
 import { SubjectCard } from "@/components/subjects/SubjectCard";
 import { calcWeightedComponentScore, calcPartialWeightedSubItemScore, normalizeComponents, normalizeSubItems, resolveObligationGradeScore } from "@/lib/grade-components";
 import { calcSubjectProgressForObligations } from "@/lib/progress";
-import { autoStatusOnScore } from "@/lib/grade-status";
+import { autoStatusOnScore, emptyGradeFields } from "@/lib/grade-status";
 import type { QualitativeLevel, SubmissionStatus } from "@/lib/types";
 import { Save, Loader2, ChevronRight, ChevronLeft, ArrowLeft, AlertCircle, Check } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
@@ -269,16 +269,17 @@ export default function GradesPage() {
 
       if (field.startsWith("componentScore:")) {
         const sortOrder = Number(field.split(":")[1]);
-        const componentScores = {
+        const rawScores = {
           ...(existing?.componentScores ?? {}),
           [sortOrder]: value as number | null,
         };
-        const score = obligation
+        const hasAnyScore = Object.values(rawScores).some((s) => s != null);
+        const componentScores = hasAnyScore ? rawScores : null;
+        const score = obligation && componentScores
           ? calcWeightedComponentScore(normalizeComponents(obligation.components), componentScores)
           : null;
-        const hasAnyScore = Object.values(componentScores).some((s) => s != null);
         const status = (existing?.status ?? "NOT_STARTED") as SubmissionStatus;
-        const nextStatus = hasAnyScore ? autoStatusOnScore(score ?? 0, status) : status;
+        const nextStatus = autoStatusOnScore(hasAnyScore ? (score ?? 0) : null, status);
 
         if (existing) {
           return prev.map((g) =>
@@ -301,16 +302,17 @@ export default function GradesPage() {
 
       if (field.startsWith("subItemScore:")) {
         const sortOrder = Number(field.split(":")[1]);
-        const subItemScores = {
+        const rawScores = {
           ...(existing?.subItemScores ?? {}),
           [sortOrder]: value as number | null,
         };
-        const score = obligation
+        const hasAnyScore = Object.values(rawScores).some((s) => s != null);
+        const subItemScores = hasAnyScore ? rawScores : null;
+        const score = obligation && subItemScores
           ? calcPartialWeightedSubItemScore(normalizeSubItems(obligation.subItems), subItemScores)
           : null;
-        const hasAnyScore = Object.values(subItemScores).some((s) => s != null);
         const status = (existing?.status ?? "NOT_STARTED") as SubmissionStatus;
-        const nextStatus = hasAnyScore ? autoStatusOnScore(score ?? 0, status) : status;
+        const nextStatus = autoStatusOnScore(hasAnyScore ? (score ?? 0) : null, status);
 
         if (existing) {
           return prev.map((g) =>
@@ -341,9 +343,9 @@ export default function GradesPage() {
         }
         if (field === "qualitativeLevel") {
           next.score = null;
-          if (value) {
-            next.status = autoStatusOnScore(0, existing.status as SubmissionStatus);
-          }
+          next.status = value
+            ? autoStatusOnScore(0, existing.status as SubmissionStatus)
+            : autoStatusOnScore(null, existing.status as SubmissionStatus);
         }
         return prev.map((g) => (g.obligationId === obligationId ? next : g));
       }
@@ -360,7 +362,42 @@ export default function GradesPage() {
               ? (value as string)
               : field === "qualitativeLevel" && value
                 ? autoStatusOnScore(0, "NOT_STARTED")
-                : "NOT_STARTED",
+                : field === "score"
+                  ? autoStatusOnScore(value as number | null, "NOT_STARTED")
+                  : "NOT_STARTED",
+        },
+      ];
+    });
+    setSaveState("idle");
+  }
+
+  function handleGradeClear(obligationId: string) {
+    const empty = emptyGradeFields();
+    setGrades((prev) => {
+      const existing = prev.find((g) => g.obligationId === obligationId);
+      if (existing) {
+        return prev.map((g) =>
+          g.obligationId === obligationId
+            ? {
+                ...g,
+                score: empty.score,
+                qualitativeLevel: empty.qualitativeLevel,
+                componentScores: empty.componentScores,
+                subItemScores: empty.subItemScores,
+                status: empty.status,
+              }
+            : g
+        );
+      }
+      return [
+        ...prev,
+        {
+          obligationId,
+          score: empty.score,
+          qualitativeLevel: empty.qualitativeLevel,
+          componentScores: empty.componentScores,
+          subItemScores: empty.subItemScores,
+          status: empty.status,
         },
       ];
     });
@@ -599,6 +636,7 @@ export default function GradesPage() {
                     studentGradeYear={selectedStudent?.class.gradeYear}
                     readOnly={false}
                     onGradeChange={handleGradeChange}
+                    onGradeClear={handleGradeClear}
                   />
                 </div>
               );

@@ -23,7 +23,7 @@ import {
   matrixTaskLabel,
   parseMatrixTaskKey,
 } from "@/lib/grade-components";
-import { autoStatusOnScore } from "@/lib/grade-status";
+import { autoStatusOnScore, emptyGradeFields } from "@/lib/grade-status";
 import { CANONICAL_GRADE_YEARS, normalizeGradeYear } from "@/lib/grade-year";
 import {
   SOCIAL_INVOLVEMENT_LABELS,
@@ -248,9 +248,7 @@ export default function GradesMatrixPage() {
           [studentId]: {
             score: null,
             qualitativeLevel: level,
-            status: level
-              ? autoStatusOnScore(0, current.status)
-              : current.status,
+            status: autoStatusOnScore(level ? 0 : null, current.status),
           },
         };
       }
@@ -272,6 +270,19 @@ export default function GradesMatrixPage() {
         [studentId]: { ...current, status: value as SubmissionStatus },
       };
     });
+    setSaveError(null);
+  }
+
+  function handleClear(studentId: string) {
+    const empty = emptyGradeFields();
+    setRowState((prev) => ({
+      ...prev,
+      [studentId]: {
+        score: empty.score,
+        qualitativeLevel: empty.qualitativeLevel,
+        status: empty.status,
+      },
+    }));
     setSaveError(null);
   }
 
@@ -579,6 +590,7 @@ export default function GradesMatrixPage() {
               qualitative={isSocial}
               showClass={showClass}
               onChange={handleChange}
+              onClear={handleClear}
             />
           </div>
         </>

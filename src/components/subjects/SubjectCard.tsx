@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Circle } from "lucide-react";
+import { ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Circle, RotateCcw } from "lucide-react";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import clsx from "clsx";
 import {
@@ -20,6 +20,7 @@ import {
 } from "@/lib/grade-components";
 import {
   STATUS_LABELS,
+  hasClearableGradeEntry,
   isMissingGradeStatus,
   normalizeSubmissionStatus,
 } from "@/lib/grade-status";
@@ -123,6 +124,7 @@ export function SubjectCard({
   progress,
   readOnly = true,
   onGradeChange,
+  onGradeClear,
   studentGradeYear,
 }: {
   name: string;
@@ -139,6 +141,8 @@ export function SubjectCard({
   };
   readOnly?: boolean;
   onGradeChange?: (obligationId: string, field: string, value: string | number | null) => void;
+  /** איפוס מלא למצב שלא הוזן ציון */
+  onGradeClear?: (obligationId: string) => void;
   /** שכבת התלמיד — לסימון מטלות עתידיות */
   studentGradeYear?: string | null;
 }) {
@@ -690,6 +694,17 @@ export function SubjectCard({
                                 )}
                               </div>
                             ) : null}
+                            {onGradeClear && hasClearableGradeEntry(grade) && (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-medium text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                                title="מחיקת הציון והחזרה למצב שלא הוזן"
+                                onClick={() => onGradeClear(o.id)}
+                              >
+                                <RotateCcw className="h-4 w-4" aria-hidden />
+                                נקה
+                              </button>
+                            )}
                           </div>
                         ) : isSocial && grade?.qualitativeLevel ? (
                           <div

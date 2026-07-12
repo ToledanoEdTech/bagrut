@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useCallback } from "react";
-import { STATUS_LABELS, SUBMISSION_STATUSES } from "@/lib/grade-status";
+import { RotateCcw } from "lucide-react";
+import { STATUS_LABELS, SUBMISSION_STATUSES, hasClearableGradeEntry } from "@/lib/grade-status";
 import { calcWeightedComponentScore, hasSeparateComponentGrades } from "@/lib/grade-components";
 import {
   SOCIAL_INVOLVEMENT_LABELS,
@@ -37,6 +38,7 @@ type Props = {
     field: "score" | "status" | "qualitativeLevel" | `componentScore:${number}`,
     value: number | null | SubmissionStatus | QualitativeLevel | ""
   ) => void;
+  onClear?: (studentId: string) => void;
 };
 
 export function GradeMatrixTable({
@@ -45,6 +47,7 @@ export function GradeMatrixTable({
   qualitative = false,
   showClass = false,
   onChange,
+  onClear,
 }: Props) {
   const multiComponent = !qualitative && hasSeparateComponentGrades(components);
   const scoreRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -110,6 +113,9 @@ export function GradeMatrixTable({
                 {components[0]?.name ?? "ציון"}
               </th>
             )}
+            {onClear && (
+              <th className="px-4 py-3 text-sm font-semibold text-slate-600">פעולות</th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -117,6 +123,7 @@ export function GradeMatrixTable({
             const weightedScore = multiComponent
               ? calcWeightedComponentScore(components, row.componentScores)
               : row.score;
+            const canClear = hasClearableGradeEntry(row);
 
             return (
               <tr
@@ -210,6 +217,23 @@ export function GradeMatrixTable({
                       }}
                       onKeyDown={(e) => handleScoreKeyDown(index, e)}
                     />
+                  </td>
+                )}
+                {onClear && (
+                  <td className="px-4 py-2.5">
+                    {canClear ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                        title="מחיקת הציון והחזרה למצב שלא הוזן"
+                        onClick={() => onClear(row.studentId)}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                        נקה
+                      </button>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
                   </td>
                 )}
               </tr>

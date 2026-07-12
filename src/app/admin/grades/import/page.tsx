@@ -300,6 +300,7 @@ export default function GradesImportPage() {
             הקובץ צריך לכלול: כיתה, מקצוע, מטלה, שם תלמיד, ציון/הערכה, סטטוס.
             למעורבות חברתית בעמודת הציון יש להזין: לא עבר, עבר, עבר בהצלחה או עבר בהצטיינות.
             (ובמידת הצורך גם רכיב/תת-מטלה)
+            כדי למחוק ציון שהוזן בטעות — השאירו את תא הציון ריק ובסטטוס בחרו «לא התחיל».
           </p>
 
           <div className="mt-6">
@@ -498,7 +499,8 @@ export default function GradesImportPage() {
               </li>
               <li className="flex gap-2">
                 <span className="font-bold text-primary-600">3.</span>
-                ציונים שכבר הוזנו יופיעו בקובץ — מלאו רק תאים ריקים
+                ציונים שכבר הוזנו יופיעו בקובץ — מלאו רק תאים ריקים. למחיקת
+                ציון: רוקנו את תא הציון ובסטטוס בחרו «לא התחיל»
               </li>
               <li className="flex gap-2">
                 <span className="font-bold text-primary-600">4.</span>

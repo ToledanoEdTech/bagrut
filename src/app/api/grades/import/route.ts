@@ -165,6 +165,7 @@ export async function POST(req: NextRequest) {
     const studentName = findColumn(row, "שם תלמיד", "שם", "name", "Name");
     const scoreRaw = findColumn(row, "ציון", "הערכה", "score", "Score");
     const statusRaw = findColumn(row, "סטטוס", "status", "Status");
+    const scoreCellEmpty = !scoreRaw || scoreRaw === "-";
 
     if (!className && !subjectName && !obligationName && !studentName) {
       return;
@@ -187,7 +188,7 @@ export async function POST(req: NextRequest) {
     let score: number | null = null;
     let qualitativeLevel: QualitativeLevel | null = null;
 
-    if (scoreRaw && scoreRaw !== "-") {
+    if (!scoreCellEmpty) {
       if (looksSocial) {
         qualitativeLevel = parseQualitativeLevelInput(scoreRaw);
         if (!qualitativeLevel) {
@@ -224,7 +225,7 @@ export async function POST(req: NextRequest) {
         score,
         qualitativeLevel,
         status,
-        hasScoreCol: scoreRaw !== "",
+        hasScoreCol: !scoreCellEmpty,
       },
     });
   });
@@ -321,6 +322,11 @@ export async function POST(req: NextRequest) {
       skipped++;
       continue;
     }
+
+    /** ציון ריק + סטטוס «לא התחיל» = איפוס למצב שלא הוזן ציון */
+    const clearToUnentered =
+      !data.hasScoreCol && data.status === "NOT_STARTED";
+
     if (target.kind === "ambiguous") {
       if (data.hasScoreCol) {
         errors.push(
@@ -329,6 +335,7 @@ export async function POST(req: NextRequest) {
         skipped++;
         continue;
       }
+      // בלי ציון ובלי איפוס מפורש — אפשר להמשיך רק לעדכון סטטוס כללי
     }
 
     const relevanceKey = `${student.id}:${obligation.id}`;
@@ -381,7 +388,27 @@ export async function POST(req: NextRequest) {
       aggregates.set(key, agg);
     }
 
-    if (data.hasScoreCol && target.kind !== "ambiguous") {
+    if (clearToUnentered) {
+      if (isSocial || target.kind === "single" || target.kind === "ambiguous") {
+        agg.score = null;
+        agg.qualitativeLevel = null;
+        agg.componentScores = {};
+        agg.subItemScores = {};
+      } else if (target.kind === "component") {
+        delete agg.componentScores[target.sortOrder];
+        if (Object.values(agg.componentScores).every((s) => s == null)) {
+          agg.score = null;
+        }
+      } else {
+        delete agg.subItemScores[target.sortOrder];
+        if (Object.values(agg.subItemScores).every((s) => s == null)) {
+          agg.score = null;
+        }
+      }
+      agg.status = "NOT_STARTED";
+      agg.explicitStatus = true;
+      agg.touched = true;
+    } else if (data.hasScoreCol && target.kind !== "ambiguous") {
       if (isSocial) {
         agg.qualitativeLevel = data.qualitativeLevel;
         agg.score = null;
@@ -389,14 +416,16 @@ export async function POST(req: NextRequest) {
         agg.score = data.score;
         agg.qualitativeLevel = null;
       } else if (target.kind === "component") {
-        agg.componentScores[target.sortOrder] = data.score;
+        if (data.score == null) delete agg.componentScores[target.sortOrder];
+        else agg.componentScores[target.sortOrder] = data.score;
       } else {
-        agg.subItemScores[target.sortOrder] = data.score;
+        if (data.score == null) delete agg.subItemScores[target.sortOrder];
+        else agg.subItemScores[target.sortOrder] = data.score;
       }
       agg.touched = true;
     }
 
-    if (data.status) {
+    if (data.status && !clearToUnentered) {
       agg.status = data.status;
       agg.explicitStatus = true;
       agg.touched = true;
@@ -406,6 +435,13 @@ export async function POST(req: NextRequest) {
   const toUpsert = Array.from(aggregates.values())
     .filter((agg) => agg.touched)
     .map((agg) => {
+      const componentScores = Object.fromEntries(
+        Object.entries(agg.componentScores).filter(([, s]) => s != null)
+      ) as Record<number, number | null>;
+      const subItemScores = Object.fromEntries(
+        Object.entries(agg.subItemScores).filter(([, s]) => s != null)
+      ) as Record<number, number | null>;
+
       if (agg.isSocial) {
         const status = agg.explicitStatus
           ? agg.status
@@ -426,8 +462,8 @@ export async function POST(req: NextRequest) {
 
       const resolved = resolveObligationGradeScore(agg.obligation, {
         score: agg.score,
-        componentScores: agg.componentScores,
-        subItemScores: agg.subItemScores,
+        componentScores,
+        subItemScores,
       });
       const status = agg.explicitStatus
         ? agg.status
@@ -438,9 +474,9 @@ export async function POST(req: NextRequest) {
         score: agg.score,
         qualitativeLevel: null,
         componentScores:
-          Object.keys(agg.componentScores).length > 0 ? agg.componentScores : null,
+          Object.keys(componentScores).length > 0 ? componentScores : null,
         subItemScores:
-          Object.keys(agg.subItemScores).length > 0 ? agg.subItemScores : null,
+          Object.keys(subItemScores).length > 0 ? subItemScores : null,
         status,
         notes: null as null,
       };
@@ -448,8 +484,9 @@ export async function POST(req: NextRequest) {
 
   let updated = 0;
   if (toUpsert.length > 0) {
-    const results = await upsertGradesBulk(toUpsert);
-    updated = results.length;
+    await upsertGradesBulk(toUpsert);
+    // כולל מחיקות (איפוס למצב שלא הוזן) — לא רק מסמכים שנותרו
+    updated = toUpsert.length;
   }
 
   return NextResponse.json({ updated, skipped, errors });

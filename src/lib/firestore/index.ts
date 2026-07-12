@@ -17,6 +17,7 @@ import type {
 } from "@/lib/types";
 import { isAdminEmail } from "@/lib/roles";
 import { LEGACY_TEACHER_PERMISSIONS } from "@/lib/permissions";
+import { shouldDeleteEmptyGrade } from "@/lib/grade-status";
 import { FieldValue } from "firebase-admin/firestore";
 
 // ─── helpers ───────────────────────────────────────────────────────────────
@@ -708,6 +709,20 @@ export async function upsertGrades(
 ) {
   const results: Grade[] = [];
   for (const g of grades) {
+    const score = g.score ?? null;
+    const qualitativeLevel = g.qualitativeLevel ?? null;
+    const componentScores = g.componentScores ?? null;
+    const subItemScores = g.subItemScores ?? null;
+    const notes = g.notes ?? null;
+    const cleared = shouldDeleteEmptyGrade({
+      status: g.status,
+      score,
+      qualitativeLevel,
+      componentScores,
+      subItemScores,
+      notes,
+    });
+
     const existing = await adminDb
       .collection("grades")
       .where("studentId", "==", studentId)
@@ -716,29 +731,34 @@ export async function upsertGrades(
       .get();
 
     if (existing.empty) {
+      if (cleared) continue;
       const id = newId();
       const grade: Grade = {
         id,
         studentId,
         obligationId: g.obligationId,
-        score: g.score ?? null,
-        qualitativeLevel: g.qualitativeLevel ?? null,
-        componentScores: g.componentScores ?? null,
-        subItemScores: g.subItemScores ?? null,
+        score,
+        qualitativeLevel,
+        componentScores,
+        subItemScores,
         status: g.status,
-        notes: g.notes ?? null,
+        notes,
       };
       await adminDb.collection("grades").doc(id).set(grade);
       results.push(grade);
     } else {
       const doc = existing.docs[0]!;
+      if (cleared) {
+        await doc.ref.delete();
+        continue;
+      }
       const updates = {
-        score: g.score ?? null,
-        qualitativeLevel: g.qualitativeLevel ?? null,
-        componentScores: g.componentScores ?? null,
-        subItemScores: g.subItemScores ?? null,
+        score,
+        qualitativeLevel,
+        componentScores,
+        subItemScores,
         status: g.status,
-        notes: g.notes ?? null,
+        notes,
         updatedAt: FieldValue.serverTimestamp(),
       };
       await doc.ref.update(updates);
@@ -747,12 +767,12 @@ export async function upsertGrades(
         id: doc.id,
         studentId: gradeData.studentId,
         obligationId: gradeData.obligationId,
-        score: g.score ?? null,
-        qualitativeLevel: g.qualitativeLevel ?? null,
-        componentScores: g.componentScores ?? null,
-        subItemScores: g.subItemScores ?? null,
+        score,
+        qualitativeLevel,
+        componentScores,
+        subItemScores,
         status: g.status,
-        notes: g.notes ?? null,
+        notes,
       });
     }
   }
@@ -829,39 +849,55 @@ export async function upsertGradesBulk(
   for (const entry of entries) {
     const key = `${entry.studentId}:${entry.obligationId}`;
     const existing = existingMap.get(key);
+    const score = entry.score ?? null;
     const qualitativeLevel = entry.qualitativeLevel ?? null;
+    const componentScores = entry.componentScores ?? null;
+    const subItemScores = entry.subItemScores ?? null;
+    const notes = entry.notes ?? null;
+    const cleared = shouldDeleteEmptyGrade({
+      status: entry.status,
+      score,
+      qualitativeLevel,
+      componentScores,
+      subItemScores,
+      notes,
+    });
 
     if (existing) {
-      batch.update(adminDb.collection("grades").doc(existing.id), {
-        score: entry.score ?? null,
-        qualitativeLevel,
-        componentScores: entry.componentScores ?? null,
-        subItemScores: entry.subItemScores ?? null,
-        status: entry.status,
-        notes: entry.notes ?? null,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-      results.push({
-        ...existing,
-        score: entry.score ?? null,
-        qualitativeLevel,
-        componentScores: entry.componentScores ?? null,
-        subItemScores: entry.subItemScores ?? null,
-        status: entry.status,
-        notes: entry.notes ?? null,
-      });
-    } else {
+      if (cleared) {
+        batch.delete(adminDb.collection("grades").doc(existing.id));
+      } else {
+        batch.update(adminDb.collection("grades").doc(existing.id), {
+          score,
+          qualitativeLevel,
+          componentScores,
+          subItemScores,
+          status: entry.status,
+          notes,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        results.push({
+          ...existing,
+          score,
+          qualitativeLevel,
+          componentScores,
+          subItemScores,
+          status: entry.status,
+          notes,
+        });
+      }
+    } else if (!cleared) {
       const id = newId();
       const grade: Grade = {
         id,
         studentId: entry.studentId,
         obligationId: entry.obligationId,
-        score: entry.score ?? null,
+        score,
         qualitativeLevel,
-        componentScores: entry.componentScores ?? null,
-        subItemScores: entry.subItemScores ?? null,
+        componentScores,
+        subItemScores,
         status: entry.status,
-        notes: entry.notes ?? null,
+        notes,
       };
       batch.set(adminDb.collection("grades").doc(id), grade);
       results.push(grade);

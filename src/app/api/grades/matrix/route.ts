@@ -234,12 +234,20 @@ export async function PUT(req: NextRequest) {
       if (!validateScore(score)) {
         return NextResponse.json({ error: "ציון לא חוקי (0–100)" }, { status: 400 });
       }
-      subItemScores = { ...(existing?.subItemScores ?? {}), [taskSortOrder]: score };
+      const nextSubItems = { ...(existing?.subItemScores ?? {}) };
+      if (score == null) delete nextSubItems[taskSortOrder];
+      else nextSubItems[taskSortOrder] = score;
+      subItemScores =
+        Object.values(nextSubItems).some((s) => s != null) ? nextSubItems : null;
     } else if (editingSingleTask && taskKind === "component") {
       if (!validateScore(score)) {
         return NextResponse.json({ error: "ציון לא חוקי (0–100)" }, { status: 400 });
       }
-      componentScores = { ...(existing?.componentScores ?? {}), [taskSortOrder]: score };
+      const nextComponents = { ...(existing?.componentScores ?? {}) };
+      if (score == null) delete nextComponents[taskSortOrder];
+      else nextComponents[taskSortOrder] = score;
+      componentScores =
+        Object.values(nextComponents).some((s) => s != null) ? nextComponents : null;
     } else if (editingSingleTask && taskKind === "single") {
       if (!validateScore(score)) {
         return NextResponse.json({ error: "ציון לא חוקי (0–100)" }, { status: 400 });
