@@ -59,6 +59,16 @@ function TaskRow({ task }: { task: MissingEntryTask }) {
   );
 }
 
+type TaskSort = "dueDate" | "missingCount";
+
+function compareTasks(a: MissingEntryTask, b: MissingEntryTask, sort: TaskSort) {
+  if (sort === "missingCount") {
+    const byMissing = b.missingStudentCount - a.missingStudentCount;
+    if (byMissing !== 0) return byMissing;
+  }
+  return a.gradeEntryDueDate.localeCompare(b.gradeEntryDueDate);
+}
+
 export default function MissingEntriesPage() {
   const { session } = useAuth();
   const isAdmin = session ? isFullAdmin(session) : false;
@@ -68,6 +78,7 @@ export default function MissingEntriesPage() {
   const [tab, setTab] = useState<"teachers" | "tasks">("teachers");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [taskFilter, setTaskFilter] = useState<"all" | "overdue" | "upcoming">("all");
+  const [taskSort, setTaskSort] = useState<TaskSort>("dueDate");
 
   const allTasks = useMemo(() => {
     if (!data) return [];
@@ -81,8 +92,8 @@ export default function MissingEntriesPage() {
         seen.add(key);
         return true;
       })
-      .sort((a, b) => a.gradeEntryDueDate.localeCompare(b.gradeEntryDueDate));
-  }, [data]);
+      .sort((a, b) => compareTasks(a, b, taskSort));
+  }, [data, taskSort]);
 
   const filteredTasks = useMemo(() => {
     if (taskFilter === "overdue") return allTasks.filter((t) => t.isOverdue);
@@ -147,31 +158,56 @@ export default function MissingEntriesPage() {
         ]}
       />
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setTab("teachers")}
-          className={clsx(
-            "rounded-xl px-4 py-2 text-sm font-semibold transition",
-            tab === "teachers"
-              ? "bg-primary-600 text-white shadow-soft"
-              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-          )}
-        >
-          לפי מורים ({data.teachers.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("tasks")}
-          className={clsx(
-            "rounded-xl px-4 py-2 text-sm font-semibold transition",
-            tab === "tasks"
-              ? "bg-primary-600 text-white shadow-soft"
-              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-          )}
-        >
-          לפי מטלות ({allTasks.length})
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setTab("teachers")}
+            className={clsx(
+              "rounded-xl px-4 py-2 text-sm font-semibold transition",
+              tab === "teachers"
+                ? "bg-primary-600 text-white shadow-soft"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            )}
+          >
+            לפי מורים ({data.teachers.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("tasks")}
+            className={clsx(
+              "rounded-xl px-4 py-2 text-sm font-semibold transition",
+              tab === "tasks"
+                ? "bg-primary-600 text-white shadow-soft"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            )}
+          >
+            לפי מטלות ({allTasks.length})
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-slate-500">מיון מטלות:</span>
+          {(
+            [
+              ["dueDate", "תאריך יעד"],
+              ["missingCount", "כמות חוסרים"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTaskSort(id)}
+              className={clsx(
+                "rounded-lg px-3 py-1.5 text-sm font-medium transition",
+                taskSort === id
+                  ? "bg-slate-800 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === "teachers" && (
@@ -227,7 +263,7 @@ export default function MissingEntriesPage() {
                   </button>
                   {open && (
                     <ul className="space-y-2 border-t border-slate-100 bg-slate-50/50 px-5 py-4">
-                      {t.tasks.map((task) => (
+                      {[...t.tasks].sort((a, b) => compareTasks(a, b, taskSort)).map((task) => (
                         <TaskRow
                           key={`${task.obligationId}-${task.obligationLabel}-${task.gradeEntryDueDate}`}
                           task={task}
@@ -249,7 +285,9 @@ export default function MissingEntriesPage() {
                 מקצועות אלה לא משויכים למורה בלוח המטלות
               </p>
               <ul className="mt-4 space-y-2">
-                {data.tasksWithoutTeacher.map((task) => (
+                {[...data.tasksWithoutTeacher]
+                  .sort((a, b) => compareTasks(a, b, taskSort))
+                  .map((task) => (
                   <TaskRow
                     key={`${task.obligationId}-${task.obligationLabel}-${task.gradeEntryDueDate}`}
                     task={task}
