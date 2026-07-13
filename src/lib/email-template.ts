@@ -37,6 +37,54 @@ function formatItemLine(item: OverdueGradeItem): string {
   return parts.join(" ");
 }
 
+function renderItemCard(item: OverdueGradeItem): string {
+  const dueLabel = item.kind === "pre_due" ? "מועד הזנה" : "יעד הזנה";
+  const dueValue =
+    item.kind === "pre_due"
+      ? `${duePhrase(item)} · ${formatDueDateHe(item.gradeEntryDueDate)}`
+      : formatDueDateHe(item.gradeEntryDueDate);
+  const missingHighlight =
+    item.kind !== "pre_due"
+      ? `color:#b91c1c;font-weight:700;`
+      : `color:#111827;font-weight:600;`;
+
+  return `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 12px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;">
+      <tr>
+        <td style="padding:14px 16px;font-family:'Segoe UI',Arial,Helvetica,sans-serif;direction:rtl;text-align:right;">
+          <p style="margin:0 0 6px;font-size:15px;line-height:1.5;color:#111827;font-weight:700;">
+            ${escapeHtml(item.subjectName)}
+          </p>
+          <p style="margin:0 0 8px;font-size:14px;line-height:1.5;color:#374151;">
+            ${escapeHtml(item.obligationLabel)}${
+              item.examEvent
+                ? ` <span style="color:#6b7280;">(${escapeHtml(item.examEvent)})</span>`
+                : ""
+            }
+          </p>
+          <p style="margin:0 0 4px;font-size:13px;line-height:1.5;color:#6b7280;">
+            ${escapeHtml(dueLabel)}:
+            <span style="color:#374151;">${escapeHtml(dueValue)}</span>
+            ${
+              item.kind === "pre_due"
+                ? ` · <span style="color:#374151;font-weight:600;">תזכורת מקדימה</span>`
+                : ` · <span style="color:#b91c1c;font-weight:700;">יעד חלף</span>`
+            }
+          </p>
+          <p style="margin:0;font-size:13px;line-height:1.5;color:#6b7280;">
+            תלמידים ללא ציון:
+            <span style="${missingHighlight}">${item.missingStudentCount}</span>
+            ${
+              item.classNames.length
+                ? ` · כיתות: <span style="color:#374151;">${escapeHtml(item.classNames.join(", "))}</span>`
+                : ""
+            }
+          </p>
+        </td>
+      </tr>
+    </table>`;
+}
+
 export function renderGradeReminderEmail(options: {
   recipientName: string;
   items: OverdueGradeItem[];
@@ -74,54 +122,48 @@ export function renderGradeReminderEmail(options: {
     "הודעה זו נשלחה אוטומטית ממערכת מעקב בגרות.",
   ].join("\n");
 
-  const listHtml = shown
-    .map(
-      (item) => `
-      <li style="margin-bottom:10px;line-height:1.6;">
-        <strong>${escapeHtml(item.subjectName)}</strong> — ${escapeHtml(item.obligationLabel)}
-        ${item.examEvent ? `<span style="color:#64748b;"> (${escapeHtml(item.examEvent)})</span>` : ""}
-        ${item.kind === "pre_due" ? `<span style="color:#0369a1;font-weight:600;"> · תזכורת מקדימה (${escapeHtml(duePhrase(item))})</span>` : ""}
-        <br />
-        <span style="color:#475569;font-size:14px;">
-          ${item.kind === "pre_due" ? "מועד הזנה" : "יעד הזנה"}: ${escapeHtml(formatDueDateHe(item.gradeEntryDueDate))}
-          · ${item.missingStudentCount} תלמידים ללא ציון
-          ${item.classNames.length ? `· כיתות: ${escapeHtml(item.classNames.join(", "))}` : ""}
-        </span>
-      </li>`
-    )
-    .join("");
+  const itemsHtml = shown.map(renderItemCard).join("");
+  const remainingHtml =
+    remaining > 0
+      ? `<p style="margin:0 0 20px;font-size:13px;line-height:1.5;color:#6b7280;text-align:right;">ועוד ${remaining} מטלות נוספות</p>`
+      : "";
 
   const html = `<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(subject)}</title>
 </head>
-<body style="margin:0;padding:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;direction:rtl;text-align:right;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;padding:24px 0;">
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Arial,Helvetica,sans-serif;direction:rtl;text-align:right;-webkit-text-size-adjust:100%;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6;padding:24px 12px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
           <tr>
-            <td style="padding:24px 28px;background:linear-gradient(135deg,#1d4ed8,#7c3aed);color:#ffffff;">
-              <h1 style="margin:0;font-size:22px;font-weight:700;">תזכורת הזנת ציונים</h1>
-              <p style="margin:8px 0 0;font-size:14px;opacity:0.95;">מערכת מעקב בגרות — ישיבה תיכונית</p>
+            <td style="padding:22px 28px;background:#1e293b;direction:rtl;text-align:right;">
+              <p style="margin:0 0 8px;font-size:12px;line-height:1.4;color:#fbbf24;font-weight:600;letter-spacing:0.02em;">
+                מערכת מעקב בגרות
+              </p>
+              <h1 style="margin:0;font-size:22px;line-height:1.35;font-weight:700;color:#ffffff;">
+                תזכורת הזנת ציונים
+              </h1>
             </td>
           </tr>
           <tr>
-            <td style="padding:28px;color:#0f172a;">
-              <p style="margin:0 0 16px;font-size:16px;">שלום ${escapeHtml(recipientName)},</p>
-              <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#334155;">
+            <td style="padding:28px;direction:rtl;text-align:right;color:#111827;font-family:'Segoe UI',Arial,Helvetica,sans-serif;">
+              <p style="margin:0 0 14px;font-size:16px;line-height:1.6;color:#111827;">
+                שלום ${escapeHtml(recipientName)},
+              </p>
+              <p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#374151;">
                 ${escapeHtml(intro)} נא להשלים את ההזנה בהקדם.
               </p>
-              <ul style="margin:0 0 24px;padding-right:20px;color:#0f172a;">
-                ${listHtml}
-                ${remaining > 0 ? `<li style="color:#64748b;">ועוד ${remaining} מטלות נוספות</li>` : ""}
-              </ul>
-              <table role="presentation" cellspacing="0" cellpadding="0">
+              ${itemsHtml}
+              ${remainingHtml}
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:8px 0 0;">
                 <tr>
-                  <td style="border-radius:8px;background:#2563eb;">
-                    <a href="${escapeHtml(gradesUrl)}" style="display:inline-block;padding:12px 24px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;">
+                  <td align="center" style="padding:8px 0 4px;">
+                    <a href="${escapeHtml(gradesUrl)}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;line-height:1.4;border-radius:8px;font-family:'Segoe UI',Arial,Helvetica,sans-serif;">
                       לטיפול באתר
                     </a>
                   </td>
@@ -130,8 +172,10 @@ export function renderGradeReminderEmail(options: {
             </td>
           </tr>
           <tr>
-            <td style="padding:16px 28px;background:#f1f5f9;color:#64748b;font-size:12px;line-height:1.6;">
-              הודעה זו נשלחה אוטומטית. אם כבר הוזנו הציונים, ניתן להתעלם מהודעה זו.
+            <td style="padding:16px 28px;background:#f9fafb;border-top:1px solid #e5e7eb;direction:rtl;text-align:right;font-family:'Segoe UI',Arial,Helvetica,sans-serif;">
+              <p style="margin:0;font-size:12px;line-height:1.6;color:#6b7280;">
+                הודעה זו נשלחה אוטומטית ממערכת מעקב בגרות. אם כבר הוזנו הציונים, ניתן להתעלם מהודעה זו.
+              </p>
             </td>
           </tr>
         </table>
@@ -151,10 +195,32 @@ export function renderTestEmail(): { subject: string; html: string; text: string
   const html = `<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head><meta charset="utf-8" /></head>
-<body style="font-family:Arial,sans-serif;direction:rtl;text-align:right;padding:24px;">
-  <h2 style="color:#1d4ed8;">בדיקת מערכת מייל</h2>
-  <p>זוהי הודעת בדיקה ממערכת מעקב בגרות.</p>
-  <p>אם קיבלת מייל זה, הגדרות ה-SMTP תקינות.</p>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Arial,Helvetica,sans-serif;direction:rtl;text-align:right;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6;padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+          <tr>
+            <td style="padding:22px 28px;background:#1e293b;">
+              <p style="margin:0 0 8px;font-size:12px;color:#fbbf24;font-weight:600;">מערכת מעקב בגרות</p>
+              <h1 style="margin:0;font-size:22px;color:#ffffff;font-weight:700;">בדיקת מערכת מייל</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;color:#111827;">
+              <p style="margin:0 0 12px;font-size:15px;line-height:1.7;color:#374151;">זוהי הודעת בדיקה ממערכת מעקב בגרות.</p>
+              <p style="margin:0;font-size:15px;line-height:1.7;color:#374151;">אם קיבלת מייל זה, הגדרות ה-SMTP תקינות.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 28px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+              <p style="margin:0;font-size:12px;color:#6b7280;">הודעה אוטומטית — אין צורך להשיב.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
   return { subject, html, text };
