@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
 
   const params = new URL(req.url).searchParams;
   const classId = params.get("classId");
+  const studentId = params.get("studentId");
   const gradeYearRaw = params.get("gradeYear");
   const gradeYear = normalizeGradeYear(gradeYearRaw);
   const subjectId = params.get("subjectId") || undefined;
@@ -38,9 +39,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "תת-מטלה לא חוקית" }, { status: 400 });
   }
 
-  if (!classId && !gradeYear) {
+  if (!classId && !gradeYear && !studentId) {
     return NextResponse.json(
-      { error: "חסר מזהה כיתה או שכבה" },
+      { error: "חסר מזהה כיתה, שכבה או תלמיד" },
       { status: 400 }
     );
   }
@@ -73,9 +74,19 @@ export async function GET(req: NextRequest) {
   const examPathById = new Map(examPaths.map((p) => [p.id, p]));
   const allowedClassIds = getAllowedClassIdsForListing(session, classes);
 
-  let targetClasses = classId
-    ? classes.filter((c) => c.id === classId)
-    : classes.filter((c) => normalizeGradeYear(c.gradeYear) === gradeYear);
+  const selectedStudent = studentId
+    ? students.find((s) => s.id === studentId)
+    : undefined;
+
+  if (studentId && !selectedStudent) {
+    return NextResponse.json({ error: "תלמיד לא נמצא" }, { status: 404 });
+  }
+
+  let targetClasses = studentId
+    ? classes.filter((c) => c.id === selectedStudent!.classId)
+    : classId
+      ? classes.filter((c) => c.id === classId)
+      : classes.filter((c) => normalizeGradeYear(c.gradeYear) === gradeYear);
 
   if (allowedClassIds) {
     const allowed = new Set(allowedClassIds);
@@ -84,12 +95,25 @@ export async function GET(req: NextRequest) {
 
   if (targetClasses.length === 0) {
     return NextResponse.json(
-      { error: classId ? "כיתה לא נמצאה" : "לא נמצאו כיתות בשכבה זו" },
+      {
+        error: studentId
+          ? "כיתה לא נמצאה"
+          : classId
+            ? "כיתה לא נמצאה"
+            : "לא נמצאו כיתות בשכבה זו",
+      },
       { status: 404 }
     );
   }
 
-  if (classId) {
+  if (studentId) {
+    const accessError = await requireGradeWrite(session, {
+      studentId,
+      subjectId,
+      obligationId,
+    });
+    if (accessError) return accessError;
+  } else if (classId) {
     const accessError = await requireGradeWrite(session, {
       classId,
       subjectId,
@@ -118,7 +142,9 @@ export async function GET(req: NextRequest) {
 
   const rows = targetClasses.flatMap((cls) => {
     const classStudents = students
-      .filter((s) => s.classId === cls.id)
+      .filter((s) =>
+        studentId ? s.id === studentId : s.classId === cls.id
+      )
       .sort((a, b) => a.name.localeCompare(b.name, "he"));
 
     return buildGradeImportTemplateRows({
@@ -135,9 +161,11 @@ export async function GET(req: NextRequest) {
     });
   });
 
-  const scopeName = classId
-    ? targetClasses[0]!.name
-    : gradeYear!;
+  const scopeName = studentId
+    ? selectedStudent!.name
+    : classId
+      ? targetClasses[0]!.name
+      : gradeYear!;
 
   return NextResponse.json({
     className: scopeName,

@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
 
   const params = new URL(req.url).searchParams;
   const classId = params.get("classId");
+  const studentId = params.get("studentId");
   const gradeYear = normalizeGradeYear(params.get("gradeYear"));
 
   const [allClasses, subjects, students, examPaths] = await Promise.all([
@@ -43,7 +44,10 @@ export async function GET(req: NextRequest) {
       ? subjectsWithPaths
       : subjectsWithPaths.filter((s) => allowedSubjectIds.includes(s.id));
 
-  if (classId) {
+  if (studentId) {
+    const accessError = await requireGradeWrite(session, { studentId });
+    if (accessError) return accessError;
+  } else if (classId) {
     const accessError = await requireGradeWrite(session, { classId });
     if (accessError) return accessError;
   } else if (gradeYear) {
@@ -107,7 +111,18 @@ export async function GET(req: NextRequest) {
   let classStudents: string[] | undefined;
   let studentCount = 0;
 
-  if (classId) {
+  if (studentId) {
+    const student = students.find((s) => s.id === studentId);
+    if (!student) {
+      return NextResponse.json({ error: "תלמיד לא נמצא" }, { status: 404 });
+    }
+    const cls = classes.find((c) => c.id === student.classId);
+    if (!cls) {
+      return NextResponse.json({ error: "כיתה לא נמצאה" }, { status: 404 });
+    }
+    classStudents = [student.name];
+    studentCount = 1;
+  } else if (classId) {
     const cls = classes.find((c) => c.id === classId);
     if (!cls) {
       return NextResponse.json({ error: "כיתה לא נמצאה" }, { status: 404 });

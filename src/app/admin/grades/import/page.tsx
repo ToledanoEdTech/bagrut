@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/Select";
 import { Alert } from "@/components/ui/Alert";
 import { FileUpload } from "@/components/ui/FileUpload";
 import { useToast } from "@/components/ui/Toast";
+import { StudentCombobox } from "@/components/students/StudentCombobox";
 import {
   downloadGradesImportTemplate,
   downloadFullGradesTemplate,
@@ -17,9 +18,15 @@ import {
 } from "@/lib/excel-export";
 import { CANONICAL_GRADE_YEARS, normalizeGradeYear } from "@/lib/grade-year";
 
-type ScopeMode = "class" | "gradeYear";
+type ScopeMode = "class" | "gradeYear" | "student";
 
 type ClassItem = { id: string; name: string; gradeYear: string | null };
+
+type StudentItem = {
+  id: string;
+  user: { name: string };
+  class: { id: string; name: string };
+};
 
 type TemplateData = {
   classes: string[];
@@ -57,12 +64,14 @@ export default function GradesImportPage() {
   const [scopeMode, setScopeMode] = useState<ScopeMode>("gradeYear");
   const [classId, setClassId] = useState("");
   const [gradeYear, setGradeYear] = useState("");
+  const [studentId, setStudentId] = useState("");
   const [subjectId, setSubjectId] = useState("");
   const [obligationLabel, setObligationLabel] = useState("");
   const [taskSortOrder, setTaskSortOrder] = useState("");
   const [downloading, setDownloading] = useState<"empty" | "filled" | "full" | null>(null);
 
   const { data: classes = [] } = useApi<ClassItem[]>("/api/classes/list");
+  const { data: students = [] } = useApi<StudentItem[]>("/api/students");
 
   const availableGradeYears = useMemo(() => {
     const present = new Set(
@@ -73,12 +82,32 @@ export default function GradesImportPage() {
     return CANONICAL_GRADE_YEARS.filter((gy) => present.has(gy));
   }, [classes]);
 
-  const scopeReady = scopeMode === "class" ? !!classId : !!gradeYear;
+  const comboboxStudents = useMemo(
+    () =>
+      [...students].sort((a, b) =>
+        a.user.name.localeCompare(b.user.name, "he")
+      ),
+    [students]
+  );
+
+  const selectedStudent = useMemo(
+    () => students.find((s) => s.id === studentId),
+    [students, studentId]
+  );
+
+  const scopeReady =
+    scopeMode === "class"
+      ? !!classId
+      : scopeMode === "student"
+        ? !!studentId
+        : !!gradeYear;
 
   const templateKey = scopeReady
     ? scopeMode === "class"
       ? `/api/grades/import/template?classId=${encodeURIComponent(classId)}`
-      : `/api/grades/import/template?gradeYear=${encodeURIComponent(gradeYear)}`
+      : scopeMode === "student"
+        ? `/api/grades/import/template?studentId=${encodeURIComponent(studentId)}`
+        : `/api/grades/import/template?gradeYear=${encodeURIComponent(gradeYear)}`
     : "/api/grades/import/template";
   const { data: templateData, loading: templateLoading } =
     useApi<TemplateData>(templateKey);
@@ -113,6 +142,7 @@ export default function GradesImportPage() {
   useEffect(() => {
     setClassId("");
     setGradeYear("");
+    setStudentId("");
     setSubjectId("");
     setObligationLabel("");
     setTaskSortOrder("");
@@ -122,7 +152,7 @@ export default function GradesImportPage() {
     setSubjectId("");
     setObligationLabel("");
     setTaskSortOrder("");
-  }, [classId, gradeYear]);
+  }, [classId, gradeYear, studentId]);
 
   useEffect(() => {
     setObligationLabel("");
@@ -175,10 +205,14 @@ export default function GradesImportPage() {
     }
   }
 
+  function buildScopeParams(): URLSearchParams {
+    if (scopeMode === "class") return new URLSearchParams({ classId });
+    if (scopeMode === "student") return new URLSearchParams({ studentId });
+    return new URLSearchParams({ gradeYear });
+  }
+
   function buildFilledTemplateQuery(): string {
-    const params = new URLSearchParams(
-      scopeMode === "class" ? { classId } : { gradeYear }
-    );
+    const params = buildScopeParams();
     if (subjectId) params.set("subjectId", subjectId);
     if (selectedObligation?.id) params.set("obligationId", selectedObligation.id);
     if (taskSortOrder) params.set("taskSortOrder", taskSortOrder);
@@ -188,6 +222,9 @@ export default function GradesImportPage() {
   function scopeDisplayName(): string {
     if (scopeMode === "class") {
       return selectedClass?.name.replace(/[/\\?*[\]]/g, "-") ?? "כיתה";
+    }
+    if (scopeMode === "student") {
+      return selectedStudent?.user.name.replace(/[/\\?*[\]]/g, "-") ?? "תלמיד";
     }
     return gradeYear.replace(/[/\\?*[\]]/g, "-") || "שכבה";
   }
@@ -208,7 +245,11 @@ export default function GradesImportPage() {
 
   function buildFilledTitle(rowCount: number): string {
     const parts = [
-      scopeMode === "class" ? (selectedClass?.name ?? "כיתה") : gradeYear,
+      scopeMode === "class"
+        ? (selectedClass?.name ?? "כיתה")
+        : scopeMode === "student"
+          ? (selectedStudent?.user.name ?? "תלמיד")
+          : gradeYear,
     ];
     if (selectedSubject?.name) parts.push(selectedSubject.name);
     if (obligationLabel) parts.push(obligationLabel);
@@ -216,10 +257,26 @@ export default function GradesImportPage() {
     return `קובץ הזנת ציונים — ${parts.join(" · ")} (${rowCount} שורות)`;
   }
 
+  function emptyRowsMessage(): string {
+    if (scopeMode === "gradeYear") {
+      return "לא נמצאו שורות לפי הבחירה — בדקו שהמקצוע/מטלה רלוונטיים לשכבה";
+    }
+    if (scopeMode === "student") {
+      return "לא נמצאו שורות לפי הבחירה — בדקו שהמקצוע/מטלה רלוונטיים לתלמיד";
+    }
+    return "לא נמצאו שורות לפי הבחירה — בדקו שהמקצוע/מטלה רלוונטיים לכיתה";
+  }
+
+  function noStudentsMessage(): string {
+    if (scopeMode === "gradeYear") return "אין תלמידים בשכבה זו";
+    if (scopeMode === "student") return "תלמיד לא נמצא";
+    return "אין תלמידים בכיתה זו";
+  }
+
   async function downloadFilledTemplate() {
     if (!templateData || !scopeReady) return;
-    const students = templateData.classStudents ?? [];
-    if (students.length === 0) return;
+    const scopedStudents = templateData.classStudents ?? [];
+    if (scopedStudents.length === 0) return;
 
     setDownloading("filled");
     try {
@@ -237,11 +294,7 @@ export default function GradesImportPage() {
         return;
       }
       if (data.rows.length === 0) {
-        setError(
-          scopeMode === "gradeYear"
-            ? "לא נמצאו שורות לפי הבחירה — בדקו שהמקצוע/מטלה רלוונטיים לשכבה"
-            : "לא נמצאו שורות לפי הבחירה — בדקו שהמקצוע/מטלה רלוונטיים לכיתה"
-        );
+        setError(emptyRowsMessage());
         return;
       }
       await downloadFullGradesTemplate(buildFilledFilename(), {
@@ -261,11 +314,9 @@ export default function GradesImportPage() {
     if (!scopeReady) return;
     setDownloading("full");
     try {
-      const query =
-        scopeMode === "class"
-          ? `classId=${encodeURIComponent(classId)}`
-          : `gradeYear=${encodeURIComponent(gradeYear)}`;
-      const res = await fetch(`/api/grades/import/full-template?${query}`);
+      const res = await fetch(
+        `/api/grades/import/full-template?${buildScopeParams().toString()}`
+      );
       const data = (await res.json()) as {
         className: string;
         statuses: string[];
@@ -290,6 +341,13 @@ export default function GradesImportPage() {
 
   const studentCount =
     templateData?.studentCount ?? templateData?.classStudents?.length ?? 0;
+
+  const filledButtonLabel =
+    studentCount > 0
+      ? scopeMode === "student"
+        ? "תבנית לפי בחירה (תלמיד אחד)"
+        : `תבנית לפי בחירה (${studentCount} תלמידים)`
+      : "תבנית לפי בחירה";
 
   return (
     <>
@@ -349,8 +407,8 @@ export default function GradesImportPage() {
               </h3>
               <p className="mt-1 text-sm text-slate-500">
                 הורידו קובץ עם שמות התלמידים וציונים קיימים — נשאר רק למלא את
-                התאים הריקים. ניתן לבחור לפי שכבה (למשל מתמטיקה/אנגלית/מגמה) או
-                לפי כיתה, ולסנן לפי מקצוע, מטלה או תת-מטלה.
+                התאים הריקים. ניתן לבחור לפי שכבה, לפי כיתה או לפי תלמיד, ולסנן
+                לפי מקצוע, מטלה או תת-מטלה.
               </p>
 
               <div className="mt-4 mb-3 flex flex-wrap gap-2">
@@ -370,6 +428,14 @@ export default function GradesImportPage() {
                 >
                   לפי כיתה
                 </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={scopeMode === "student" ? "primary" : "secondary"}
+                  onClick={() => setScopeMode("student")}
+                >
+                  לפי תלמיד
+                </Button>
               </div>
 
               <div className="mt-4 grid gap-3">
@@ -386,7 +452,7 @@ export default function GradesImportPage() {
                       </option>
                     ))}
                   </Select>
-                ) : (
+                ) : scopeMode === "class" ? (
                   <Select
                     label="כיתה"
                     value={classId}
@@ -400,6 +466,15 @@ export default function GradesImportPage() {
                       </option>
                     ))}
                   </Select>
+                ) : (
+                  <div>
+                    <label className="label">תלמיד</label>
+                    <StudentCombobox
+                      students={comboboxStudents}
+                      selectedId={studentId}
+                      onSelect={setStudentId}
+                    />
+                  </div>
                 )}
 
                 <Select
@@ -456,9 +531,7 @@ export default function GradesImportPage() {
                   ) : (
                     <Download className="h-4 w-4" />
                   )}
-                  {studentCount > 0
-                    ? `תבנית לפי בחירה (${studentCount} תלמידים)`
-                    : "תבנית לפי בחירה"}
+                  {filledButtonLabel}
                 </Button>
 
                 <Button
@@ -477,9 +550,7 @@ export default function GradesImportPage() {
 
               {scopeReady && !templateLoading && studentCount === 0 && (
                 <p className="mt-2 text-sm text-amber-600">
-                  {scopeMode === "gradeYear"
-                    ? "אין תלמידים בשכבה זו"
-                    : "אין תלמידים בכיתה זו"}
+                  {noStudentsMessage()}
                 </p>
               )}
             </div>
@@ -490,12 +561,12 @@ export default function GradesImportPage() {
             <ul className="mt-4 space-y-3 text-sm text-slate-600">
               <li className="flex gap-2">
                 <span className="font-bold text-primary-600">1.</span>
-                הורידו תבנית ריקה או תבנית עם תלמידים לפי שכבה או כיתה
+                הורידו תבנית ריקה או תבנית עם תלמידים לפי שכבה, כיתה או תלמיד
               </li>
               <li className="flex gap-2">
                 <span className="font-bold text-primary-600">2.</span>
-                בחרו שכבה (למקצועות כמו מתמטיקה/אנגלית/מגמה) או כיתה, ואופציונלית
-                מקצוע / מטלה / תת-מטלה לסינון הקובץ
+                בחרו שכבה, כיתה או תלמיד, ואופציונלית מקצוע / מטלה / תת-מטלה
+                לסינון הקובץ
               </li>
               <li className="flex gap-2">
                 <span className="font-bold text-primary-600">3.</span>
