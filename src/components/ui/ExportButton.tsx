@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
+import clsx from "clsx";
 import { Button } from "@/components/ui/Button";
 
 type ExportButtonProps = {
@@ -9,6 +10,7 @@ type ExportButtonProps = {
   disabled?: boolean;
   label?: string;
   size?: "sm" | "md" | "lg";
+  className?: string;
 };
 
 export function ExportButton({
@@ -16,6 +18,7 @@ export function ExportButton({
   disabled,
   label = "ייצוא לאקסל",
   size = "md",
+  className,
 }: ExportButtonProps) {
   const [exporting, setExporting] = useState(false);
 
@@ -35,7 +38,7 @@ export function ExportButton({
       size={size}
       onClick={handleClick}
       disabled={disabled || exporting}
-      className="shrink-0"
+      className={clsx("shrink-0", className)}
     >
       {exporting ? (
         <Loader2 className="h-4 w-4 animate-spin" />

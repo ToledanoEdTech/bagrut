@@ -33,7 +33,7 @@ export function Tabs({ tabs }: { tabs: TabItem[] }) {
             onMouseEnter={() => prefetchRoute(tab.href)}
             onFocus={() => prefetchRoute(tab.href)}
             className={clsx(
-              "relative z-10 flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-base font-medium transition-colors",
+              "relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-sm font-medium transition-colors sm:gap-2 sm:px-4 sm:text-base",
               active ? "text-primary-700" : "text-slate-600 hover:text-slate-900"
             )}
           >
@@ -44,8 +44,8 @@ export function Tabs({ tabs }: { tabs: TabItem[] }) {
                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
               />
             )}
-            <span className="relative flex items-center gap-2">
-              {Icon && <Icon className="h-4 w-4" />}
+            <span className="relative flex items-center gap-1.5 sm:gap-2">
+              {Icon && <Icon className="hidden h-4 w-4 sm:block" />}
               {tab.label}
             </span>
           </Link>

@@ -464,13 +464,14 @@ export default function GradesPage() {
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
         <ExportButton
           onExport={handleExport}
           disabled={!selectedId || subjects.length === 0}
           label="ייצוא ציונים"
+          className="w-full sm:w-auto"
         />
-        <Link href="/admin/grades/matrix" className="btn-secondary">
+        <Link href="/admin/grades/matrix" className="btn-secondary w-full justify-center sm:w-auto">
           <ArrowLeft className="h-4 w-4" />
           הזנה מהירה לפי מטלה
         </Link>

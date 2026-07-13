@@ -485,7 +485,7 @@ export function SubjectCard({
                                 : "border-slate-200")
                       )}
                     >
-                      <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             {obligationDone ? (
@@ -575,9 +575,9 @@ export function SubjectCard({
                         </div>
 
                         {!readOnly && onGradeChange ? (
-                          <div className="flex shrink-0 flex-wrap items-center gap-3">
+                          <div className="flex w-full min-w-0 flex-col gap-3 sm:w-auto sm:shrink-0 sm:flex-row sm:flex-wrap sm:items-center">
                             <select
-                              className="input w-36 py-2 text-base"
+                              className="input w-full py-2 text-base sm:w-36"
                               value={grade?.status ?? "NOT_STARTED"}
                               onChange={(e) =>
                                 onGradeChange(o.id, "status", e.target.value)
@@ -591,7 +591,7 @@ export function SubjectCard({
                             </select>
                             {isSocial ? (
                               <select
-                                className="input w-44 py-2 text-base"
+                                className="input w-full py-2 text-base sm:w-44"
                                 value={grade?.qualitativeLevel ?? ""}
                                 onChange={(e) =>
                                   onGradeChange(
@@ -609,13 +609,13 @@ export function SubjectCard({
                                 ))}
                               </select>
                             ) : !usesSubItems && multiComponent ? (
-                              <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex w-full flex-wrap items-end gap-2 sm:w-auto sm:items-center">
                                 {o.components.map((c, i) => {
                                   const sortOrder = c.sortOrder ?? i;
                                   return (
                                     <label
                                       key={sortOrder}
-                                      className="flex flex-col items-end gap-1"
+                                      className="flex min-w-[calc(50%-0.25rem)] flex-1 flex-col items-stretch gap-1 sm:min-w-0 sm:flex-none sm:items-end"
                                     >
                                       <span className="text-xs font-medium text-slate-600">
                                         {c.name} ({c.weightPercent}%)
@@ -624,7 +624,8 @@ export function SubjectCard({
                                         type="number"
                                         min={0}
                                         max={100}
-                                        className="input w-24 py-2 text-base"
+                                        inputMode="decimal"
+                                        className="input w-full py-2 text-base sm:w-24"
                                         placeholder="ציון"
                                         value={grade?.componentScores?.[sortOrder] ?? ""}
                                         onChange={(e) =>
@@ -659,7 +660,8 @@ export function SubjectCard({
                                 type="number"
                                 min={0}
                                 max={100}
-                                className="input w-24 py-2 text-base"
+                                inputMode="decimal"
+                                className="input w-full py-2 text-base sm:w-24"
                                 placeholder="ציון"
                                 value={grade?.score ?? ""}
                                 onChange={(e) =>
@@ -697,7 +699,7 @@ export function SubjectCard({
                             {onGradeClear && hasClearableGradeEntry(grade) && (
                               <button
                                 type="button"
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-medium text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-medium text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
                                 title="מחיקת הציון והחזרה למצב שלא הוזן"
                                 onClick={() => onGradeClear(o.id)}
                               >

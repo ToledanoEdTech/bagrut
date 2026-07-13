@@ -405,11 +405,12 @@ export default function GradesMatrixPage() {
 
   return (
     <>
-      <Card className="p-6">
-        <div className="mb-4 flex flex-wrap gap-2">
+      <Card className="p-4 sm:p-6">
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <Button
             type="button"
             size="sm"
+            className="w-full sm:w-auto"
             variant={scopeMode === "gradeYear" ? "primary" : "secondary"}
             onClick={() => setScopeMode("gradeYear")}
           >
@@ -418,6 +419,7 @@ export default function GradesMatrixPage() {
           <Button
             type="button"
             size="sm"
+            className="w-full sm:w-auto"
             variant={scopeMode === "class" ? "primary" : "secondary"}
             onClick={() => setScopeMode("class")}
           >
@@ -502,8 +504,8 @@ export default function GradesMatrixPage() {
 
       {!matrixLoading && matrixData && taskKey && (
         <>
-          <div className="mt-6 flex flex-wrap items-end justify-between gap-3">
-            <div className="text-sm text-slate-600">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+            <div className="min-w-0 text-sm text-slate-600">
               <span className="font-medium">{matrixData.rows.length} תלמידים</span>
               {matrixData.notRelevantCount > 0 && (
                 <span className="me-2 text-slate-400">
@@ -511,7 +513,7 @@ export default function GradesMatrixPage() {
                   {scopeMode === "gradeYear" ? "לשכבה זו" : "לכיתה זו"}
                 </span>
               )}
-              <span className="block text-slate-500">
+              <span className="mt-0.5 block break-words text-slate-500">
                 {scopeLabel}
                 {" — "}
                 {matrixData.subject.displayName ?? matrixData.subject.name}
@@ -526,12 +528,14 @@ export default function GradesMatrixPage() {
               </span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {isDirty && <span className="badge-warning">שינויים לא שמורים</span>}
-              <div className="flex items-center gap-2">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+              {isDirty && (
+                <span className="badge-warning self-start">שינויים לא שמורים</span>
+              )}
+              <div className="flex min-w-0 items-center gap-2">
                 {isSocial ? (
                   <select
-                    className="input w-40 py-1.5 text-xs"
+                    className="input min-w-0 flex-1 py-2 text-sm sm:w-40 sm:flex-none sm:py-1.5 sm:text-xs"
                     value={bulkLevel}
                     onChange={(e) =>
                       setBulkLevel((e.target.value || "") as QualitativeLevel | "")
@@ -550,30 +554,44 @@ export default function GradesMatrixPage() {
                     min={0}
                     max={100}
                     inputMode="decimal"
-                    className="w-20 py-1.5 text-xs"
+                    className="w-20 shrink-0 py-2 text-sm sm:py-1.5 sm:text-xs"
                     placeholder="ציון"
                     value={bulkScore}
                     onChange={(e) => setBulkScore(e.target.value)}
                   />
                 )}
-                <Button type="button" variant="secondary" size="sm" onClick={applyBulkScore}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="min-w-0 flex-1 sm:flex-none"
+                  onClick={applyBulkScore}
+                >
                   החל לכל הריקים
                 </Button>
               </div>
-              <Button onClick={saveGrades} disabled={saving || !isDirty} size="sm">
-                {saving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                שמירה
-              </Button>
-              <ExportButton
-                onExport={handleExport}
-                disabled={tableRows.length === 0}
-                label="ייצוא"
-                size="sm"
-              />
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                <Button
+                  onClick={saveGrades}
+                  disabled={saving || !isDirty}
+                  size="sm"
+                  className="w-full sm:w-auto"
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  שמירה
+                </Button>
+                <ExportButton
+                  onExport={handleExport}
+                  disabled={tableRows.length === 0}
+                  label="ייצוא"
+                  size="sm"
+                  className="w-full sm:w-auto"
+                />
+              </div>
             </div>
           </div>
 
