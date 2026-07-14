@@ -10,7 +10,10 @@ import {
   type GradeReminderSettings,
   type OverdueGradeItem,
 } from "@/lib/grade-reminders";
-import { isNegativeGradeEntry } from "@/lib/missing-grades";
+import {
+  formatObligationLabel,
+  getNegativeGradeScore,
+} from "@/lib/missing-grades";
 import { isObligationRelevantForStudent } from "@/lib/grade-year";
 import {
   listAllGrades,
@@ -53,6 +56,29 @@ import type {
   Track,
 } from "@/lib/types";
 
+export type NegativeGradeGapItem = {
+  studentId: string;
+  studentName: string;
+  className: string;
+  subjectId: string;
+  subjectName: string;
+  obligationId: string;
+  obligationLabel: string;
+  score: number;
+};
+
+export type OverdueGradeGapItem = {
+  obligationId: string;
+  subjectId: string;
+  subjectName: string;
+  obligationLabel: string;
+  examEvent: string | null;
+  gradeEntryDueDate: string;
+  missingStudentCount: number;
+  classNames: string[];
+  subItemSortOrder?: number;
+};
+
 export type GradeGaps = {
   totalMissing: number;
   totalNegative: number;
@@ -68,6 +94,8 @@ export type GradeGaps = {
     negativeCount: number;
     completionPercent: number;
   }>;
+  negativeItems: NegativeGradeGapItem[];
+  overdueItems: OverdueGradeGapItem[];
 };
 
 export type SchoolProgress = {
@@ -260,6 +288,7 @@ function computeGradeGaps(data: ScopedData): GradeGaps {
 
   let totalMissing = 0;
   let totalNegative = 0;
+  const negativeItems: NegativeGradeGapItem[] = [];
   const missingBySubject = new Map<string, { name: string; count: number }>();
   const negativeBySubject = new Map<string, { name: string; count: number }>();
   const classStats = new Map<
@@ -313,12 +342,23 @@ function computeGradeGaps(data: ScopedData): GradeGaps {
         } else {
           classEntry.completed += 1;
         }
-        if (isNegativeGradeEntry(obligation, grade)) {
+        const negativeScore = getNegativeGradeScore(obligation, grade);
+        if (negativeScore != null) {
           totalNegative += 1;
           classEntry.negative += 1;
           const sub = negativeBySubject.get(subject.id) ?? { name: subject.name, count: 0 };
           sub.count += 1;
           negativeBySubject.set(subject.id, sub);
+          negativeItems.push({
+            studentId: student.id,
+            studentName: student.name,
+            className: cls.name,
+            subjectId: subject.id,
+            subjectName: subject.name,
+            obligationId: obligation.id,
+            obligationLabel: formatObligationLabel(obligation),
+            score: negativeScore,
+          });
         }
       }
     }
@@ -371,6 +411,22 @@ function computeGradeGaps(data: ScopedData): GradeGaps {
     .sort((a, b) => b.missingCount - a.missingCount || b.negativeCount - a.negativeCount)
     .slice(0, 10);
 
+  negativeItems.sort(
+    (a, b) => a.score - b.score || a.studentName.localeCompare(b.studentName, "he")
+  );
+
+  const overdueGapItems: OverdueGradeGapItem[] = overdueItems.map((item) => ({
+    obligationId: item.obligationId,
+    subjectId: item.subjectId,
+    subjectName: item.subjectName,
+    obligationLabel: item.obligationLabel,
+    examEvent: item.examEvent,
+    gradeEntryDueDate: item.gradeEntryDueDate,
+    missingStudentCount: item.missingStudentCount,
+    classNames: item.classNames,
+    subItemSortOrder: item.subItemSortOrder,
+  }));
+
   return {
     totalMissing,
     totalNegative,
@@ -379,6 +435,8 @@ function computeGradeGaps(data: ScopedData): GradeGaps {
     topMissingSubjects,
     topNegativeSubjects,
     byClass,
+    negativeItems,
+    overdueItems: overdueGapItems,
   };
 }
 

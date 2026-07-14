@@ -52,8 +52,8 @@ export function Sheet({ open, onClose, title, children, className }: SheetProps)
             aria-modal="true"
             aria-labelledby={title ? "sheet-title" : undefined}
             className={clsx(
-              "absolute inset-y-0 right-0 flex w-full max-w-lg flex-col border-l border-slate-200/70 bg-white shadow-xl",
-              className
+              "absolute inset-y-0 right-0 flex w-full flex-col border-l border-slate-200/70 bg-white shadow-xl",
+              className ?? "max-w-lg"
             )}
             initial={{ x: reducedMotion ? 0 : "100%" }}
             animate={{ x: 0 }}
