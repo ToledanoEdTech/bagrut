@@ -14,15 +14,7 @@ import {
   getGradeReminderSettings,
   updateGradeReminderSettings,
 } from "@/lib/firestore/settings";
-import {
-  listAllGrades,
-  listClasses,
-  listExamPaths,
-  listStaff,
-  listStudents,
-  listSubjects,
-  listTracks,
-} from "@/lib/firestore";
+import { loadSchoolSnapshot } from "@/lib/school-snapshot";
 
 export const dynamic = "force-dynamic";
 
@@ -31,16 +23,8 @@ export async function GET() {
   if (error) return error;
 
   const settings = await getGradeReminderSettings();
-  const [subjects, students, classes, examPaths, tracks, grades, staff] =
-    await Promise.all([
-      listSubjects(),
-      listStudents(),
-      listClasses(),
-      listExamPaths(),
-      listTracks(),
-      listAllGrades(),
-      listStaff(),
-    ]);
+  const { subjects, students, classes, examPaths, tracks, grades, staff } =
+    await loadSchoolSnapshot();
 
   const overdueItems = collectOverdueGradeItems({
     today: getIsraelYmd(),

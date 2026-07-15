@@ -15,16 +15,8 @@ import {
   getNegativeGradeScore,
 } from "@/lib/missing-grades";
 import { isObligationRelevantForStudent } from "@/lib/grade-year";
-import {
-  listAllGrades,
-  listClasses,
-  listExamPaths,
-  listStaff,
-  listStudents,
-  listSubjects,
-  listTracks,
-} from "@/lib/firestore";
 import { getGradeReminderSettings } from "@/lib/firestore/settings";
+import { loadSchoolSnapshot } from "@/lib/school-snapshot";
 import { cached } from "@/lib/server-cache";
 import {
   canViewOutstandingBagrut,
@@ -578,27 +570,20 @@ function computeDataQualityAlerts(data: RawData): DataQualityAlerts {
 }
 
 async function loadRawData(): Promise<RawData> {
-  const [subjects, students, classes, examPaths, tracks, grades, reminderSettings, staff] =
-    await Promise.all([
-      listSubjects(),
-      listStudents(),
-      listClasses(),
-      listExamPaths(),
-      listTracks(),
-      listAllGrades(),
-      getGradeReminderSettings(),
-      listStaff(),
-    ]);
+  const [snapshot, reminderSettings] = await Promise.all([
+    loadSchoolSnapshot(),
+    getGradeReminderSettings(),
+  ]);
 
   return {
-    subjects,
-    students,
-    classes,
-    examPaths,
-    tracks,
-    grades,
+    subjects: snapshot.subjects,
+    students: snapshot.students,
+    classes: snapshot.classes,
+    examPaths: snapshot.examPaths,
+    tracks: snapshot.tracks,
+    grades: snapshot.grades,
     reminderSettings,
-    staff,
+    staff: snapshot.staff,
   };
 }
 

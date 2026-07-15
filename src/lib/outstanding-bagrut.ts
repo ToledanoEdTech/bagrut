@@ -17,12 +17,8 @@ import {
   resolveRelevantSubjects,
   type StudentWithRelations,
 } from "@/lib/student-subjects";
-import {
-  listAllGrades,
-  listClasses,
-  listExamPaths,
-  listStudents,
-} from "@/lib/firestore";
+import { listStudents } from "@/lib/firestore";
+import { loadSchoolSnapshot } from "@/lib/school-snapshot";
 import type { Class, ExamPath, Grade, Student, Subject } from "@/lib/types";
 import {
   evaluateOutstandingBagrut,
@@ -68,19 +64,16 @@ export async function computeOutstandingBagrutForStudents(
 ): Promise<OutstandingBagrutStudent[]> {
   if (students.length === 0) return [];
 
-  const [ctx, examPaths, allGrades, classes] = await Promise.all([
+  const [ctx, snapshot] = await Promise.all([
     loadSubjectContext(),
-    listExamPaths(),
-    listAllGrades(),
-    classesById ? Promise.resolve(null) : listClasses(),
+    loadSchoolSnapshot(),
   ]);
 
   const classMap =
-    classesById ??
-    new Map((classes ?? []).map((cls) => [cls.id, cls]));
-  const examPathsById = new Map(examPaths.map((path) => [path.id, path]));
+    classesById ?? new Map(snapshot.classes.map((cls) => [cls.id, cls]));
+  const examPathsById = new Map(snapshot.examPaths.map((path) => [path.id, path]));
   const gradesByStudent = new Map<string, Grade[]>();
-  for (const grade of allGrades) {
+  for (const grade of snapshot.grades) {
     const list = gradesByStudent.get(grade.studentId) ?? [];
     list.push(grade);
     gradesByStudent.set(grade.studentId, list);

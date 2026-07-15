@@ -5,17 +5,9 @@ import {
   staffShouldReceiveItem,
   type OverdueGradeItem,
 } from "@/lib/grade-reminders";
-import {
-  listAllGrades,
-  listClasses,
-  listExamPaths,
-  listStaff,
-  listStudents,
-  listSubjects,
-  listTracks,
-} from "@/lib/firestore";
 import { cached } from "@/lib/server-cache";
 import { isFullAdmin } from "@/lib/permissions";
+import { loadSchoolSnapshot } from "@/lib/school-snapshot";
 import type { AuthSession, StaffRecord, Subject } from "@/lib/types";
 
 export type MissingEntryTask = {
@@ -83,16 +75,8 @@ function itemToTask(
 }
 
 async function computeMissingEntries(): Promise<MissingEntriesResponse> {
-  const [subjects, students, classes, examPaths, tracks, grades, staff] =
-    await Promise.all([
-      listSubjects(),
-      listStudents(),
-      listClasses(),
-      listExamPaths(),
-      listTracks(),
-      listAllGrades(),
-      listStaff(),
-    ]);
+  const { subjects, students, classes, examPaths, tracks, grades, staff } =
+    await loadSchoolSnapshot();
 
   const today = getIsraelYmd();
   const reminderInput = {

@@ -130,7 +130,9 @@ export function prefetch(key: string) {
 
 const ROUTE_PREFETCH: Record<string, string[]> = {
   "/admin": ["/api/admin/dashboard"],
-  "/admin/students": ["/api/students", "/api/classes", "/api/tracks", "/api/students/outstanding-bagrut"],
+  // outstanding/hightech bagrut are loaded on the page itself; prefetching them
+  // forces a heavy grades scan on every sidebar hover of Students.
+  "/admin/students": ["/api/students", "/api/classes", "/api/tracks", "/api/subjects"],
   "/admin/outstanding-bagrut": ["/api/students/outstanding-bagrut"],
   "/admin/classes": ["/api/classes", "/api/paths", "/api/staff"],
   "/admin/subjects": ["/api/subjects"],

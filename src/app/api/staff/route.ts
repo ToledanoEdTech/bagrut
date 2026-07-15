@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireAdmin } from "@/lib/api-auth";
+import { listStaff } from "@/lib/firestore";
 import { isAdminEmail } from "@/lib/roles";
+import { invalidateServerCache } from "@/lib/server-cache";
 import type { StaffPermission, StaffRole } from "@/lib/types";
 
 function normalizePermissions(permissions: unknown): StaffPermission[] | undefined {
@@ -19,9 +21,7 @@ export async function GET() {
   const { error } = await requireAdmin();
   if (error) return error;
 
-  const snap = await adminDb.collection("staff").orderBy("email").get();
-  const staff = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  return NextResponse.json(staff);
+  return NextResponse.json(await listStaff());
 }
 
 export async function POST(req: NextRequest) {
@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
   }
 
   const doc = await adminDb.collection("staff").add(docData);
+  await invalidateServerCache("staff");
 
   return NextResponse.json({
     id: doc.id,
@@ -159,6 +160,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   await ref.update(updates);
+  await invalidateServerCache("staff");
   const updated = await ref.get();
   return NextResponse.json({ id: updated.id, ...updated.data() });
 }
@@ -197,5 +199,6 @@ export async function DELETE(req: NextRequest) {
   }
 
   await ref.delete();
+  await invalidateServerCache("staff");
   return NextResponse.json({ success: true });
 }

@@ -20,15 +20,7 @@ import {
   getGradeReminderSettings,
   updateGradeReminderSettings,
 } from "@/lib/firestore/settings";
-import {
-  listAllGrades,
-  listClasses,
-  listExamPaths,
-  listStaff,
-  listStudents,
-  listSubjects,
-  listTracks,
-} from "@/lib/firestore";
+import { loadSchoolSnapshot } from "@/lib/school-snapshot";
 import { sendMail } from "@/lib/mailer";
 
 export type RunGradeRemindersOptions = {
@@ -58,16 +50,8 @@ export async function runGradeReminders(
     };
   }
 
-  const [subjects, students, classes, examPaths, tracks, grades, staff] =
-    await Promise.all([
-      listSubjects(),
-      listStudents(),
-      listClasses(),
-      listExamPaths(),
-      listTracks(),
-      listAllGrades(),
-      listStaff(),
-    ]);
+  const { subjects, students, classes, examPaths, tracks, grades, staff } =
+    await loadSchoolSnapshot();
 
   const today = getIsraelYmd();
   const dataInput = {

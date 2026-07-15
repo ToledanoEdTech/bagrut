@@ -17,15 +17,9 @@ import {
 } from "@/lib/permissions";
 import { formatSubjectDisplayName } from "@/lib/subject-display";
 import { resolveRelevantSubjects, type StudentWithRelations } from "@/lib/student-subjects";
+import { loadSchoolSnapshot } from "@/lib/school-snapshot";
+import { cached } from "@/lib/server-cache";
 import type { AuthSession, Class, ExamPath, Grade, Student, Subject, Track } from "@/lib/types";
-import {
-  listAllGrades,
-  listClasses,
-  listExamPaths,
-  listStudents,
-  listSubjects,
-  listTracks,
-} from "@/lib/firestore";
 
 export type PendingTaskEntry = {
   studentId: string;
@@ -263,43 +257,50 @@ export function summarizePendingTasks(entries: PendingTaskEntry[]): Omit<Pending
   };
 }
 
+function buildPendingTasksCacheKey(
+  session: AuthSession,
+  filter: PendingTasksFilter
+): string {
+  const scope =
+    session.role === "ADMIN"
+      ? "admin"
+      : `${session.uid}:${JSON.stringify(session.permissions ?? [])}`;
+  return `pending-tasks:${scope}:${JSON.stringify(filter)}`;
+}
+
 export async function getPendingTasksForSession(
   session: AuthSession,
   filter: PendingTasksFilter
 ): Promise<PendingTasksMeta> {
-  const [subjects, students, classes, examPaths, tracks, grades] = await Promise.all([
-    listSubjects(),
-    listStudents(),
-    listClasses(),
-    listExamPaths(),
-    listTracks(),
-    listAllGrades(),
-  ]);
+  return cached(buildPendingTasksCacheKey(session, filter), 60_000, async () => {
+    const { subjects, students, classes, examPaths, tracks, grades } =
+      await loadSchoolSnapshot();
 
-  const scopedStudents = filterStudentsForScope(
-    session,
-    students,
-    classes,
-    subjects,
-    examPaths,
-    tracks
-  );
-  const scopedSubjects = filterSubjectsForScope(session, subjects);
-
-  const entries = collectPendingTasks(
-    {
-      subjects: scopedSubjects,
-      students: scopedStudents,
+    const scopedStudents = filterStudentsForScope(
+      session,
+      students,
       classes,
+      subjects,
       examPaths,
-      tracks,
-      grades,
-    },
-    filter
-  );
+      tracks
+    );
+    const scopedSubjects = filterSubjectsForScope(session, subjects);
 
-  return {
-    entries,
-    ...summarizePendingTasks(entries),
-  };
+    const entries = collectPendingTasks(
+      {
+        subjects: scopedSubjects,
+        students: scopedStudents,
+        classes,
+        examPaths,
+        tracks,
+        grades,
+      },
+      filter
+    );
+
+    return {
+      entries,
+      ...summarizePendingTasks(entries),
+    };
+  });
 }

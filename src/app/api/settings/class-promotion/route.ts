@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   try {
     const result = await runClassPromotion({ dryRun, force });
     if (!dryRun && result.ran) {
-      invalidateServerCache("classes");
+      await invalidateServerCache("classes");
     }
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {

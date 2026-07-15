@@ -6,7 +6,7 @@ import { isAdminEmail } from "@/lib/roles";
 
 const SESSION_COOKIE = "fb_session";
 const SESSION_MAX_AGE_MS = 60 * 60 * 24 * 5 * 1000; // 5 days
-const AUTH_CACHE_TTL_MS = 30_000;
+const AUTH_CACHE_TTL_MS = 120_000;
 
 const authSessionCache = new Map<
   string,

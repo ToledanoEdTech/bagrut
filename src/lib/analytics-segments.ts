@@ -9,15 +9,7 @@ import { evaluateOutstandingBagrut } from "@/lib/outstanding-bagrut-core";
 import { evaluateHightechBagrut } from "@/lib/hightech-bagrut-core";
 import { calcSubjectProgressForObligations } from "@/lib/progress";
 import { CANONICAL_GRADE_YEARS } from "@/lib/grade-year";
-import {
-  getStudentTrackIds,
-  listAllGrades,
-  listClasses,
-  listExamPaths,
-  listStudents,
-  listSubjects,
-  listTracks,
-} from "@/lib/firestore";
+import { getStudentTrackIds } from "@/lib/firestore";
 import {
   canViewOutstandingBagrut,
   getAllowedSubjectIds,
@@ -25,6 +17,7 @@ import {
   isFullAdmin,
   studentMatchesPermissionScopes,
 } from "@/lib/permissions";
+import { loadSchoolSnapshot } from "@/lib/school-snapshot";
 import { cached } from "@/lib/server-cache";
 import {
   resolveRelevantSubjects,
@@ -408,15 +401,8 @@ function filterStudentsForScope(
 async function computeAnalyticsForSession(
   session: AuthSession
 ): Promise<AnalyticsApiResponse> {
-  const [subjects, students, classes, examPaths, tracks, grades] =
-    await Promise.all([
-      listSubjects(),
-      listStudents(),
-      listClasses(),
-      listExamPaths(),
-      listTracks(),
-      listAllGrades(),
-    ]);
+  const { subjects, students, classes, examPaths, tracks, grades } =
+    await loadSchoolSnapshot();
 
   const scopedStudents = filterStudentsForScope(
     session,

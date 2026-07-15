@@ -16,7 +16,10 @@ export function useApi<T>(key: string | null) {
   useEffect(() => {
     if (!key) return;
 
-    const sync = () => {
+    let active = true;
+
+    const applyCached = () => {
+      if (!active) return;
       const cached = getCached<T>(key);
       setState((prev) => ({
         data: cached ?? prev.data,
@@ -25,27 +28,55 @@ export function useApi<T>(key: string | null) {
       }));
     };
 
-    const unsub = subscribe(key, sync);
-    void fetchCached<T>(key)
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) return;
-        const message = err instanceof Error ? err.message : "שגיאה בטעינת הנתונים";
-        setState((prev) => ({
-          ...prev,
-          loading: false,
-          error: message,
-        }));
-      })
-      .finally(sync);
+    const load = (force = false) => {
+      void fetchCached<T>(key, force ? { force: true } : undefined)
+        .catch((err: unknown) => {
+          if (!active) return;
+          if (err instanceof ApiError && err.status === 401) return;
+          const message =
+            err instanceof Error ? err.message : "שגיאה בטעינת הנתונים";
+          setState((prev) => ({
+            ...prev,
+            loading: false,
+            error: message,
+          }));
+        })
+        .finally(applyCached);
+    };
 
-    return unsub;
+    const onInvalidate = () => {
+      const cached = getCached<T>(key);
+      if (cached !== undefined) {
+        applyCached();
+        return;
+      }
+      // Cache entry was cleared — fetch fresh data for open screens.
+      setState((prev) => ({
+        ...prev,
+        loading: prev.data === undefined,
+      }));
+      load(true);
+    };
+
+    const unsub = subscribe(key, onInvalidate);
+    load(false);
+
+    return () => {
+      active = false;
+      unsub();
+    };
   }, [key]);
 
   const mutate = useCallback(async () => {
     if (!key) return;
     try {
       await fetchCached<T>(key, { force: true });
-      setState((prev) => ({ ...prev, error: null }));
+      setState((prev) => ({
+        ...prev,
+        data: getCached<T>(key) ?? prev.data,
+        loading: false,
+        error: null,
+      }));
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) return;
       const message = err instanceof Error ? err.message : "שגיאה בטעינת הנתונים";

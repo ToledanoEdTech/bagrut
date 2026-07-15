@@ -15,11 +15,7 @@ import {
   resolveRelevantSubjects,
   type StudentWithRelations,
 } from "@/lib/student-subjects";
-import {
-  listClasses,
-  listExamPaths,
-  listStudents,
-} from "@/lib/firestore";
+import { listClasses, listExamPaths, listStudents } from "@/lib/firestore";
 import type { Class, ExamPath, Student, Subject } from "@/lib/types";
 import {
   evaluateHightechBagrut,
