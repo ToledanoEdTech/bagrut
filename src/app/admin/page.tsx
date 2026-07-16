@@ -601,12 +601,17 @@ export default function AdminDashboard() {
   const { data, loading } = useApi<AdminDashboardResponse>("/api/admin/dashboard");
   const [gapsModal, setGapsModal] = useState<"negative" | "overdue" | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [showMore, setShowMore] = useState(false);
 
   if (loading && !data) {
     return <PageLoader />;
   }
   if (!data) {
-    return <div className="text-center text-base text-slate-500">שגיאה בטעינת הנתונים</div>;
+    return (
+      <Alert variant="error" className="mt-6">
+        שגיאה בטעינת הנתונים. נסו לרענן את הדף.
+      </Alert>
+    );
   }
   const {
     counts,
@@ -620,29 +625,21 @@ export default function AdminDashboard() {
     dataQualityAlerts,
   } = data;
   const isAdmin = session ? isFullAdmin(session) : false;
+  const isTeacher = session?.role === "TEACHER";
   const canGrades = session ? hasAnyGradeWrite(session) : false;
   const canEditStudents = session ? hasAnyStudentEdit(session) : false;
   const quickActions = [
-    isAdmin && session && canImportStudents(session.role)
-      ? {
-          href: "/admin/import",
-          label: "ייבוא תלמידים מאקסל",
-          icon: Upload,
-          variant: "primary" as const,
-          fullWidth: true,
-        }
-      : null,
     canGrades
       ? {
           href: "/admin/grades",
           label: "הזנת ציונים",
           icon: ClipboardList,
-          variant: "secondary" as const,
+          variant: "primary" as const,
         }
       : null,
     canGrades
       ? {
-          href: "/admin/grades/matrix",
+          href: "/admin/grades-matrix",
           label: "מטריצת ציונים",
           icon: Grid3X3,
           variant: "secondary" as const,
@@ -656,57 +653,19 @@ export default function AdminDashboard() {
           variant: "secondary" as const,
         }
       : null,
-    {
-      href: "/admin/classes",
-      label: "כיתות ותוכניות",
-      icon: School,
-      variant: "secondary" as const,
-    },
-    isAdmin && session && canManageStructure(session.role)
+    canGrades
       ? {
-          href: "/admin/subjects",
-          label: "מקצועות וחובות",
-          icon: BookOpen,
+          href: "/admin/reports",
+          label: "מרכז חוסרים",
+          icon: AlertTriangle,
           variant: "secondary" as const,
         }
       : null,
-    canOutstandingBagrut
+    isAdmin && session && canImportStudents(session.role)
       ? {
-          href: "/admin/outstanding-bagrut",
-          label: "בגרות מצטיינת",
-          icon: Award,
-          variant: "secondary" as const,
-        }
-      : null,
-    canOutstandingBagrut
-      ? {
-          href: "/admin/hightech-bagrut",
-          label: "בגרות הייטק",
-          icon: Cpu,
-          variant: "secondary" as const,
-        }
-      : null,
-    canStudents
-      ? {
-          href: "/admin/analytics",
-          label: "סטטיסטיקות",
-          icon: BarChart3,
-          variant: "secondary" as const,
-        }
-      : null,
-    isAdmin
-      ? {
-          href: "/admin/staff",
-          label: "צוות והרשאות",
-          icon: UserCog,
-          variant: "secondary" as const,
-        }
-      : null,
-    isAdmin
-      ? {
-          href: "/admin/settings",
-          label: "תזכורות ציונים",
-          icon: Bell,
+          href: "/admin/import",
+          label: "ייבוא תלמידים",
+          icon: Upload,
           variant: "secondary" as const,
         }
       : null,
@@ -715,15 +674,143 @@ export default function AdminDashboard() {
     label: string;
     icon: typeof Users;
     variant: "primary" | "secondary";
-    fullWidth?: boolean;
   }>;
+  const attentionTotal = gradeGaps
+    ? gradeGaps.totalMissing + gradeGaps.totalNegative + gradeGaps.overdueCount
+    : 0;
   return (
     <>
       <PageHeader
         variant="gradient"
-        title={session?.role === "TEACHER" ? "דשבורד מורה" : "דשבורד מנהל"}
-        subtitle="סקירה כללית של מערכת מעקב הבגרות"
-      />
+        title={isTeacher ? "דשבורד מורה" : "דשבורד מנהל"}
+        subtitle={
+          isTeacher
+            ? "התמקדו בהזנת ציונים ובפריטים שדורשים טיפול"
+            : undefined
+        }
+      >
+        {canGrades && (
+          <Link
+            href="/admin/grades"
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-base font-semibold text-primary-700 shadow-soft transition hover:bg-primary-50"
+          >
+            <ClipboardList className="h-5 w-5" />
+            להזנת ציונים
+          </Link>
+        )}
+      </PageHeader>
+
+      {/* Primary: attention first */}
+      {gradeGaps && (
+        <Card className="mt-8 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-100">
+                <AlertTriangle className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-h2 text-slate-900">מה דורש טיפול היום</h2>
+                <p className="text-sm text-slate-500">
+                  {attentionTotal > 0
+                    ? `${attentionTotal} פריטים שדורשים תשומת לב`
+                    : "אין פריטים דחופים כרגע"}
+                </p>
+              </div>
+            </div>
+            {canGrades && (
+              <Link
+                href="/admin/reports"
+                className="text-sm font-semibold text-primary-600 hover:text-primary-700"
+              >
+                למרכז החוסרים
+                <ChevronLeft className="inline h-4 w-4" />
+              </Link>
+            )}
+          </div>
+          <ul className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <GapLinkRow
+              href="/admin/grades"
+              label="חובות חסרות"
+              value={gradeGaps.totalMissing}
+              variant="warning"
+            />
+            <GapLinkRow
+              onClick={() => setGapsModal("negative")}
+              label="ציונים שליליים"
+              value={gradeGaps.totalNegative}
+              variant={gradeGaps.totalNegative > 0 ? "danger" : "default"}
+            />
+            <GapLinkRow
+              onClick={() => setGapsModal("overdue")}
+              label="באיחור"
+              value={gradeGaps.overdueCount}
+              variant={gradeGaps.overdueCount > 0 ? "danger" : "default"}
+            />
+            <GapLinkRow
+              href="/admin/grades"
+              label="יעדים קרובים (14 יום)"
+              value={gradeGaps.upcomingCount}
+            />
+          </ul>
+          {(gradeGaps.topMissingSubjects.length > 0 ||
+            gradeGaps.topNegativeSubjects.length > 0) && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {gradeGaps.topMissingSubjects.length > 0 && (
+                <div className="rounded-xl border border-slate-100 px-4 py-3">
+                  <p className="mb-2 text-xs font-medium text-slate-500">
+                    מקצועות עם הכי הרבה חסרים
+                  </p>
+                  <ul className="space-y-1 text-sm">
+                    {gradeGaps.topMissingSubjects.map((s) => (
+                      <li key={s.subjectId} className="flex justify-between text-slate-700">
+                        <span className="truncate">{s.subjectName}</span>
+                        <span className="shrink-0 font-bold text-amber-700">{s.missingCount}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {gradeGaps.topNegativeSubjects.length > 0 && (
+                <div className="rounded-xl border border-slate-100 px-4 py-3">
+                  <p className="mb-2 text-xs font-medium text-slate-500">
+                    מקצועות עם ציונים שליליים
+                  </p>
+                  <ul className="space-y-1 text-sm">
+                    {gradeGaps.topNegativeSubjects.map((s) => (
+                      <li key={s.subjectId} className="flex justify-between text-slate-700">
+                        <span className="truncate">{s.subjectName}</span>
+                        <span className="shrink-0 font-bold text-red-700">{s.negativeCount}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {quickActions.length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <Link
+                key={action.href}
+                href={action.href}
+                className={clsx(
+                  action.variant === "primary" ? "btn-primary" : "btn-secondary",
+                  "px-3 py-2 text-sm"
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {action.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
       <div className="mt-8">
         <StatCardGrid
           items={[
@@ -751,152 +838,86 @@ export default function AdminDashboard() {
           {gradeGaps && <ClassSummaryCard byClass={gradeGaps.byClass} />}
         </div>
       )}
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
-        {gradeGaps && (
-          <Card className="p-6 lg:col-span-1">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-100">
-                <AlertTriangle className="h-5 w-5" />
-              </span>
-              <div>
-                <h2 className="text-h2 text-slate-900">דורש טיפול</h2>
-                <p className="text-sm text-slate-500">פריטים שדורשים תשומת לב</p>
-              </div>
-            </div>
-            <ul className="mt-5 space-y-2 text-sm">
-              <GapLinkRow
-                href="/admin/grades"
-                label="חובות חסרות"
-                value={gradeGaps.totalMissing}
-                variant="warning"
-              />
-              <GapLinkRow
-                onClick={() => setGapsModal("negative")}
-                label="ציונים שליליים"
-                value={gradeGaps.totalNegative}
-                variant={gradeGaps.totalNegative > 0 ? "danger" : "default"}
-              />
-              <GapLinkRow
-                onClick={() => setGapsModal("overdue")}
-                label="באיחור"
-                value={gradeGaps.overdueCount}
-                variant={gradeGaps.overdueCount > 0 ? "danger" : "default"}
-              />
-              <GapLinkRow
-                href="/admin/grades"
-                label="תאריכי יעד קרובים (14 יום)"
-                value={gradeGaps.upcomingCount}
-              />
-              {gradeGaps.topMissingSubjects.length > 0 && (
-                <li className="rounded-xl border border-slate-100 px-4 py-3">
-                  <p className="mb-2 text-xs font-medium text-slate-500">מקצועות עם הכי הרבה חסרים</p>
-                  <ul className="space-y-1">
-                    {gradeGaps.topMissingSubjects.map((s) => (
-                      <li
-                        key={s.subjectId}
-                        className="flex justify-between text-slate-700"
-                      >
-                        <span className="truncate">{s.subjectName}</span>
-                        <span className="shrink-0 font-bold text-amber-700">
-                          {s.missingCount}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              )}
-              {gradeGaps.topNegativeSubjects.length > 0 && (
-                <li className="rounded-xl border border-slate-100 px-4 py-3">
-                  <p className="mb-2 text-xs font-medium text-slate-500">מקצועות עם הכי הרבה ציונים שליליים</p>
-                  <ul className="space-y-1">
-                    {gradeGaps.topNegativeSubjects.map((s) => (
-                      <li
-                        key={s.subjectId}
-                        className="flex justify-between text-slate-700"
-                      >
-                        <span className="truncate">{s.subjectName}</span>
-                        <span className="shrink-0 font-bold text-red-700">
-                          {s.negativeCount}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              )}
-              <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-                <span className="text-slate-600">תוכניות חובה</span>
-                <span className="font-bold text-slate-800">{counts.paths}</span>
-              </li>
-            </ul>
-          </Card>
-        )}
-        {outstandingBagrutPreview && (
-          <OutstandingPreviewCard
-            preview={outstandingBagrutPreview}
-            onStudentClick={setSelectedStudentId}
+
+      {/* Secondary: programs & previews behind toggle */}
+      <div className="mt-8">
+        <button
+          type="button"
+          onClick={() => setShowMore((v) => !v)}
+          className="flex w-full items-center justify-between rounded-xl border border-slate-200/70 bg-white px-4 py-3 text-start shadow-soft transition hover:bg-slate-50"
+        >
+          <span className="flex items-center gap-2 font-semibold text-slate-800">
+            <Sparkles className="h-5 w-5 text-primary-600" />
+            תוכניות בגרות ומידע נוסף
+          </span>
+          <ChevronDown
+            className={clsx("h-5 w-5 text-slate-400 transition", showMore && "rotate-180")}
           />
-        )}
-        {hightechBagrutPreview && (
-          <HightechPreviewCard
-            preview={hightechBagrutPreview}
-            onStudentClick={setSelectedStudentId}
-          />
-        )}
-        {!outstandingBagrutPreview && !hightechBagrutPreview && (
-          <Card className="p-6 lg:col-span-1">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600 ring-1 ring-inset ring-primary-100">
-                <Target className="h-5 w-5" />
-              </span>
-              <div>
-                <h2 className="text-h2 text-slate-900">תוכניות חובה</h2>
-                <p className="text-sm text-slate-500">{counts.paths} תוכניות מוגדרות</p>
+        </button>
+        {showMore && (
+          <div className="mt-4 grid gap-6 lg:grid-cols-3">
+            {outstandingBagrutPreview && (
+              <OutstandingPreviewCard
+                preview={outstandingBagrutPreview}
+                onStudentClick={setSelectedStudentId}
+              />
+            )}
+            {hightechBagrutPreview && (
+              <HightechPreviewCard
+                preview={hightechBagrutPreview}
+                onStudentClick={setSelectedStudentId}
+              />
+            )}
+            <Card className="p-6">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600 ring-1 ring-inset ring-primary-100">
+                  <Target className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-h2 text-slate-900">תוכניות חובה</h2>
+                  <p className="text-sm text-slate-500">{counts.paths} תוכניות מוגדרות</p>
+                </div>
               </div>
-            </div>
-            <div className="mt-5 space-y-2">
-              {paths.map((p) => (
-                <Link
-                  key={p.id}
-                  href="/admin/subjects"
-                  className="group flex items-center gap-3 rounded-xl border border-transparent bg-slate-50 px-4 py-3 transition hover:border-primary-100 hover:bg-white hover:shadow-soft"
-                >
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-gradient-to-l from-primary-500 to-brand-500" />
-                  <span className="min-w-0 flex-1 text-base font-medium text-slate-700 group-hover:text-slate-900">
-                    {p.label}
-                  </span>
-                  <ChevronLeft className="h-4 w-4 shrink-0 text-slate-300 group-hover:text-primary-500" />
-                </Link>
-              ))}
-            </div>
-          </Card>
-        )}
-        <Card className="p-6 lg:col-span-1">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-100">
-              <Sparkles className="h-5 w-5" />
-            </span>
-            <h2 className="text-h2 text-slate-900">פעולות מהירות</h2>
-          </div>
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            {quickActions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <Link
-                  key={action.href}
-                  href={action.href}
-                  className={clsx(
-                    "w-full",
-                    action.fullWidth && "col-span-2",
-                    action.variant === "primary" ? "btn-primary" : "btn-secondary"
+              <div className="mt-5 space-y-2">
+                {paths.map((p) => (
+                  <Link
+                    key={p.id}
+                    href="/admin/subjects"
+                    className="group flex items-center gap-3 rounded-xl border border-transparent bg-slate-50 px-4 py-3 transition hover:border-primary-100 hover:bg-white hover:shadow-soft"
+                  >
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-gradient-to-l from-primary-500 to-brand-500" />
+                    <span className="min-w-0 flex-1 text-base font-medium text-slate-700 group-hover:text-slate-900">
+                      {p.label}
+                    </span>
+                    <ChevronLeft className="h-4 w-4 shrink-0 text-slate-300 group-hover:text-primary-500" />
+                  </Link>
+                ))}
+              </div>
+              {isAdmin && session && canManageStructure(session.role) && (
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+                  <Link href="/admin/classes" className="btn-secondary px-3 py-1.5 text-sm">
+                    <School className="h-4 w-4" />
+                    כיתות
+                  </Link>
+                  <Link href="/admin/subjects" className="btn-secondary px-3 py-1.5 text-sm">
+                    <BookOpen className="h-4 w-4" />
+                    מקצועות
+                  </Link>
+                  {canOutstandingBagrut && (
+                    <Link href="/admin/analytics" className="btn-secondary px-3 py-1.5 text-sm">
+                      <BarChart3 className="h-4 w-4" />
+                      סטטיסטיקות
+                    </Link>
                   )}
-                >
-                  <Icon className="h-5 w-5" />
-                  {action.label}
-                </Link>
-              );
-            })}
+                  <Link href="/admin/staff" className="btn-secondary px-3 py-1.5 text-sm">
+                    <UserCog className="h-4 w-4" />
+                    צוות
+                  </Link>
+                </div>
+              )}
+            </Card>
           </div>
-        </Card>
+        )}
       </div>
       {teacherAlerts &&
         (teacherAlerts.upcoming.length > 0 || teacherAlerts.overdue.length > 0) && (
@@ -985,64 +1006,8 @@ export default function AdminDashboard() {
           </div>
         )}
       {gradeRemindersSummary && (
-        <div className="mt-8 grid gap-6 lg:grid-cols-3">
+        <div className="mt-8 max-w-md">
           <GradeRemindersCard summary={gradeRemindersSummary} />
-          <Card className="p-6 lg:col-span-2">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600 ring-1 ring-inset ring-primary-100">
-                <Target className="h-5 w-5" />
-              </span>
-              <div>
-                <h2 className="text-h2 text-slate-900">תוכניות חובה</h2>
-                <p className="text-sm text-slate-500">{counts.paths} תוכניות מוגדרות</p>
-              </div>
-            </div>
-            <div className="mt-5 space-y-2">
-              {paths.map((p) => (
-                <Link
-                  key={p.id}
-                  href="/admin/subjects"
-                  className="group flex items-center gap-3 rounded-xl border border-transparent bg-slate-50 px-4 py-3 transition hover:border-primary-100 hover:bg-white hover:shadow-soft"
-                >
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-gradient-to-l from-primary-500 to-brand-500" />
-                  <span className="min-w-0 flex-1 text-base font-medium text-slate-700 group-hover:text-slate-900">
-                    {p.label}
-                  </span>
-                  <ChevronLeft className="h-4 w-4 shrink-0 text-slate-300 group-hover:text-primary-500" />
-                </Link>
-              ))}
-            </div>
-          </Card>
-        </div>
-      )}
-      {!gradeRemindersSummary && (outstandingBagrutPreview || hightechBagrutPreview) && (
-        <div className="mt-8 grid gap-6 lg:grid-cols-3">
-          <Card className="p-6 lg:col-span-2">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600 ring-1 ring-inset ring-primary-100">
-                <Target className="h-5 w-5" />
-              </span>
-              <div>
-                <h2 className="text-h2 text-slate-900">תוכניות חובה</h2>
-                <p className="text-sm text-slate-500">{counts.paths} תוכניות מוגדרות</p>
-              </div>
-            </div>
-            <div className="mt-5 space-y-2">
-              {paths.map((p) => (
-                <Link
-                  key={p.id}
-                  href="/admin/subjects"
-                  className="group flex items-center gap-3 rounded-xl border border-transparent bg-slate-50 px-4 py-3 transition hover:border-primary-100 hover:bg-white hover:shadow-soft"
-                >
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-gradient-to-l from-primary-500 to-brand-500" />
-                  <span className="min-w-0 flex-1 text-base font-medium text-slate-700 group-hover:text-slate-900">
-                    {p.label}
-                  </span>
-                  <ChevronLeft className="h-4 w-4 shrink-0 text-slate-300 group-hover:text-primary-500" />
-                </Link>
-              ))}
-            </div>
-          </Card>
         </div>
       )}
       {dataQualityAlerts && (

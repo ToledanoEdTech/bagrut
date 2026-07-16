@@ -66,9 +66,9 @@ export function StatCard({
   return (
     <div
       className={clsx(
-        "group relative h-full w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200/70 bg-white p-5 shadow-card transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-card-hover",
+        "group relative h-full w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200/70 bg-white p-5 shadow-soft transition-all duration-300 ease-out",
         interactive &&
-          "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2"
+          "cursor-pointer shadow-card hover:-translate-y-0.5 hover:shadow-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2"
       )}
       role={interactive ? "button" : undefined}
       tabIndex={interactive ? 0 : undefined}

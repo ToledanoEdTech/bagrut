@@ -57,6 +57,7 @@ type SubjectsMap = Map<
     name: string;
     units: number | null;
     category: SubjectContext["allSubjects"][0]["category"];
+    trackId: string | null;
     obligations: Map<
       string,
       {
@@ -114,6 +115,7 @@ function accumulateSubjectsForStudent(
         name: subject.name,
         units: subject.units,
         category: subject.category,
+        trackId: subject.trackId ?? null,
         obligations: new Map(),
       });
     }
@@ -149,6 +151,7 @@ async function buildOptionsFromStudents(
         name: s.name,
         units: s.units,
         category: s.category,
+        trackId: s.trackId,
         tasks: Array.from(s.obligations.values()).flatMap(
           ({ obligation, relevantStudentCount }) =>
             expandObligationMatrixTasks(obligation, relevantStudentCount)

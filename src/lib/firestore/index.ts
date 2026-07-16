@@ -820,6 +820,27 @@ export async function getGradesByStudentsAndObligation(
   return result;
 }
 
+/** All grades for the given students (keyed `${studentId}:${obligationId}`). */
+export async function getGradesByStudentIds(
+  studentIds: string[]
+): Promise<Map<string, Grade>> {
+  const result = new Map<string, Grade>();
+  if (studentIds.length === 0) return result;
+
+  for (let i = 0; i < studentIds.length; i += 30) {
+    const chunk = studentIds.slice(i, i + 30);
+    const snap = await adminDb
+      .collection("grades")
+      .where("studentId", "in", chunk)
+      .get();
+    for (const doc of snap.docs) {
+      const grade = { id: doc.id, ...doc.data() } as Grade;
+      result.set(`${grade.studentId}:${grade.obligationId}`, grade);
+    }
+  }
+  return result;
+}
+
 export async function upsertGradesBulk(
   entries: Array<{
     studentId: string;

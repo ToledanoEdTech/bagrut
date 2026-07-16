@@ -21,6 +21,59 @@ export type SubjectContext = {
 
 export { calcSubjectProgress } from "@/lib/progress";
 
+/**
+ * Resolve the TRACK subject for a student track.
+ * Prefer trackId, then exact/closest name — avoid matching "תקשוב" for "תקשוב הגבר".
+ */
+export function findTrackSubject(
+  trackId: string,
+  track: Track | undefined,
+  allSubjects: Subject[]
+): Subject | null {
+  const byTrackId = allSubjects.find(
+    (s) => s.category === "TRACK" && s.trackId === trackId
+  );
+  if (byTrackId) return byTrackId;
+
+  if (!track) return null;
+  const trackName = track.name.trim();
+  if (!trackName) return null;
+
+  const trackSubjects = allSubjects.filter((s) => s.category === "TRACK");
+
+  const exact = trackSubjects.find((s) => s.name.trim() === trackName);
+  if (exact) return exact;
+
+  const startsWith = trackSubjects.find(
+    (s) =>
+      s.name.trim().startsWith(trackName) || trackName.startsWith(s.name.trim())
+  );
+  if (startsWith) {
+    // Prefer the longer (more specific) name when several start-with matches exist
+    const candidates = trackSubjects.filter(
+      (s) =>
+        s.name.trim().startsWith(trackName) ||
+        trackName.startsWith(s.name.trim())
+    );
+    return candidates.sort((a, b) => b.name.length - a.name.length)[0] ?? startsWith;
+  }
+
+  const firstToken = trackName.split(/\s+/)[0]!;
+  if (firstToken.length < 2) return null;
+  const tokenMatches = trackSubjects.filter((s) => s.name.includes(firstToken));
+  if (tokenMatches.length === 0) return null;
+  if (tokenMatches.length === 1) return tokenMatches[0]!;
+
+  // Prefer subject whose full name is contained in the track name (or vice versa)
+  const contained = tokenMatches
+    .filter(
+      (s) =>
+        trackName.includes(s.name.trim()) || s.name.trim().includes(trackName)
+    )
+    .sort((a, b) => b.name.length - a.name.length);
+  return contained[0] ?? tokenMatches.sort((a, b) => b.name.length - a.name.length)[0]!;
+}
+
 export async function loadSubjectContext(): Promise<SubjectContext> {
   const [allSubjects, tracks] = await Promise.all([listSubjects(), listTracks()]);
   return {
@@ -69,23 +122,11 @@ export function resolveRelevantSubjects(
   const trackIds = getStudentTrackIds(student);
   const trackSubjects: Subject[] = [];
   for (const trackId of trackIds) {
-    let trackSubject =
-      allSubjects.find(
-        (s) => s.category === "TRACK" && s.trackId === trackId
-      ) ?? null;
-
-    if (!trackSubject) {
-      const track = tracksById.get(trackId);
-      if (track) {
-        trackSubject =
-          allSubjects.find(
-            (s) =>
-              s.category === "TRACK" &&
-              s.name.includes(track.name.split(" ")[0]!)
-          ) ?? null;
-      }
-    }
-
+    const trackSubject = findTrackSubject(
+      trackId,
+      tracksById.get(trackId),
+      allSubjects
+    );
     if (trackSubject) trackSubjects.push(trackSubject);
   }
 

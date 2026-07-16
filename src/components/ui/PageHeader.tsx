@@ -38,17 +38,12 @@ export function PageHeader({
         )}
       >
         <div className="absolute inset-0 bg-gradient-to-l from-primary-700 via-brand-700 to-primary-800" />
-        <div className="absolute inset-0 bg-mesh-hero opacity-60" />
+        <div className="absolute inset-0 bg-mesh-hero opacity-50" />
         <div className="absolute -left-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
-        <div
-          className="absolute inset-0 opacity-[0.06]"
-          style={{
-            backgroundImage:
-              "linear-gradient(white 1px, transparent 1px), linear-gradient(90deg, white 1px, transparent 1px)",
-            backgroundSize: "40px 40px",
-          }}
-        />
         <div className="relative">
+          <p className="mb-2 text-xs font-semibold tracking-wide text-primary-100/80">
+            ישיבה תיכונית צביה אלישיב · מערכת מעקב בגרות
+          </p>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <h1 className="text-4xl font-extrabold tracking-tight text-white drop-shadow-sm">
@@ -74,10 +69,13 @@ export function PageHeader({
     <>
       <header
         className={clsx(
-          "-mx-4 -mt-4 mb-2 border-b border-slate-200/70 bg-white/70 px-6 py-6 backdrop-blur-sm lg:-mx-8 lg:-mt-8 lg:px-8",
+          "-mx-4 -mt-4 mb-2 border-b border-slate-200/70 bg-white/80 px-6 py-6 backdrop-blur-sm lg:-mx-8 lg:-mt-8 lg:px-8",
           className
         )}
       >
+        <p className="mb-1.5 text-xs font-semibold tracking-wide text-slate-400">
+          ישיבה תיכונית צביה אלישיב
+        </p>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-h1 text-slate-900">{title}</h1>

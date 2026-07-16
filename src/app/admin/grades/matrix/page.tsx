@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Save, Loader2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -109,12 +110,28 @@ type RowState = Record<
 >;
 
 export default function GradesMatrixPage() {
+  return (
+    <Suspense fallback={<PageLoader variant="table" />}>
+      <GradesMatrixPageContent />
+    </Suspense>
+  );
+}
+
+function GradesMatrixPageContent() {
   const toast = useToast();
+  const searchParams = useSearchParams();
+  const initialClassId = searchParams.get("classId") ?? "";
+  const initialGradeYear = normalizeGradeYear(searchParams.get("gradeYear")) ?? "";
+  const initialSubjectId = searchParams.get("subjectId") ?? "";
+  const initialObligationId = searchParams.get("obligationId");
+
   const { data: classes = [], loading: classesLoading } = useApi<ClassItem[]>("/api/classes/list");
-  const [scopeMode, setScopeMode] = useState<ScopeMode>("gradeYear");
-  const [classId, setClassId] = useState("");
-  const [gradeYear, setGradeYear] = useState("");
-  const [subjectId, setSubjectId] = useState("");
+  const [scopeMode, setScopeMode] = useState<ScopeMode>(
+    initialClassId ? "class" : "gradeYear"
+  );
+  const [classId, setClassId] = useState(initialClassId);
+  const [gradeYear, setGradeYear] = useState(initialGradeYear);
+  const [subjectId, setSubjectId] = useState(initialSubjectId);
   const [taskKey, setTaskKey] = useState("");
   const [rowState, setRowState] = useState<RowState>({});
   const [savedSnapshot, setSavedSnapshot] = useState("");
@@ -122,6 +139,11 @@ export default function GradesMatrixPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [bulkScore, setBulkScore] = useState("");
   const [bulkLevel, setBulkLevel] = useState<QualitativeLevel | "">("");
+  const pendingObligationId = useRef<string | null>(initialObligationId);
+  /** Skip cascade resets caused by initial URL hydration */
+  const suppressCascade = useRef(
+    !!(initialClassId || initialGradeYear || initialSubjectId)
+  );
 
   const parsedTask = parseMatrixTaskKey(taskKey);
 
@@ -160,6 +182,7 @@ export default function GradesMatrixPage() {
   const showClass = scopeMode === "gradeYear";
 
   useEffect(() => {
+    if (suppressCascade.current) return;
     setClassId("");
     setGradeYear("");
     setSubjectId("");
@@ -169,6 +192,10 @@ export default function GradesMatrixPage() {
   }, [scopeMode]);
 
   useEffect(() => {
+    if (suppressCascade.current) {
+      suppressCascade.current = false;
+      return;
+    }
     setSubjectId("");
     setTaskKey("");
     setRowState({});
@@ -176,6 +203,7 @@ export default function GradesMatrixPage() {
   }, [classId, gradeYear]);
 
   useEffect(() => {
+    if (pendingObligationId.current) return;
     setTaskKey("");
     setRowState({});
     setSavedSnapshot("");
@@ -204,6 +232,19 @@ export default function GradesMatrixPage() {
 
   const selectedSubject = options?.subjects.find((s) => s.id === subjectId);
   const tasks = selectedSubject?.tasks ?? [];
+
+  // Auto-select first task for deep-linked obligationId
+  useEffect(() => {
+    const obId = pendingObligationId.current;
+    if (!obId || !options || !subjectId) return;
+    const subject = options.subjects.find((s) => s.id === subjectId);
+    const match = subject?.tasks.find((t) => t.id === obId);
+    if (match) {
+      setTaskKey(makeMatrixTaskKey(match.id, match.taskKind, match.sortOrder));
+      pendingObligationId.current = null;
+    }
+  }, [options, subjectId]);
+
   const selectedTask = tasks.find(
     (t) =>
       parsedTask &&

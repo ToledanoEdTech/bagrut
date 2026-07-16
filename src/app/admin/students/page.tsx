@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Users, Info, Award, Cpu, ChevronLeft, X } from "lucide-react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Plus, Pencil, Trash2, Users, Info, Award, Cpu, ChevronLeft } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -9,7 +10,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ExportButton } from "@/components/ui/ExportButton";
-import { SearchInput } from "@/components/ui/SearchInput";
+import { FilterBar } from "@/components/ui/FilterBar";
 import { Select } from "@/components/ui/Select";
 import { Alert } from "@/components/ui/Alert";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -85,7 +86,27 @@ type ClassGroup = {
 };
 
 export default function StudentsPage() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <PageHeader title="תלמידים" subtitle="טוען..." />
+          <div className="mt-8">
+            <PageLoader variant="table" />
+          </div>
+        </>
+      }
+    >
+      <StudentsPageContent />
+    </Suspense>
+  );
+}
+
+function StudentsPageContent() {
   const { session } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const canEdit = session ? hasAnyStudentEdit(session) : false;
   const canOutstandingBagrut = session ? canViewOutstandingBagrut(session) : false;
   const confirm = useConfirm();
@@ -113,16 +134,54 @@ export default function StudentsPage() {
   const [saving, setSaving] = useState(false);
   const [editExamPathId, setEditExamPathId] = useState<string | null>(null);
   const [newExamPathId, setNewExamPathId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [filterGradeYear, setFilterGradeYear] = useState("");
-  const [filterClassId, setFilterClassId] = useState("");
-  const [filterTrackId, setFilterTrackId] = useState("");
-  const [filterMathUnits, setFilterMathUnits] = useState("");
-  const [filterEnglishUnits, setFilterEnglishUnits] = useState("");
+
+  const candidateFromUrl = searchParams.get("candidate");
+  const initialCandidate: "all" | "outstanding" | "hightech" =
+    candidateFromUrl === "outstanding" || candidateFromUrl === "hightech"
+      ? candidateFromUrl
+      : "all";
+
+  const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
+  const [filterGradeYear, setFilterGradeYear] = useState(() => searchParams.get("grade") ?? "");
+  const [filterClassId, setFilterClassId] = useState(() => searchParams.get("class") ?? "");
+  const [filterTrackId, setFilterTrackId] = useState(() => searchParams.get("track") ?? "");
+  const [filterMathUnits, setFilterMathUnits] = useState(() => searchParams.get("math") ?? "");
+  const [filterEnglishUnits, setFilterEnglishUnits] = useState(
+    () => searchParams.get("english") ?? ""
+  );
   const [candidateFilter, setCandidateFilter] = useState<"all" | "outstanding" | "hightech">(
-    "all"
+    initialCandidate
   );
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+
+  const syncFiltersToUrl = useCallback(() => {
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("q", search.trim());
+    if (filterGradeYear) params.set("grade", filterGradeYear);
+    if (filterClassId) params.set("class", filterClassId);
+    if (filterTrackId) params.set("track", filterTrackId);
+    if (filterMathUnits) params.set("math", filterMathUnits);
+    if (filterEnglishUnits) params.set("english", filterEnglishUnits);
+    if (candidateFilter !== "all") params.set("candidate", candidateFilter);
+    const qs = params.toString();
+    const next = qs ? `${pathname}?${qs}` : pathname;
+    router.replace(next, { scroll: false });
+  }, [
+    search,
+    filterGradeYear,
+    filterClassId,
+    filterTrackId,
+    filterMathUnits,
+    filterEnglishUnits,
+    candidateFilter,
+    pathname,
+    router,
+  ]);
+
+  useEffect(() => {
+    const t = setTimeout(syncFiltersToUrl, 250);
+    return () => clearTimeout(t);
+  }, [syncFiltersToUrl]);
 
   const outstandingByStudentId = outstandingData?.byStudentId ?? {};
   const hightechByStudentId = hightechData?.byStudentId ?? {};
@@ -152,14 +211,16 @@ export default function StudentsPage() {
     [tracks]
   );
 
+  const advancedFilterCount = [
+    filterGradeYear,
+    filterClassId,
+    filterTrackId,
+    filterMathUnits,
+    filterEnglishUnits,
+  ].filter(Boolean).length;
+
   const hasActiveFilters =
-    !!search.trim() ||
-    !!filterGradeYear ||
-    !!filterClassId ||
-    !!filterTrackId ||
-    !!filterMathUnits ||
-    !!filterEnglishUnits ||
-    candidateFilter !== "all";
+    !!search.trim() || advancedFilterCount > 0 || candidateFilter !== "all";
 
   function clearFilters() {
     setSearch("");
@@ -532,40 +593,40 @@ export default function StudentsPage() {
             transition={{ duration: 0.2 }}
           >
       <div className="mt-6 space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="חיפוש לפי שם, אימייל, כיתה או מגמה..."
-            className="max-w-md"
-          />
-          {canOutstandingBagrut && (
-            <>
-              <Button
-                variant={candidateFilter === "outstanding" ? "primary" : "secondary"}
-                size="sm"
-                onClick={() =>
-                  setCandidateFilter((v) => (v === "outstanding" ? "all" : "outstanding"))
-                }
-              >
-                <Award className="h-4 w-4" />
-                מועמדים לבגרות מצטיינת
-              </Button>
-              <Button
-                variant={candidateFilter === "hightech" ? "primary" : "secondary"}
-                size="sm"
-                onClick={() =>
-                  setCandidateFilter((v) => (v === "hightech" ? "all" : "hightech"))
-                }
-              >
-                <Cpu className="h-4 w-4" />
-                מועמדים לבגרות הייטק
-              </Button>
-            </>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-end gap-3">
+        <FilterBar
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="חיפוש לפי שם, אימייל, כיתה או מגמה..."
+          activeFilterCount={advancedFilterCount + (candidateFilter !== "all" ? 1 : 0)}
+          onClear={hasActiveFilters ? clearFilters : undefined}
+          defaultExpanded={advancedFilterCount > 0}
+          quickFilters={
+            canOutstandingBagrut ? (
+              <>
+                <Button
+                  variant={candidateFilter === "outstanding" ? "primary" : "secondary"}
+                  size="sm"
+                  onClick={() =>
+                    setCandidateFilter((v) => (v === "outstanding" ? "all" : "outstanding"))
+                  }
+                >
+                  <Award className="h-4 w-4" />
+                  מצטיינת
+                </Button>
+                <Button
+                  variant={candidateFilter === "hightech" ? "primary" : "secondary"}
+                  size="sm"
+                  onClick={() =>
+                    setCandidateFilter((v) => (v === "hightech" ? "all" : "hightech"))
+                  }
+                >
+                  <Cpu className="h-4 w-4" />
+                  הייטק
+                </Button>
+              </>
+            ) : undefined
+          }
+        >
           <div className="w-[9.5rem]">
             <label className="label">שכבה</label>
             <Select
@@ -616,7 +677,7 @@ export default function StudentsPage() {
             <Select
               value={filterMathUnits}
               onChange={(e) => setFilterMathUnits(e.target.value)}
-              aria-label='סינון לפי יחידות מתמטיקה'
+              aria-label="סינון לפי יחידות מתמטיקה"
             >
               <option value="">הכל</option>
               {UNIT_OPTIONS.map((u) => (
@@ -631,7 +692,7 @@ export default function StudentsPage() {
             <Select
               value={filterEnglishUnits}
               onChange={(e) => setFilterEnglishUnits(e.target.value)}
-              aria-label='סינון לפי יחידות אנגלית'
+              aria-label="סינון לפי יחידות אנגלית"
             >
               <option value="">הכל</option>
               {UNIT_OPTIONS.map((u) => (
@@ -641,17 +702,11 @@ export default function StudentsPage() {
               ))}
             </Select>
           </div>
-          {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="mb-0.5">
-              <X className="h-4 w-4" />
-              נקה סינון
-            </Button>
-          )}
-          <span className="mb-2 text-sm text-slate-500">
-            {filteredCount} תלמידים
-            {hasActiveFilters ? " (מסונן)" : ""}
-          </span>
-        </div>
+        </FilterBar>
+        <p className="text-sm text-slate-500">
+          {filteredCount} תלמידים
+          {hasActiveFilters ? " (מסונן)" : ""}
+        </p>
       </div>
 
       {saveError && !showNew && !editingId && (
@@ -800,11 +855,11 @@ export default function StudentsPage() {
                     </colgroup>
                     <thead className="bg-slate-50/80">
                       <tr className="border-b border-slate-200 text-slate-500">
-                        <th className="px-4 py-3 text-right text-xs font-semibold">שם</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold">אימייל</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold">מגמות</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold">מתמטיקה</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold">אנגלית</th>
+                        <th scope="col" className="px-4 py-3 text-right text-xs font-semibold">שם</th>
+                        <th scope="col" className="px-4 py-3 text-right text-xs font-semibold">אימייל</th>
+                        <th scope="col" className="px-4 py-3 text-right text-xs font-semibold">מגמות</th>
+                        <th scope="col" className="px-4 py-3 text-center text-xs font-semibold">מתמטיקה</th>
+                        <th scope="col" className="px-4 py-3 text-center text-xs font-semibold">אנגלית</th>
                         {canOutstandingBagrut && (
                           <th className="px-4 py-3 text-center text-xs font-semibold">
                             תגים
@@ -820,7 +875,16 @@ export default function StudentsPage() {
                         <tr
                           key={s.id}
                           onClick={() => openStudent(s.id)}
-                          className="cursor-pointer transition-colors even:bg-slate-50/40 hover:bg-primary-50/30"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              openStudent(s.id);
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`פתח כרטיס תלמיד ${s.user.name}`}
+                          className="cursor-pointer transition-colors even:bg-slate-50/40 hover:bg-primary-50/30 focus-visible:bg-primary-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-400"
                         >
                           <td className="truncate px-4 py-3 font-semibold text-slate-800">
                             {s.user.name}

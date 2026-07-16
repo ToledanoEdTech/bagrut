@@ -10,29 +10,29 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          50: "#eef2ff",
-          100: "#e0e7ff",
-          200: "#c7d2fe",
-          300: "#a5b4fc",
-          400: "#818cf8",
-          500: "#6366f1",
-          600: "#4f46e5",
-          700: "#4338ca",
-          800: "#3730a3",
-          900: "#312e81",
-          950: "#1e1b4b",
+          50: "#f0fdfa",
+          100: "#ccfbf1",
+          200: "#99f6e4",
+          300: "#5eead4",
+          400: "#2dd4bf",
+          500: "#14b8a6",
+          600: "#0d9488",
+          700: "#0f766e",
+          800: "#115e59",
+          900: "#134e4a",
+          950: "#042f2e",
         },
         brand: {
-          50: "#f5f3ff",
-          100: "#ede9fe",
-          200: "#ddd6fe",
-          300: "#c4b5fd",
-          400: "#a78bfa",
-          500: "#8b5cf6",
-          600: "#7c3aed",
-          700: "#6d28d9",
-          800: "#5b21b6",
-          900: "#4c1d95",
+          50: "#f0f9ff",
+          100: "#e0f2fe",
+          200: "#bae6fd",
+          300: "#7dd3fc",
+          400: "#38bdf8",
+          500: "#0ea5e9",
+          600: "#0284c7",
+          700: "#0369a1",
+          800: "#075985",
+          900: "#0c4a6e",
         },
         accent: {
           50: "#ecfdf5",
@@ -53,8 +53,8 @@ const config: Config = {
         card: "0 2px 4px rgba(15, 23, 42, 0.04), 0 8px 24px -8px rgba(15, 23, 42, 0.10)",
         "card-hover":
           "0 4px 8px rgba(15, 23, 42, 0.06), 0 16px 40px -12px rgba(15, 23, 42, 0.18)",
-        glow: "0 8px 24px -6px rgba(79, 70, 229, 0.45)",
-        "glow-lg": "0 16px 48px -12px rgba(79, 70, 229, 0.55)",
+        glow: "0 8px 24px -6px rgba(13, 148, 136, 0.35)",
+        "glow-lg": "0 16px 48px -12px rgba(13, 148, 136, 0.45)",
         "inner-top": "inset 0 1px 0 0 rgba(255, 255, 255, 0.10)",
       },
       borderRadius: {
@@ -62,13 +62,13 @@ const config: Config = {
       },
       backgroundImage: {
         "brand-gradient":
-          "linear-gradient(135deg, #4f46e5 0%, #6d28d9 50%, #7c3aed 100%)",
+          "linear-gradient(135deg, #0d9488 0%, #0369a1 50%, #0284c7 100%)",
         "brand-gradient-soft":
-          "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+          "linear-gradient(135deg, #14b8a6 0%, #0ea5e9 100%)",
         "mesh-light":
-          "radial-gradient(at 0% 0%, rgba(99,102,241,0.10) 0px, transparent 50%), radial-gradient(at 98% 0%, rgba(139,92,246,0.10) 0px, transparent 50%), radial-gradient(at 50% 100%, rgba(16,185,129,0.06) 0px, transparent 50%)",
+          "radial-gradient(at 0% 0%, rgba(13,148,136,0.08) 0px, transparent 50%), radial-gradient(at 98% 0%, rgba(2,132,199,0.08) 0px, transparent 50%), radial-gradient(at 50% 100%, rgba(16,185,129,0.06) 0px, transparent 50%)",
         "mesh-hero":
-          "radial-gradient(at 15% 20%, rgba(139,92,246,0.55) 0px, transparent 50%), radial-gradient(at 85% 15%, rgba(79,70,229,0.55) 0px, transparent 50%), radial-gradient(at 70% 85%, rgba(124,58,237,0.45) 0px, transparent 50%), radial-gradient(at 20% 90%, rgba(67,56,202,0.45) 0px, transparent 50%)",
+          "radial-gradient(at 15% 20%, rgba(2,132,199,0.45) 0px, transparent 50%), radial-gradient(at 85% 15%, rgba(13,148,136,0.50) 0px, transparent 50%), radial-gradient(at 70% 85%, rgba(3,105,161,0.40) 0px, transparent 50%), radial-gradient(at 20% 90%, rgba(15,118,110,0.40) 0px, transparent 50%)",
         shimmer:
           "linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)",
       },

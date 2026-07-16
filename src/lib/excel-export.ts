@@ -453,6 +453,47 @@ export function buildMatrixSheet(input: {
   };
 }
 
+/** Overview grades matrix (students × selected subject/obligation columns). */
+export function buildOverviewGridSheet(input: {
+  title: string;
+  showClass?: boolean;
+  columns: Array<{ key: string; header: string }>;
+  rows: Array<{
+    studentName: string;
+    className?: string | null;
+    trackNames?: string[];
+    cells: Record<string, string | number | null | undefined>;
+  }>;
+}): ExportSheet {
+  const showClass = input.showClass ?? false;
+  return {
+    name: "מטריצת ציונים",
+    title: input.title,
+    columns: [
+      { header: "שם תלמיד", key: "studentName", width: 22 },
+      ...(showClass ? [{ header: "כיתה", key: "className", width: 12 }] : []),
+      { header: "מגמות", key: "tracks", width: 18 },
+      ...input.columns.map((c) => ({
+        header: c.header,
+        key: c.key,
+        width: Math.min(Math.max(c.header.length + 2, 10), 18),
+      })),
+    ],
+    rows: input.rows.map((r) => {
+      const row: Record<string, string | number | null | undefined> = {
+        studentName: r.studentName,
+        ...(showClass ? { className: r.className ?? "—" } : {}),
+        tracks: r.trackNames?.length ? r.trackNames.join(", ") : "—",
+      };
+      for (const col of input.columns) {
+        const value = r.cells[col.key];
+        row[col.key] = value == null || value === "" ? "—" : value;
+      }
+      return row;
+    }),
+  };
+}
+
 export function buildClassStudentsSheet(
   className: string,
   students: StudentExportRow[]

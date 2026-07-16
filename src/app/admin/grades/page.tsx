@@ -473,7 +473,7 @@ export default function GradesPage() {
         />
         <Link href="/admin/grades/matrix" className="btn-secondary w-full justify-center sm:w-auto">
           <ArrowLeft className="h-4 w-4" />
-          הזנה מהירה לפי מטלה
+          הזנה לפי מטלה
         </Link>
       </div>
 

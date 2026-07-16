@@ -2,6 +2,7 @@
 
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { PageLoader } from "@/components/ui/PageLoader";
+import { Alert } from "@/components/ui/Alert";
 import { useRegisterPageMeta } from "@/components/layout/PageMetaContext";
 import { StudentDashboardContent } from "@/components/students/StudentDashboardContent";
 import { useApi } from "@/hooks/useApi";
@@ -22,7 +23,11 @@ export default function StudentDashboard() {
   }
 
   if (!data) {
-    return <div className="text-center text-base text-slate-500">שגיאה בטעינת הנתונים</div>;
+    return (
+      <Alert variant="error" className="mt-6">
+        שגיאה בטעינת הנתונים. נסו לרענן את הדף.
+      </Alert>
+    );
   }
 
   const trackLabel =

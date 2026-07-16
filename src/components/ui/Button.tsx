@@ -11,7 +11,8 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   className?: string;
 };
 
-const variants: Record<ButtonVariant, string> = {
+/** Shared with `.btn-primary` / `.btn-secondary` in globals.css — keep in sync */
+export const buttonVariants: Record<ButtonVariant, string> = {
   primary:
     "bg-gradient-to-l from-primary-600 to-brand-600 text-white shadow-glow hover:from-primary-500 hover:to-brand-500 hover:shadow-glow-lg focus-visible:ring-primary-400",
   secondary:
@@ -21,6 +22,8 @@ const variants: Record<ButtonVariant, string> = {
   danger:
     "bg-gradient-to-l from-red-600 to-rose-600 text-white shadow-[0_8px_24px_-6px_rgba(220,38,38,0.45)] hover:from-red-500 hover:to-rose-500 focus-visible:ring-red-300",
 };
+
+const variants = buttonVariants;
 
 const sizes: Record<ButtonSize, string> = {
   sm: "px-3 py-1.5 text-sm rounded-lg gap-1.5",
