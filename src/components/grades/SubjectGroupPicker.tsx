@@ -60,7 +60,7 @@ export function SubjectGroupPicker({
       : `${selected.length} מקצועות`;
 
   return (
-    <div ref={rootRef} className="relative min-w-[14rem] flex-1">
+    <div ref={rootRef} className="relative w-full">
       <label className="label">מקצועות להצגה</label>
       <button
         type="button"

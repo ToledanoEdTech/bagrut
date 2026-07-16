@@ -224,22 +224,22 @@ function GradesMatrixReportContent() {
 
       <div className="mt-6 space-y-6">
         <Card className="p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <p className="text-sm text-slate-500">
               בחרו מקצועות להצגה (ניתן לבחור כמה). ייצוא האקסל משקף את הסינון
               הנוכחי. לחיצה על תלמיד פותחת כרטיס; לחיצה על תא מובילה להזנה.
             </p>
             <Link
               href="/admin/grades/matrix"
-              className="btn-secondary shrink-0 px-3 py-2 text-sm"
+              className="btn-secondary w-full justify-center px-3 py-2 text-sm sm:w-auto sm:shrink-0"
             >
               <ClipboardList className="h-4 w-4" />
               הזנה לפי מטלה
             </Link>
           </div>
 
-          <div className="mt-5 flex flex-wrap items-end gap-3">
-            <div className="w-[9rem]">
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-end">
+            <div className="w-full sm:w-[9rem]">
               <label className="label">היקף</label>
               <Select
                 value={scopeMode}
@@ -260,7 +260,7 @@ function GradesMatrixReportContent() {
 
             {scopeMode === "gradeYear" ? (
               <>
-                <div className="w-[9rem]">
+                <div className="w-full sm:w-[9rem]">
                   <label className="label">שכבה</label>
                   <Select
                     value={gradeYear}
@@ -280,7 +280,7 @@ function GradesMatrixReportContent() {
                     ))}
                   </Select>
                 </div>
-                <div className="w-[10rem]">
+                <div className="w-full sm:w-[10rem]">
                   <label className="label">כיתה</label>
                   <Select
                     value={filterClassId}
@@ -302,7 +302,7 @@ function GradesMatrixReportContent() {
                 </div>
               </>
             ) : (
-              <div className="w-[11rem]">
+              <div className="w-full sm:w-[11rem]">
                 <label className="label">כיתה</label>
                 <Select
                   value={classId}
@@ -326,7 +326,7 @@ function GradesMatrixReportContent() {
               </div>
             )}
 
-            <div className="w-[11rem]">
+            <div className="w-full sm:w-[11rem]">
               <label className="label">מגמה</label>
               <Select
                 value={trackId}
@@ -343,18 +343,21 @@ function GradesMatrixReportContent() {
               </Select>
             </div>
 
-            <SubjectGroupPicker
-              options={data?.subjects ?? []}
-              selected={selectedSubjects}
-              onChange={setSelectedSubjects}
-              disabled={!gridQuery || !data}
-            />
+            <div className="w-full min-w-0 sm:min-w-[14rem] sm:flex-1">
+              <SubjectGroupPicker
+                options={data?.subjects ?? []}
+                selected={selectedSubjects}
+                onChange={setSelectedSubjects}
+                disabled={!gridQuery || !data}
+              />
+            </div>
 
             {(trackId || selectedSubjects.length > 0 || filterClassId) && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
+                className="w-full sm:w-auto"
                 onClick={() => {
                   setTrackId("");
                   resetSubjects();
