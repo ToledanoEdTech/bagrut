@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Users, Info, Award, Cpu, ChevronLeft } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, Info, Award, Cpu, ChevronLeft, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { Select } from "@/components/ui/Select";
 import { Alert } from "@/components/ui/Alert";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Sheet } from "@/components/ui/Sheet";
@@ -25,12 +26,15 @@ import {
   downloadExcel,
   exportTimestamp,
 } from "@/lib/excel-export";
+import { CANONICAL_GRADE_YEARS, normalizeGradeYear } from "@/lib/grade-year";
 import { useAuth } from "@/components/AuthProvider";
 import { hasAnyStudentEdit, canViewOutstandingBagrut } from "@/lib/permissions";
 import { OutstandingBagrutBadge } from "@/components/students/OutstandingBagrutBadge";
 import { HightechBagrutBadge } from "@/components/students/HightechBagrutBadge";
 import type { OutstandingBagrutResult } from "@/lib/outstanding-bagrut-core";
 import type { HightechBagrutResult } from "@/lib/hightech-bagrut-core";
+
+const UNIT_OPTIONS = [3, 4, 5] as const;
 
 type OutstandingBagrutApiData = {
   byStudentId: Record<string, OutstandingBagrutResult>;
@@ -110,6 +114,11 @@ export default function StudentsPage() {
   const [editExamPathId, setEditExamPathId] = useState<string | null>(null);
   const [newExamPathId, setNewExamPathId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [filterGradeYear, setFilterGradeYear] = useState("");
+  const [filterClassId, setFilterClassId] = useState("");
+  const [filterTrackId, setFilterTrackId] = useState("");
+  const [filterMathUnits, setFilterMathUnits] = useState("");
+  const [filterEnglishUnits, setFilterEnglishUnits] = useState("");
   const [candidateFilter, setCandidateFilter] = useState<"all" | "outstanding" | "hightech">(
     "all"
   );
@@ -118,6 +127,59 @@ export default function StudentsPage() {
   const outstandingByStudentId = outstandingData?.byStudentId ?? {};
   const hightechByStudentId = hightechData?.byStudentId ?? {};
   const selectedStudent = students.find((s) => s.id === selectedStudentId);
+
+  const availableGradeYears = useMemo(() => {
+    const present = new Set(
+      classesRaw
+        .map((c) => normalizeGradeYear(c.gradeYear))
+        .filter((gy): gy is string => !!gy)
+    );
+    return CANONICAL_GRADE_YEARS.filter((gy) => present.has(gy));
+  }, [classesRaw]);
+
+  const classOptionsForFilter = useMemo(() => {
+    let list = [...classesRaw];
+    if (filterGradeYear) {
+      list = list.filter(
+        (c) => normalizeGradeYear(c.gradeYear) === filterGradeYear
+      );
+    }
+    return list.sort((a, b) => a.name.localeCompare(b.name, "he"));
+  }, [classesRaw, filterGradeYear]);
+
+  const sortedTracks = useMemo(
+    () => [...tracks].sort((a, b) => a.name.localeCompare(b.name, "he")),
+    [tracks]
+  );
+
+  const hasActiveFilters =
+    !!search.trim() ||
+    !!filterGradeYear ||
+    !!filterClassId ||
+    !!filterTrackId ||
+    !!filterMathUnits ||
+    !!filterEnglishUnits ||
+    candidateFilter !== "all";
+
+  function clearFilters() {
+    setSearch("");
+    setFilterGradeYear("");
+    setFilterClassId("");
+    setFilterTrackId("");
+    setFilterMathUnits("");
+    setFilterEnglishUnits("");
+    setCandidateFilter("all");
+  }
+
+  function onGradeYearChange(value: string) {
+    setFilterGradeYear(value);
+    if (filterClassId) {
+      const cls = classesRaw.find((c) => c.id === filterClassId);
+      if (value && normalizeGradeYear(cls?.gradeYear) !== value) {
+        setFilterClassId("");
+      }
+    }
+  }
 
   function openStudent(studentId: string) {
     setShowNew(false);
@@ -170,7 +232,18 @@ export default function StudentsPage() {
 
   const filteredClassGroups = useMemo(() => {
     const q = search.trim();
+    const qLower = q.toLowerCase();
     return classGroups
+      .filter((group) => {
+        if (filterClassId && group.id !== filterClassId) return false;
+        if (
+          filterGradeYear &&
+          normalizeGradeYear(group.gradeYear) !== filterGradeYear
+        ) {
+          return false;
+        }
+        return true;
+      })
       .map((group) => ({
         ...group,
         students: group.students.filter((s) => {
@@ -183,8 +256,18 @@ export default function StudentsPage() {
           if (candidateFilter === "hightech" && !hightechByStudentId[s.id]?.isCandidate) {
             return false;
           }
+          if (filterMathUnits && s.mathUnits !== Number(filterMathUnits)) {
+            return false;
+          }
+          if (filterEnglishUnits && s.englishUnits !== Number(filterEnglishUnits)) {
+            return false;
+          }
+          if (filterTrackId) {
+            const trackIds =
+              s.tracks?.map((t) => t.id) ?? (s.track ? [s.track.id] : []);
+            if (!trackIds.includes(filterTrackId)) return false;
+          }
           if (!q) return true;
-          const qLower = q.toLowerCase();
           const trackNames =
             s.tracks?.map((t) => t.name).join(" ") ?? s.track?.name ?? "";
           return (
@@ -199,15 +282,22 @@ export default function StudentsPage() {
   }, [
     classGroups,
     search,
+    filterGradeYear,
+    filterClassId,
+    filterTrackId,
+    filterMathUnits,
+    filterEnglishUnits,
     candidateFilter,
     outstandingByStudentId,
     hightechByStudentId,
   ]);
 
-  const exportStudents = useMemo(() => {
-    if (search.trim()) return filteredClassGroups.flatMap((g) => g.students);
-    return students;
-  }, [students, filteredClassGroups, search]);
+  const filteredStudents = useMemo(
+    () => filteredClassGroups.flatMap((g) => g.students),
+    [filteredClassGroups]
+  );
+
+  const filteredCount = filteredStudents.length;
 
   async function load() {
     await Promise.all([refreshStudents(), refreshClasses(), refreshTracks()]);
@@ -327,8 +417,18 @@ export default function StudentsPage() {
   }
 
   async function handleExport() {
+    const classMeta = new Map(classesRaw.map((c) => [c.id, c]));
+    const rows = filteredStudents.map((s) => ({
+      ...s,
+      class: s.class
+        ? {
+            ...s.class,
+            gradeYear: classMeta.get(s.class.id)?.gradeYear ?? null,
+          }
+        : null,
+    }));
     await downloadExcel(`תלמידים_${exportTimestamp()}.xlsx`, [
-      buildStudentsSheet(exportStudents),
+      buildStudentsSheet(rows),
     ]);
   }
 
@@ -376,7 +476,7 @@ export default function StudentsPage() {
       <PageHeader title={pageTitle} subtitle={pageSubtitle}>
         {!selectedStudentId && (
           <div className="flex flex-wrap items-center gap-2">
-            <ExportButton onExport={handleExport} disabled={exportStudents.length === 0} />
+            <ExportButton onExport={handleExport} disabled={filteredCount === 0} />
             {canEdit && (
               <Button
                 onClick={openNewForm}
@@ -431,37 +531,127 @@ export default function StudentsPage() {
             exit={{ opacity: 0, x: 20 }}
             transition={{ duration: 0.2 }}
           >
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="חיפוש לפי שם, אימייל, כיתה או מגמה..."
-          className="max-w-md"
-        />
-        {canOutstandingBagrut && (
-          <>
-            <Button
-              variant={candidateFilter === "outstanding" ? "primary" : "secondary"}
-              size="sm"
-              onClick={() =>
-                setCandidateFilter((v) => (v === "outstanding" ? "all" : "outstanding"))
-              }
+      <div className="mt-6 space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="חיפוש לפי שם, אימייל, כיתה או מגמה..."
+            className="max-w-md"
+          />
+          {canOutstandingBagrut && (
+            <>
+              <Button
+                variant={candidateFilter === "outstanding" ? "primary" : "secondary"}
+                size="sm"
+                onClick={() =>
+                  setCandidateFilter((v) => (v === "outstanding" ? "all" : "outstanding"))
+                }
+              >
+                <Award className="h-4 w-4" />
+                מועמדים לבגרות מצטיינת
+              </Button>
+              <Button
+                variant={candidateFilter === "hightech" ? "primary" : "secondary"}
+                size="sm"
+                onClick={() =>
+                  setCandidateFilter((v) => (v === "hightech" ? "all" : "hightech"))
+                }
+              >
+                <Cpu className="h-4 w-4" />
+                מועמדים לבגרות הייטק
+              </Button>
+            </>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-[9.5rem]">
+            <label className="label">שכבה</label>
+            <Select
+              value={filterGradeYear}
+              onChange={(e) => onGradeYearChange(e.target.value)}
+              aria-label="סינון לפי שכבה"
             >
-              <Award className="h-4 w-4" />
-              מועמדים לבגרות מצטיינת
-            </Button>
-            <Button
-              variant={candidateFilter === "hightech" ? "primary" : "secondary"}
-              size="sm"
-              onClick={() =>
-                setCandidateFilter((v) => (v === "hightech" ? "all" : "hightech"))
-              }
+              <option value="">הכל</option>
+              {availableGradeYears.map((gy) => (
+                <option key={gy} value={gy}>
+                  {gy}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="w-[9.5rem]">
+            <label className="label">כיתת אם</label>
+            <Select
+              value={filterClassId}
+              onChange={(e) => setFilterClassId(e.target.value)}
+              aria-label="סינון לפי כיתת אם"
             >
-              <Cpu className="h-4 w-4" />
-              מועמדים לבגרות הייטק
+              <option value="">הכל</option>
+              {classOptionsForFilter.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="w-[11rem]">
+            <label className="label">מגמה</label>
+            <Select
+              value={filterTrackId}
+              onChange={(e) => setFilterTrackId(e.target.value)}
+              aria-label="סינון לפי מגמה"
+            >
+              <option value="">הכל</option>
+              {sortedTracks.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="w-[8.5rem]">
+            <label className="label">מתמטיקה</label>
+            <Select
+              value={filterMathUnits}
+              onChange={(e) => setFilterMathUnits(e.target.value)}
+              aria-label='סינון לפי יחידות מתמטיקה'
+            >
+              <option value="">הכל</option>
+              {UNIT_OPTIONS.map((u) => (
+                <option key={u} value={u}>
+                  {u} יח״ל
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="w-[8.5rem]">
+            <label className="label">אנגלית</label>
+            <Select
+              value={filterEnglishUnits}
+              onChange={(e) => setFilterEnglishUnits(e.target.value)}
+              aria-label='סינון לפי יחידות אנגלית'
+            >
+              <option value="">הכל</option>
+              {UNIT_OPTIONS.map((u) => (
+                <option key={u} value={u}>
+                  {u} יח״ל
+                </option>
+              ))}
+            </Select>
+          </div>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="mb-0.5">
+              <X className="h-4 w-4" />
+              נקה סינון
             </Button>
-          </>
-        )}
+          )}
+          <span className="mb-2 text-sm text-slate-500">
+            {filteredCount} תלמידים
+            {hasActiveFilters ? " (מסונן)" : ""}
+          </span>
+        </div>
       </div>
 
       {saveError && !showNew && !editingId && (
@@ -515,7 +705,9 @@ export default function StudentsPage() {
           <EmptyState
             icon={Users}
             title="לא נמצאו תוצאות"
-            description={`לא נמצאו תלמידים התואמים לחיפוש "${search}"`}
+            description="לא נמצאו תלמידים התואמים לסינון הנוכחי"
+            actionLabel={hasActiveFilters ? "נקה סינון" : undefined}
+            onAction={hasActiveFilters ? clearFilters : undefined}
           />
         ) : (
           filteredClassGroups.map((group) => (

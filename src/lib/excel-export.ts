@@ -156,7 +156,11 @@ export function exportTimestamp(): string {
 
 type StudentExportRow = {
   user: { name: string; email?: string };
-  class: { name: string; examPath?: { label: string } } | null;
+  class: {
+    name: string;
+    gradeYear?: string | null;
+    examPath?: { label: string };
+  } | null;
   tracks?: { name: string }[];
   track?: { name: string } | null;
   mathUnits: number;
@@ -174,6 +178,7 @@ export function buildStudentsSheet(students: StudentExportRow[]): ExportSheet {
     columns: [
       { header: "שם", key: "name" },
       { header: "אימייל", key: "email" },
+      { header: "שכבה", key: "gradeYear" },
       { header: "כיתה", key: "className" },
       { header: "מגמות", key: "tracks" },
       { header: 'מתמטיקה (יח"ל)', key: "math" },
@@ -183,6 +188,7 @@ export function buildStudentsSheet(students: StudentExportRow[]): ExportSheet {
     rows: sorted.map((s) => ({
       name: s.user.name,
       email: s.user.email ?? "—",
+      gradeYear: s.class?.gradeYear ?? "—",
       className: s.class?.name ?? "—",
       tracks:
         s.tracks?.length

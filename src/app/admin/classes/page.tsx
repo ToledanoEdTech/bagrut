@@ -186,9 +186,19 @@ export default function ClassesPage() {
 
   async function handleExport() {
     if (view === "students" && selectedClass) {
+      const rows = classStudents.map((s) => ({
+        ...s,
+        class: s.class
+          ? {
+              ...s.class,
+              gradeYear: selectedClass.gradeYear,
+              examPath: selectedClass.examPath,
+            }
+          : null,
+      }));
       await downloadExcel(
         `תלמידים_${selectedClass.name}_${exportTimestamp()}.xlsx`,
-        [buildClassStudentsSheet(selectedClass.name, classStudents)]
+        [buildClassStudentsSheet(selectedClass.name, rows)]
       );
       return;
     }
