@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Pencil, Trash2, Save, X, ChevronLeft, Users, GraduationCap } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -102,6 +101,19 @@ export default function ClassesPage() {
       .filter((s) => s.class?.id === selectedClassId)
       .sort((a, b) => a.user.name.localeCompare(b.user.name, "he"));
   }, [students, selectedClassId]);
+
+  const pageTitle =
+    view === "detail"
+      ? (selectedStudent?.user.name ?? "כרטיס תלמיד")
+      : view === "students" && selectedClass
+        ? selectedClass.name
+        : "כיתות";
+  const pageSubtitle =
+    view === "detail" && selectedClass
+      ? `${selectedClass.name}${selectedClass.gradeYear ? ` · ${selectedClass.gradeYear}` : ""}`
+      : view === "students" && selectedClass
+        ? `${selectedClass.gradeYear ? `${selectedClass.gradeYear} · ` : ""}${selectedClass.examPath.label} · ${classStudents.length} תלמידים`
+        : "";
 
   async function load() {
     await Promise.all([refreshClasses(), refreshPaths()]);
@@ -212,22 +224,15 @@ export default function ClassesPage() {
 
   return (
     <>
-      <PageHeader
-        title={
-          view === "detail"
-            ? (selectedStudent?.user.name ?? "כרטיס תלמיד")
-            : view === "students" && selectedClass
-              ? selectedClass.name
-              : "כיתות ותוכניות חובה"
-        }
-        subtitle={
-          view === "detail" && selectedClass
-            ? `${selectedClass.name}${selectedClass.gradeYear ? ` · ${selectedClass.gradeYear}` : ""}`
-            : view === "students" && selectedClass
-              ? `${selectedClass.gradeYear ? `${selectedClass.gradeYear} · ` : ""}${selectedClass.examPath.label} · ${classStudents.length} תלמידים`
-              : 'הגדרת כיתות ושיוך לתוכנית חובה (רגילה, בית מדרש, מב"ר/חנ"מ)'
-        }
-      >
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          {view !== "classes" && (
+            <h2 className="text-xl font-bold text-slate-900">{pageTitle}</h2>
+          )}
+          {view !== "classes" && pageSubtitle && (
+            <p className="mt-0.5 text-sm text-slate-500">{pageSubtitle}</p>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           {view !== "detail" && (
             <ExportButton
@@ -243,7 +248,7 @@ export default function ClassesPage() {
             </Button>
           )}
         </div>
-      </PageHeader>
+      </div>
 
       <Breadcrumb
         items={[

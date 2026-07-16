@@ -478,6 +478,122 @@ export async function listExamPaths() {
   });
 }
 
+function slugifyExamPathKey(label: string): string {
+  const ascii = label
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+  if (ascii.length >= 2) return ascii;
+  return `path_${Date.now().toString(36)}`;
+}
+
+async function ensureUniqueExamPathKey(baseKey: string, excludeId?: string): Promise<string> {
+  const paths = await listExamPaths();
+  const taken = new Set(
+    paths.filter((p) => p.id !== excludeId).map((p) => p.key)
+  );
+  if (!taken.has(baseKey)) return baseKey;
+  let i = 2;
+  while (taken.has(`${baseKey}_${i}`)) i += 1;
+  return `${baseKey}_${i}`;
+}
+
+export async function createExamPath(data: {
+  label: string;
+  description?: string | null;
+  pathType?: ExamPath["pathType"];
+  subjectIds?: string[];
+  key?: string;
+}): Promise<ExamPath & { _count: { classes: number } }> {
+  const label = data.label.trim();
+  if (!label) throw new Error("שם תוכנית הוא שדה חובה");
+
+  const baseKey = data.key?.trim() || slugifyExamPathKey(label);
+  const key = await ensureUniqueExamPathKey(baseKey);
+  const id = newId();
+
+  // Attach social involvement automatically when present
+  let subjectIds = [...new Set(data.subjectIds ?? [])];
+  const subjects = await listSubjects();
+  const social = subjects.find((s) => s.category === "SOCIAL");
+  if (social && !subjectIds.includes(social.id)) {
+    subjectIds = [...subjectIds, social.id];
+  }
+
+  const path: ExamPath = {
+    id,
+    key,
+    label,
+    pathType: data.pathType ?? "REGULAR",
+    description: data.description?.trim() || null,
+    subjectIds,
+  };
+
+  await adminDb.collection("examPaths").doc(id).set({
+    ...path,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  await invalidateServerCache("examPaths");
+  await invalidateServerCache("subjects");
+  return { ...path, _count: { classes: 0 } };
+}
+
+export async function updateExamPath(
+  id: string,
+  data: {
+    label?: string;
+    description?: string | null;
+    pathType?: ExamPath["pathType"];
+    subjectIds?: string[];
+    key?: string;
+  }
+): Promise<(ExamPath & { _count: { classes: number } }) | null> {
+  const existing = await getExamPathById(id);
+  if (!existing) return null;
+
+  const updates: Partial<ExamPath> = {};
+  if (data.label !== undefined) {
+    const label = data.label.trim();
+    if (!label) throw new Error("שם תוכנית הוא שדה חובה");
+    updates.label = label;
+  }
+  if (data.description !== undefined) {
+    updates.description = data.description?.trim() || null;
+  }
+  if (data.pathType !== undefined) {
+    updates.pathType = data.pathType;
+  }
+  if (data.subjectIds !== undefined) {
+    updates.subjectIds = [...new Set(data.subjectIds)];
+  }
+  if (data.key !== undefined && data.key.trim()) {
+    updates.key = await ensureUniqueExamPathKey(data.key.trim(), id);
+  }
+
+  await adminDb.collection("examPaths").doc(id).update({
+    ...updates,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  await invalidateServerCache("examPaths");
+  await invalidateServerCache("subjects");
+
+  const paths = await listExamPaths();
+  return paths.find((p) => p.id === id) ?? null;
+}
+
+export async function deleteExamPath(id: string): Promise<void> {
+  const paths = await listExamPaths();
+  const path = paths.find((p) => p.id === id);
+  if (!path) throw new Error("תוכנית לא נמצאה");
+  if ((path._count?.classes ?? 0) > 0) {
+    throw new Error("לא ניתן למחוק תוכנית שמשויכות אליה כיתות");
+  }
+  await adminDb.collection("examPaths").doc(id).delete();
+  await invalidateServerCache("examPaths");
+  await invalidateServerCache("subjects");
+}
+
 // ─── tracks ───────────────────────────────────────────────────────────────
 
 export async function getTrackById(id: string): Promise<Track | null> {
