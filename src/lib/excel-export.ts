@@ -159,7 +159,7 @@ type StudentExportRow = {
   class: {
     name: string;
     gradeYear?: string | null;
-    examPath?: { label: string };
+    examPath?: { label: string } | null;
   } | null;
   tracks?: { name: string }[];
   track?: { name: string } | null;
