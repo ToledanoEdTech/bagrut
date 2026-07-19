@@ -145,7 +145,14 @@ export default function ClassesPage() {
     load();
   }
 
-  async function remove(id: string) {
+  async function remove(id: string, name: string) {
+    const ok = await confirm({
+      title: "מחיקת כיתה",
+      description: `למחוק את הכיתה "${name}"? פעולה זו אינה ניתנת לביטול.`,
+      confirmLabel: "מחק",
+      variant: "danger",
+    });
+    if (!ok) return;
     const res = await fetch(`/api/classes?id=${id}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) toast.error(data.error);
@@ -535,7 +542,7 @@ export default function ClassesPage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => remove(c.id)}
+                      onClick={() => remove(c.id, c.name)}
                       className="text-red-500 hover:bg-red-50 hover:text-red-600"
                       aria-label="מחיקה"
                     >
