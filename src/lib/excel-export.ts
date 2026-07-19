@@ -301,7 +301,7 @@ export function buildSubjectsSheets(subjects: SubjectExportRow[]): ExportSheet[]
 type ClassExportRow = {
   name: string;
   gradeYear: string | null;
-  examPath: { label: string };
+  examPath: { label: string } | null;
   homeroomTeacher?: { name: string; email: string } | null;
   _count: { students: number };
 };
@@ -325,7 +325,7 @@ export function buildClassesSheet(classes: ClassExportRow[]): ExportSheet {
       homeroom: c.homeroomTeacher
         ? c.homeroomTeacher.name || c.homeroomTeacher.email
         : "לא הוגדר מחנך",
-      path: c.examPath.label,
+      path: c.examPath?.label ?? "ללא תוכנית",
       students: c._count.students,
     })),
   };

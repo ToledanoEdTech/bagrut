@@ -32,7 +32,7 @@ type ClassItem = {
   id: string;
   name: string;
   gradeYear: string | null;
-  examPath: ExamPath;
+  examPath: ExamPath | null;
   homeroomTeacherId?: string | null;
   homeroomTeacher?: { id: string; name: string; email: string } | null;
   _count: { students: number };
@@ -112,7 +112,7 @@ export default function ClassesPage() {
     view === "detail" && selectedClass
       ? `${selectedClass.name}${selectedClass.gradeYear ? ` · ${selectedClass.gradeYear}` : ""}`
       : view === "students" && selectedClass
-        ? `${selectedClass.gradeYear ? `${selectedClass.gradeYear} · ` : ""}${selectedClass.examPath.label} · ${classStudents.length} תלמידים`
+        ? `${selectedClass.gradeYear ? `${selectedClass.gradeYear} · ` : ""}${selectedClass.examPath?.label ?? "ללא תוכנית"} · ${classStudents.length} תלמידים`
         : "";
 
   async function load() {
@@ -531,7 +531,7 @@ export default function ClassesPage() {
                         setForm({
                           name: c.name,
                           gradeYear: c.gradeYear ?? "",
-                          examPathId: c.examPath.id,
+                          examPathId: c.examPath?.id ?? paths[0]?.id ?? "",
                           homeroomTeacherId: c.homeroomTeacherId ?? "",
                         });
                       }}
@@ -556,7 +556,9 @@ export default function ClassesPage() {
                   className="mt-4 w-full rounded-xl bg-primary-50 px-3 py-2 text-right transition hover:bg-primary-100"
                 >
                   <p className="text-xs text-primary-600">תוכנית חובה</p>
-                  <p className="text-base font-medium text-primary-800">{c.examPath.label}</p>
+                  <p className="text-base font-medium text-primary-800">
+                    {c.examPath?.label ?? "ללא תוכנית"}
+                  </p>
                 </button>
                 <button
                   type="button"

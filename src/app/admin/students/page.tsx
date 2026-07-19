@@ -270,7 +270,7 @@ function StudentsPageContent() {
           id: classId,
           name: student.class?.name ?? "ללא כיתה",
           gradeYear: meta?.gradeYear ?? null,
-          examPathLabel: student.class?.examPath.label ?? null,
+          examPathLabel: student.class?.examPath?.label ?? null,
           students: [],
         });
       }
