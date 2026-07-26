@@ -9,15 +9,13 @@ import {
   listTracks,
 } from "@/lib/firestore";
 import {
-  calcPartialWeightedSubItemScore,
-  calcWeightedComponentScore,
-  calcWeightedSubItemScore,
-  hasSeparateComponentGrades,
-  hasSubItemGrades,
+  formatSubItemProgressLabel,
+  getObligationSubItemProgress,
   isObligationSubItemsComplete,
-  normalizeComponents,
-  normalizeSubItems,
+  resolveObligationGradeScore,
+  roundGradeScore,
 } from "@/lib/grade-components";
+import { calcSubjectProgressForObligations } from "@/lib/progress";
 import {
   findTrackSubject,
   loadSubjectContext,
@@ -262,7 +260,8 @@ function shortObligationLabel(ob: Obligation): string {
 
 function resolveObligationScore(
   obligation: Obligation,
-  grade: Grade | undefined
+  grade: Grade | undefined,
+  studentGradeYear?: string | null
 ): { score: number | null; display: string | null; filled: boolean; status: SubmissionStatus | null } {
   if (!grade) {
     return { score: null, display: null, filled: false, status: null };
@@ -273,10 +272,6 @@ function resolveObligationScore(
     return { score: null, display: "פטור", filled: true, status };
   }
 
-  const subItems = normalizeSubItems(obligation.subItems);
-  const components = normalizeComponents(obligation.components);
-  const usesSubItems = hasSubItemGrades(subItems);
-
   if (grade.qualitativeLevel) {
     return {
       score: null,
@@ -286,43 +281,58 @@ function resolveObligationScore(
     };
   }
 
-  let score: number | null = null;
-  if (usesSubItems) {
-    const complete = isObligationSubItemsComplete(
-      { subItems: obligation.subItems },
-      grade
-    );
-    score = complete
-      ? calcWeightedSubItemScore(subItems, grade.subItemScores)
-      : calcPartialWeightedSubItemScore(subItems, grade.subItemScores);
-    if (!complete && score == null) {
-      const entered = subItems.filter(
-        (s) => grade.subItemScores?.[s.sortOrder] != null
-      ).length;
-      if (entered > 0) {
-        return {
-          score: null,
-          display: `${entered}/${subItems.length}`,
-          filled: true,
-          status,
-        };
-      }
-    }
-  } else if (hasSeparateComponentGrades(components)) {
-    score = calcWeightedComponentScore(components, grade.componentScores);
-  } else {
-    score = grade.score ?? null;
+  const score = resolveObligationGradeScore(obligation, grade, {
+    studentGradeYear,
+    requireComplete: false,
+  });
+
+  const subItemsComplete = isObligationSubItemsComplete(
+    obligation,
+    grade,
+    studentGradeYear
+  );
+  const subItemProgress = getObligationSubItemProgress(
+    obligation,
+    grade,
+    studentGradeYear
+  );
+  const showPartialProgress =
+    subItemProgress != null &&
+    subItemProgress.enteredCount > 0 &&
+    !subItemsComplete;
+
+  if (showPartialProgress && score == null) {
+    return {
+      score: null,
+      display: formatSubItemProgressLabel(
+        subItemProgress.enteredCount,
+        subItemProgress.totalCount
+      ),
+      filled: true,
+      status,
+    };
   }
 
   const filled =
     score != null ||
     status === "GRADED" ||
     status === "SUBMITTED" ||
-    status === "MISSING";
+    status === "MISSING" ||
+    showPartialProgress;
 
   return {
     score,
-    display: score != null ? String(Math.round(score * 10) / 10) : filled ? "—" : null,
+    display:
+      score != null
+        ? String(roundGradeScore(score))
+        : showPartialProgress
+          ? formatSubItemProgressLabel(
+              subItemProgress!.enteredCount,
+              subItemProgress!.totalCount
+            )
+          : filled
+            ? "—"
+            : null,
     filled: score != null || filled,
     status,
   };
@@ -332,13 +342,13 @@ function summarizeSubjectForStudent(
   subject: SubjectWithObligations,
   layerGradeYear: string | null,
   gradesMap: Map<string, Grade>,
-  studentId: string
+  studentId: string,
+  studentGradeYear?: string | null
 ): OverviewCell {
-  const obIds = subject.obligations
-    .filter((o) => isObligationDueForStudent(o.gradeYear, layerGradeYear))
-    .map((o) => o.id);
+  // כמו כרטיס התלמיד: שקלול על כל מטלות המקצוע (לא ממוצע פשוט)
+  const obligations = subject.obligations;
 
-  if (obIds.length === 0) {
+  if (obligations.length === 0) {
     return {
       display: null,
       score: null,
@@ -349,35 +359,64 @@ function summarizeSubjectForStudent(
     };
   }
 
+  const grades = obligations.map((o) => {
+    const g = gradesMap.get(`${studentId}:${o.id}`);
+    return {
+      obligationId: o.id,
+      score: g?.score ?? null,
+      qualitativeLevel: g?.qualitativeLevel ?? null,
+      componentScores: g?.componentScores ?? null,
+      subItemScores: g?.subItemScores ?? null,
+      componentWeightOverrides: g?.componentWeightOverrides ?? null,
+      subItemWeightOverrides: g?.subItemWeightOverrides ?? null,
+      status: g?.status ?? "NOT_STARTED",
+    };
+  });
+
+  const dueObligations = obligations.filter((o) =>
+    isObligationDueForStudent(o.gradeYear, layerGradeYear)
+  );
   let filled = 0;
-  let scoreSum = 0;
-  let scoreCount = 0;
-  for (const obId of obIds) {
-    const grade = gradesMap.get(`${studentId}:${obId}`);
-    const obligation = subject.obligations.find((o) => o.id === obId);
-    if (!obligation) continue;
-    const resolved = resolveObligationScore(obligation, grade);
+  for (const obligation of dueObligations) {
+    const grade = gradesMap.get(`${studentId}:${obligation.id}`);
+    const resolved = resolveObligationScore(
+      obligation,
+      grade,
+      studentGradeYear ?? layerGradeYear
+    );
     if (resolved.filled) filled++;
-    if (resolved.score != null) {
-      scoreSum += resolved.score;
-      scoreCount++;
-    }
   }
 
-  const avg = scoreCount > 0 ? Math.round((scoreSum / scoreCount) * 10) / 10 : null;
   const isSocial = isSocialInvolvementSubject(subject);
-  const display = isSocial
-    ? `${filled}/${obIds.length}`
-    : avg != null
-      ? String(avg)
-      : `${filled}/${obIds.length}`;
+  if (isSocial) {
+    return {
+      display: `${filled}/${dueObligations.length || obligations.length}`,
+      score: null,
+      status: null,
+      relevant: true,
+      filled: filled > 0,
+      subjectId: subject.id,
+    };
+  }
+
+  /** שקלול לפי אחוזי המטלות + עיגול שלם — כמו בכרטיס התלמיד */
+  const progress = calcSubjectProgressForObligations(
+    obligations,
+    grades,
+    undefined,
+    subject
+  );
+  const estimatedGrade = progress.estimatedGrade;
 
   return {
-    display,
-    score: avg,
+    display:
+      estimatedGrade != null
+        ? String(estimatedGrade)
+        : `${filled}/${dueObligations.length || obligations.length}`,
+    score: estimatedGrade,
     status: null,
     relevant: true,
-    filled: filled > 0,
+    filled: filled > 0 || estimatedGrade != null,
     subjectId: subject.id,
   };
 }
@@ -705,7 +744,8 @@ export async function getOverviewGrid(opts: {
             subject,
             layerGradeYear,
             gradesMap,
-            ms.student.id
+            ms.student.id,
+            ms.cls.gradeYear
           );
           if (cell.filled) filledCells++;
           cells[col.key] = cell;
@@ -738,7 +778,11 @@ export async function getOverviewGrid(opts: {
           }
           relevantCells++;
           const grade = gradesMap.get(`${ms.student.id}:${obligation.id}`);
-          const resolved = resolveObligationScore(obligation, grade);
+          const resolved = resolveObligationScore(
+            obligation,
+            grade,
+            ms.cls.gradeYear
+          );
           if (resolved.filled) filledCells++;
           cells[col.key] = {
             display: resolved.display,
