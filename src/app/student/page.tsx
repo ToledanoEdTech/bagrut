@@ -88,7 +88,7 @@ export default function StudentDashboard() {
           <ProgressBar
             value={data.overallProgress}
             className="mt-2.5 h-3 bg-white/20"
-            color="success"
+            color="onDark"
           />
         </div>
       </div>

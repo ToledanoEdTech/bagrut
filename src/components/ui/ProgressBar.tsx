@@ -7,12 +7,14 @@ export function ProgressBar({
 }: {
   value: number;
   className?: string;
-  color?: "primary" | "success" | "warning";
+  color?: "primary" | "success" | "warning" | "onDark";
 }) {
   const fills = {
     primary: "from-primary-500 to-brand-600",
     success: "from-emerald-500 to-teal-500",
     warning: "from-amber-500 to-orange-500",
+    /** High-contrast fill for dark teal/brand hero backgrounds */
+    onDark: "from-amber-300 to-yellow-200",
   };
 
   const clamped = Math.min(100, Math.max(0, value));

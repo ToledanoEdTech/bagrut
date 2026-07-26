@@ -237,7 +237,11 @@ export function StudentDashboardContent({
               <span>התקדמות כללית</span>
               <span className="font-bold">{data.overallProgress.toFixed(0)}%</span>
             </div>
-            <ProgressBar value={data.overallProgress} className="mt-2 h-3" color="success" />
+            <ProgressBar
+              value={data.overallProgress}
+              className="mt-2 h-3 bg-white/20"
+              color="onDark"
+            />
           </div>
           <div className="shrink-0 rounded-2xl bg-white/15 px-5 py-3 text-center ring-1 ring-white/25 backdrop-blur-sm">
             <p className="text-4xl font-extrabold tabular-nums text-white">
