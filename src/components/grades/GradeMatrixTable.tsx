@@ -3,7 +3,13 @@
 import { useRef, useCallback, useSyncExternalStore } from "react";
 import { RotateCcw } from "lucide-react";
 import { STATUS_LABELS, SUBMISSION_STATUSES, hasClearableGradeEntry } from "@/lib/grade-status";
-import { calcWeightedComponentScore, hasSeparateComponentGrades } from "@/lib/grade-components";
+import {
+  applyWeightOverrides,
+  calcPartialWeightedItemScore,
+  calcWeightedComponentScore,
+  hasSeparateComponentGrades,
+  isWeightedScoreComplete,
+} from "@/lib/grade-components";
 import {
   SOCIAL_INVOLVEMENT_LABELS,
   SOCIAL_INVOLVEMENT_LEVELS,
@@ -38,8 +44,11 @@ export type MatrixRow = {
   studentName: string;
   className?: string | null;
   score: number | null;
+  /** ציון משוקלל כמו בכרטיס התלמיד (כשמוצגים רכיבים מרובים) */
+  resolvedScore?: number | null;
   qualitativeLevel?: QualitativeLevel | null;
   componentScores?: Record<number, number | null> | null;
+  componentWeightOverrides?: Record<number, number> | null;
   status: SubmissionStatus;
 };
 
@@ -96,6 +105,18 @@ function ClearButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+/** אותו כלל כמו resolveObligationGradeScore לציון משוקלל מרכיבים */
+function resolveMatrixWeightedScore(
+  components: MatrixComponent[],
+  row: MatrixRow
+): number | null {
+  const effective = applyWeightOverrides(components, row.componentWeightOverrides);
+  if (isWeightedScoreComplete(effective, row.componentScores)) {
+    return calcWeightedComponentScore(effective, row.componentScores);
+  }
+  return calcPartialWeightedItemScore(effective, row.componentScores);
+}
+
 export function GradeMatrixTable({
   rows,
   components = [],
@@ -140,7 +161,7 @@ export function GradeMatrixTable({
       <div className="space-y-3">
         {rows.map((row, index) => {
           const weightedScore = multiComponent
-            ? calcWeightedComponentScore(components, row.componentScores)
+            ? resolveMatrixWeightedScore(components, row)
             : row.score;
           const canClear = hasClearableGradeEntry(row);
 
@@ -324,7 +345,7 @@ export function GradeMatrixTable({
         <tbody>
           {rows.map((row, index) => {
             const weightedScore = multiComponent
-              ? calcWeightedComponentScore(components, row.componentScores)
+              ? resolveMatrixWeightedScore(components, row)
               : row.score;
             const canClear = hasClearableGradeEntry(row);
 

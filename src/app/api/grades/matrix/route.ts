@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   findObligation,
+  getClassById,
   getGradesByStudentsAndObligation,
   getStudentById,
   listClassesSimple,
@@ -12,14 +13,11 @@ import {
   isObligationRelevantForStudent,
 } from "@/lib/grade-matrix";
 import {
-  calcPartialWeightedSubItemScore,
-  calcWeightedComponentScore,
-  calcWeightedSubItemScore,
   hasSeparateComponentGrades,
   hasSubItemGrades,
-  isObligationSubItemsComplete,
   normalizeComponents,
   normalizeSubItems,
+  resolveObligationGradeScore,
   validateComponentScores,
   validateSubItemScores,
   type MatrixTaskKind,
@@ -169,6 +167,8 @@ export async function PUT(req: NextRequest) {
     qualitativeLevel: QualitativeLevel | null;
     componentScores: Record<number, number | null> | null;
     subItemScores: Record<number, number | null> | null;
+    componentWeightOverrides: Record<number, number> | null;
+    subItemWeightOverrides: Record<number, number> | null;
     status: SubmissionStatus;
     notes: string | null;
   }> = [];
@@ -204,6 +204,10 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "סטטוס לא חוקי" }, { status: 400 });
     }
 
+    const existing = existingGrades.get(entry.studentId);
+    const componentWeightOverrides = existing?.componentWeightOverrides ?? null;
+    const subItemWeightOverrides = existing?.subItemWeightOverrides ?? null;
+
     if (isSocial) {
       const qualitativeLevel = entry.qualitativeLevel ?? null;
       if (qualitativeLevel != null && !isValidQualitativeLevel(qualitativeLevel)) {
@@ -216,6 +220,8 @@ export async function PUT(req: NextRequest) {
         qualitativeLevel,
         componentScores: null,
         subItemScores: null,
+        componentWeightOverrides: null,
+        subItemWeightOverrides: null,
         status: entry.status as SubmissionStatus,
         notes: entry.notes ?? null,
       });
@@ -223,12 +229,12 @@ export async function PUT(req: NextRequest) {
     }
 
     const score = entry.score ?? null;
-    const existing = existingGrades.get(entry.studentId);
 
     let componentScores: Record<number, number | null> | null =
       existing?.componentScores ?? null;
     let subItemScores: Record<number, number | null> | null =
       existing?.subItemScores ?? null;
+    let topLevelScore: number | null = existing?.score ?? null;
 
     if (editingSingleTask && taskKind === "subItem") {
       if (!validateScore(score)) {
@@ -252,6 +258,16 @@ export async function PUT(req: NextRequest) {
       if (!validateScore(score)) {
         return NextResponse.json({ error: "ציון לא חוקי (0–100)" }, { status: 400 });
       }
+      topLevelScore = score;
+      // סנכרון לרכיב יחיד אם קיים — כמו כרטיס התלמיד
+      if (components.length === 1) {
+        const only = components[0]!;
+        if (score == null) {
+          componentScores = null;
+        } else {
+          componentScores = { [only.sortOrder]: score };
+        }
+      }
     } else if (usesSubItems) {
       subItemScores = entry.subItemScores ?? null;
       if (!validateSubItemScores(subItemScores)) {
@@ -264,28 +280,38 @@ export async function PUT(req: NextRequest) {
       }
     } else if (!validateScore(score)) {
       return NextResponse.json({ error: "ציון לא חוקי (0–100)" }, { status: 400 });
+    } else {
+      topLevelScore = score;
     }
 
-    let resolvedScore: number | null = score;
-    if (usesSubItems) {
-      const complete = isObligationSubItemsComplete(
-        { subItems: found.obligation.subItems },
-        { subItemScores }
-      );
-      resolvedScore = complete
-        ? calcWeightedSubItemScore(subItems, subItemScores)
-        : calcPartialWeightedSubItemScore(subItems, subItemScores);
-    } else if (multiComponent) {
-      resolvedScore = calcWeightedComponentScore(components, componentScores);
-    }
+    const studentClass = await getClassById(student.classId);
+    const studentGradeYear = studentClass?.gradeYear ?? null;
+
+    const resolvedScore = resolveObligationGradeScore(
+      found.obligation,
+      {
+        score: topLevelScore,
+        componentScores,
+        subItemScores,
+        componentWeightOverrides,
+        subItemWeightOverrides,
+      },
+      { studentGradeYear, requireComplete: false }
+    );
 
     validated.push({
       studentId: entry.studentId,
       obligationId,
       score: resolvedScore,
       qualitativeLevel: null,
-      componentScores: multiComponent && !usesSubItems ? componentScores : null,
+      componentScores: usesSubItems
+        ? null
+        : multiComponent || components.length === 1
+          ? componentScores
+          : null,
       subItemScores: usesSubItems ? subItemScores : null,
+      componentWeightOverrides,
+      subItemWeightOverrides,
       status: entry.status as SubmissionStatus,
       notes: entry.notes ?? null,
     });

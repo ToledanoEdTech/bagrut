@@ -43,6 +43,7 @@ type TemplateData = {
         sortOrder: number;
         taskName: string;
         taskKind: "single" | "component" | "subItem";
+        weightPercent: number;
       }>;
     }>;
   }>;
@@ -356,6 +357,7 @@ export default function GradesImportPage() {
           <h2 className="text-lg font-semibold">העלאת קובץ ציונים</h2>
           <p className="mt-2 text-sm text-slate-500">
             הקובץ צריך לכלול: כיתה, מקצוע, מטלה, שם תלמיד, ציון/הערכה, סטטוס.
+            ניתן גם למלא את עמודת «אחוז שקלול (%)» כדי לשנות את יחס הרכיבים (למשל בחינה/הגשה) בהזנה ספציפית בלבד — ברירת המחדל היא האחוז שהוגדר במטלה.
             למעורבות חברתית בעמודת הציון יש להזין: לא עבר, עבר, עבר בהצלחה או עבר בהצטיינות.
             (ובמידת הצורך גם רכיב/תת-מטלה)
             כדי למחוק ציון שהוזן בטעות — השאירו את תא הציון ריק ובסטטוס בחרו «לא התחיל».

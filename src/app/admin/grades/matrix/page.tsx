@@ -90,9 +90,12 @@ type MatrixData = {
     className?: string;
     grade: {
       score: number | null;
+      resolvedScore?: number | null;
       qualitativeLevel?: QualitativeLevel | null;
       componentScores?: Record<number, number | null> | null;
       subItemScores?: Record<number, number | null> | null;
+      componentWeightOverrides?: Record<number, number> | null;
+      subItemWeightOverrides?: Record<number, number> | null;
       status: SubmissionStatus;
       notes: string | null;
     } | null;
@@ -260,7 +263,10 @@ function GradesMatrixPageContent() {
       studentName: r.studentName,
       className: r.className ?? null,
       score: rowState[r.studentId]?.score ?? null,
+      resolvedScore: r.grade?.resolvedScore ?? null,
       qualitativeLevel: rowState[r.studentId]?.qualitativeLevel ?? null,
+      componentScores: r.grade?.componentScores ?? null,
+      componentWeightOverrides: r.grade?.componentWeightOverrides ?? null,
       status: rowState[r.studentId]?.status ?? "NOT_STARTED",
     }));
   }, [matrixData, rowState]);

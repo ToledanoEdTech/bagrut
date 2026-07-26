@@ -20,9 +20,6 @@ import {
   type SubjectContext,
 } from "@/lib/student-subjects";
 import {
-  calcPartialWeightedSubItemScore,
-  calcWeightedComponentScore,
-  calcWeightedSubItemScore,
   expandObligationMatrixTasks,
   formatSubItemProgressLabel,
   getObligationSubItemProgress,
@@ -31,6 +28,7 @@ import {
   isObligationSubItemsComplete,
   normalizeComponents,
   normalizeSubItems,
+  resolveObligationGradeScore,
   type MatrixTaskKind,
   type MatrixTaskOption,
 } from "@/lib/grade-components";
@@ -247,7 +245,7 @@ async function buildMatrixRows(
     found.obligation.id
   );
 
-  const { subItems, components, usesSubItems, tableComponents } = buildTableComponents(
+  const { usesSubItems, tableComponents } = buildTableComponents(
     found.obligation,
     taskKind,
     taskSortOrder
@@ -284,24 +282,26 @@ async function buildMatrixRows(
     rows: relevantStudents.map((ms) => {
       const s = ms.student;
       const grade = gradesMap.get(s.id);
-      let itemScore: number | null = null;
+      const studentGradeYear = ms.cls.gradeYear;
 
+      /** אותו חישוב כמו כרטיס התלמיד */
+      const resolvedScore = resolveObligationGradeScore(
+        found.obligation,
+        grade ?? {},
+        { studentGradeYear, requireComplete: false }
+      );
+
+      /**
+       * בתא העריכה: לרכיב/תת-מטלה — הציון הגולמי (כמו שדות ההזנה בכרטיס).
+       * אחרת — הציון המשוקלל המחושב מחדש (לא grade.score הישן).
+       */
+      let itemScore: number | null = null;
       if (taskKind === "subItem" && taskSortOrder != null) {
         itemScore = grade?.subItemScores?.[taskSortOrder] ?? null;
       } else if (taskKind === "component" && taskSortOrder != null) {
         itemScore = grade?.componentScores?.[taskSortOrder] ?? null;
-      } else if (usesSubItems) {
-        const complete = isObligationSubItemsComplete(
-          { subItems: found.obligation.subItems },
-          grade ?? {}
-        );
-        itemScore = complete
-          ? calcWeightedSubItemScore(subItems, grade?.subItemScores)
-          : calcPartialWeightedSubItemScore(subItems, grade?.subItemScores);
-      } else if (hasSeparateComponentGrades(components)) {
-        itemScore = calcWeightedComponentScore(components, grade?.componentScores);
       } else {
-        itemScore = grade?.score ?? null;
+        itemScore = resolvedScore;
       }
 
       return {
@@ -312,19 +312,22 @@ async function buildMatrixRows(
         grade: grade
           ? {
               score: itemScore,
+              resolvedScore,
               displayLabel:
                 usesSubItems && taskKind == null && taskSortOrder == null
                   ? (() => {
                       const progress = getObligationSubItemProgress(
-                        { subItems: found.obligation.subItems },
-                        grade
+                        found.obligation,
+                        grade,
+                        studentGradeYear
                       );
                       if (
                         progress &&
                         progress.enteredCount > 0 &&
                         !isObligationSubItemsComplete(
-                          { subItems: found.obligation.subItems },
-                          grade
+                          found.obligation,
+                          grade,
+                          studentGradeYear
                         )
                       ) {
                         return formatSubItemProgressLabel(
@@ -337,6 +340,8 @@ async function buildMatrixRows(
                   : null,
               componentScores: grade.componentScores ?? null,
               subItemScores: grade.subItemScores ?? null,
+              componentWeightOverrides: grade.componentWeightOverrides ?? null,
+              subItemWeightOverrides: grade.subItemWeightOverrides ?? null,
               qualitativeLevel: grade.qualitativeLevel ?? null,
               status: grade.status,
               notes: grade.notes,

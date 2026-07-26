@@ -147,6 +147,15 @@ export interface Grade {
   qualitativeLevel?: QualitativeLevel | null;
   componentScores?: Record<number, number | null> | null;
   subItemScores?: Record<number, number | null> | null;
+  /**
+   * Override לאחוזי שקלול רכיבים בהזנה זו בלבד (מפתח = sortOrder).
+   * חסר = משתמשים באחוז מברירת המחדל של המטלה.
+   */
+  componentWeightOverrides?: Record<number, number> | null;
+  /**
+   * Override לאחוזי שקלול תתי-מטלות בהזנה זו בלבד (מפתח = sortOrder).
+   */
+  subItemWeightOverrides?: Record<number, number> | null;
   status: SubmissionStatus;
   notes: string | null;
 }

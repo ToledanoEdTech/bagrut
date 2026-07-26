@@ -152,6 +152,8 @@ export function emptyGradeFields(): {
   qualitativeLevel: null;
   componentScores: null;
   subItemScores: null;
+  componentWeightOverrides: null;
+  subItemWeightOverrides: null;
   status: "NOT_STARTED";
   notes: null;
 } {
@@ -160,6 +162,8 @@ export function emptyGradeFields(): {
     qualitativeLevel: null,
     componentScores: null,
     subItemScores: null,
+    componentWeightOverrides: null,
+    subItemWeightOverrides: null,
     status: "NOT_STARTED",
     notes: null,
   };

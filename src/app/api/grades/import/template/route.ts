@@ -97,11 +97,24 @@ export async function GET(req: NextRequest) {
           return {
             id: o.id,
             label: obligationDisplayLabel(o),
-            tasks: tasks.map((t) => ({
-              sortOrder: t.sortOrder,
-              taskName: t.taskName,
-              taskKind: t.taskKind,
-            })),
+            tasks: tasks.map((t) => {
+              const weightFromOb =
+                t.taskKind === "subItem"
+                  ? o.subItems.find((si) => si.sortOrder === t.sortOrder)
+                      ?.weightPercent
+                  : t.taskKind === "component"
+                    ? o.components.find((c) => c.sortOrder === t.sortOrder)
+                        ?.weightPercent
+                    : o.subItems[0]?.weightPercent ??
+                      o.components[0]?.weightPercent ??
+                      100;
+              return {
+                sortOrder: t.sortOrder,
+                taskName: t.taskName,
+                taskKind: t.taskKind,
+                weightPercent: weightFromOb ?? 100,
+              };
+            }),
           };
         })
         .sort((a, b) => a.label.localeCompare(b.label, "he")),

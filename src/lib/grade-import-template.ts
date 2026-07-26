@@ -101,12 +101,44 @@ export function buildGradeImportTemplateRows(params: {
             }
           }
 
+          let weightPercent: number | string = "";
+          if (!isSocial) {
+            if (task.taskKind === "component") {
+              weightPercent =
+                grade?.componentWeightOverrides?.[task.sortOrder] ??
+                ob.components.find((c) => c.sortOrder === task.sortOrder)
+                  ?.weightPercent ??
+                "";
+            } else if (task.taskKind === "subItem") {
+              weightPercent =
+                grade?.subItemWeightOverrides?.[task.sortOrder] ??
+                ob.subItems.find((s) => s.sortOrder === task.sortOrder)
+                  ?.weightPercent ??
+                "";
+            } else {
+              const only =
+                ob.subItems[0] ??
+                ob.components[0] ??
+                null;
+              if (only) {
+                const override =
+                  ob.subItems.length > 0
+                    ? grade?.subItemWeightOverrides?.[only.sortOrder]
+                    : grade?.componentWeightOverrides?.[only.sortOrder];
+                weightPercent = override ?? only.weightPercent;
+              } else {
+                weightPercent = 100;
+              }
+            }
+          }
+
           rows.push({
             className,
             subjectName: subject.displayName,
             obligationName: obligationDisplayLabel(ob),
             taskName: displayTaskName,
             studentName: student.name,
+            weightPercent,
             score,
             status: statusLabel,
           });

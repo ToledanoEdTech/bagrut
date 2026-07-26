@@ -26,6 +26,8 @@ type ProgressGrade = {
   qualitativeLevel?: QualitativeLevel | null;
   componentScores?: Record<number, number | null> | null;
   subItemScores?: Record<number, number | null> | null;
+  componentWeightOverrides?: Record<number, number> | null;
+  subItemWeightOverrides?: Record<number, number> | null;
   status: string;
 };
 
@@ -102,7 +104,8 @@ export function calcSubjectProgress(
 
   const totalWeight = obligations.reduce((s, o) => s + o.weightPercent, 0);
   const progressPercent = totalWeight > 0 ? (completedWeight / totalWeight) * 100 : 0;
-  const estimatedGrade = scoredWeight > 0 ? (scoredSum / scoredWeight) * 100 : null;
+  const rawEstimated = scoredWeight > 0 ? (scoredSum / scoredWeight) * 100 : null;
+  const estimatedGrade = rawEstimated == null ? null : Math.round(rawEstimated);
   const isFinal = allFinal && estimatedGrade != null;
 
   return {

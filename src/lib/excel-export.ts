@@ -511,6 +511,7 @@ const IMPORT_COLUMNS = [
   { header: "מקצוע", key: "subjectName", width: 18 },
   { header: "מטלה", key: "obligationName", width: 28 },
   { header: "שם תלמיד", key: "studentName", width: 20 },
+  { header: "אחוז שקלול (%)", key: "weightPercent", width: 14 },
   { header: "ציון", key: "score", width: 10 },
   { header: "סטטוס", key: "status", width: 14 },
 ] as const;
@@ -518,6 +519,7 @@ const IMPORT_COLUMNS = [
 export type GradesImportTemplateTask = {
   taskName: string;
   taskKind: "single" | "component" | "subItem";
+  weightPercent: number;
 };
 
 export type GradesImportTemplateInput = {
@@ -590,6 +592,7 @@ export type FullGradesTemplateRow = {
   obligationName: string;
   taskName: string;
   studentName: string;
+  weightPercent: number | string;
   score: number | string;
   status: string;
 };
@@ -600,6 +603,7 @@ const FULL_GRADES_COLUMNS = [
   { header: "מטלה", key: "obligationName", width: 26 },
   { header: "רכיב/תת-מטלה", key: "taskName", width: 20 },
   { header: "שם תלמיד", key: "studentName", width: 20 },
+  { header: "אחוז שקלול (%)", key: "weightPercent", width: 14 },
   { header: "ציון", key: "score", width: 10 },
   { header: "סטטוס", key: "status", width: 14 },
 ] as const;
@@ -672,9 +676,22 @@ export async function downloadFullGradesTemplate(
   });
 
   const lastDataRow = dataStartRow + Math.max(input.rows.length, 1) - 1;
-  applyListValidation(ws, "G", dataStartRow, lastDataRow, statusRange);
+  applyListValidation(ws, "H", dataStartRow, lastDataRow, statusRange);
   (ws as WorksheetWithValidations).dataValidations.add(
     `F${dataStartRow}:F${lastDataRow}`,
+    {
+      type: "decimal",
+      operator: "between",
+      allowBlank: true,
+      formulae: [0, 100],
+      showErrorMessage: true,
+      errorStyle: "warning",
+      errorTitle: "אחוז לא תקין",
+      error: "אחוז השקלול חייב להיות בין 0 ל-100",
+    }
+  );
+  (ws as WorksheetWithValidations).dataValidations.add(
+    `G${dataStartRow}:G${lastDataRow}`,
     {
       type: "decimal",
       operator: "between",
@@ -871,6 +888,7 @@ export async function downloadGradesImportTemplate(
     subjectName: string;
     obligationName: string;
     studentName: string;
+    weightPercent: number | string;
     score: string;
     status: string;
     taskName?: string;
@@ -887,17 +905,21 @@ export async function downloadGradesImportTemplate(
             obligationName: input.prefilledObligation ?? "",
             taskName: task.taskName,
             studentName,
+            weightPercent: task.weightPercent,
             score: "",
             status: "",
           });
         }
       }
     } else {
+      const defaultWeight =
+        tasks.length === 1 ? tasks[0]!.weightPercent : "";
       prefilledRows = input.students.map((studentName) => ({
         className: input.prefilledClass ?? "",
         subjectName: input.prefilledSubject ?? "",
         obligationName: input.prefilledObligation ?? "",
         studentName,
+        weightPercent: defaultWeight,
         score: "",
         status: "",
       }));
@@ -936,9 +958,22 @@ export async function downloadGradesImportTemplate(
     if (studentRange) {
       applyListValidation(ws, "E", dataStartRow, lastDataRow, studentRange);
     }
-    applyListValidation(ws, "G", dataStartRow, lastDataRow, statusRange);
+    applyListValidation(ws, "H", dataStartRow, lastDataRow, statusRange);
     (ws as WorksheetWithValidations).dataValidations.add(
       `F${dataStartRow}:F${lastDataRow}`,
+      {
+        type: "decimal",
+        operator: "between",
+        allowBlank: true,
+        formulae: [0, 100],
+        showErrorMessage: true,
+        errorStyle: "warning",
+        errorTitle: "אחוז לא תקין",
+        error: "אחוז השקלול חייב להיות בין 0 ל-100",
+      }
+    );
+    (ws as WorksheetWithValidations).dataValidations.add(
+      `G${dataStartRow}:G${lastDataRow}`,
       {
         type: "decimal",
         operator: "between",
@@ -957,9 +992,22 @@ export async function downloadGradesImportTemplate(
     if (studentRange) {
       applyListValidation(ws, "D", dataStartRow, lastDataRow, studentRange);
     }
-    applyListValidation(ws, "F", dataStartRow, lastDataRow, statusRange);
+    applyListValidation(ws, "G", dataStartRow, lastDataRow, statusRange);
     (ws as WorksheetWithValidations).dataValidations.add(
       `E${dataStartRow}:E${lastDataRow}`,
+      {
+        type: "decimal",
+        operator: "between",
+        allowBlank: true,
+        formulae: [0, 100],
+        showErrorMessage: true,
+        errorStyle: "warning",
+        errorTitle: "אחוז לא תקין",
+        error: "אחוז השקלול חייב להיות בין 0 ל-100",
+      }
+    );
+    (ws as WorksheetWithValidations).dataValidations.add(
+      `F${dataStartRow}:F${lastDataRow}`,
       {
         type: "decimal",
         operator: "between",

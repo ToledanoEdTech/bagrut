@@ -19,7 +19,10 @@ import {
 import { parseStatusInput, validateScore, autoStatusOnScore } from "@/lib/grade-status";
 import {
   expandObligationMatrixTasks,
+  formatWeightPartsBreakdown,
+  obligationDisplayLabel,
   resolveObligationGradeScore,
+  validateObligationEffectiveWeightSum,
 } from "@/lib/grade-components";
 import {
   isSocialInvolvementSubject,
@@ -38,6 +41,9 @@ type ImportRow = {
   qualitativeLevel: QualitativeLevel | null;
   status: SubmissionStatus | null;
   hasScoreCol: boolean;
+  /** undefined = העמודה לא קיימת/לא נגעו; null = ריק (חזרה לברירת מחדל); number = override */
+  weightPercent: number | null | undefined;
+  hasWeightCol: boolean;
 };
 
 function findColumn(row: Record<string, string>, ...keys: string[]): string {
@@ -124,6 +130,7 @@ export async function POST(req: NextRequest) {
         "הערכה",
         "סטטוס",
         "רכיב/תת-מטלה",
+        "אחוז שקלול (%)",
       ],
     });
   } catch (e) {
@@ -165,7 +172,20 @@ export async function POST(req: NextRequest) {
     const studentName = findColumn(row, "שם תלמיד", "שם", "name", "Name");
     const scoreRaw = findColumn(row, "ציון", "הערכה", "score", "Score");
     const statusRaw = findColumn(row, "סטטוס", "status", "Status");
+    const weightRaw = findColumn(
+      row,
+      "אחוז שקלול (%)",
+      "אחוז שקלול",
+      "אחוז",
+      "weightPercent",
+      "weight",
+      "Weight"
+    );
     const scoreCellEmpty = !scoreRaw || scoreRaw === "-";
+    const hasWeightKey = Object.keys(row).some((k) =>
+      /אחוז|weight/i.test(k)
+    );
+    const weightCellEmpty = !weightRaw || weightRaw === "-";
 
     if (!className && !subjectName && !obligationName && !studentName) {
       return;
@@ -214,6 +234,24 @@ export async function POST(req: NextRequest) {
       return;
     }
 
+    let weightPercent: number | null | undefined = undefined;
+    if (hasWeightKey) {
+      if (weightCellEmpty) {
+        weightPercent = null;
+      } else {
+        const parsed = parseFloat(weightRaw.replace(",", ".").replace(/%/g, ""));
+        if (isNaN(parsed) || parsed < 0 || parsed > 100) {
+          parsedRows.push({
+            rowNum,
+            data: null,
+            error: "אחוז שקלול לא חוקי (0–100)",
+          });
+          return;
+        }
+        weightPercent = parsed;
+      }
+    }
+
     parsedRows.push({
       rowNum,
       data: {
@@ -226,6 +264,8 @@ export async function POST(req: NextRequest) {
         qualitativeLevel,
         status,
         hasScoreCol: !scoreCellEmpty,
+        weightPercent,
+        hasWeightCol: hasWeightKey,
       },
     });
   });
@@ -240,6 +280,7 @@ export async function POST(req: NextRequest) {
 
   type Aggregate = {
     studentId: string;
+    studentName: string;
     obligationId: string;
     classId: string;
     subjectId: string;
@@ -249,9 +290,13 @@ export async function POST(req: NextRequest) {
     qualitativeLevel: QualitativeLevel | null;
     componentScores: Record<number, number | null>;
     subItemScores: Record<number, number | null>;
+    componentWeightOverrides: Record<number, number>;
+    subItemWeightOverrides: Record<number, number>;
     status: SubmissionStatus;
     explicitStatus: boolean;
     touched: boolean;
+    /** שורות בקובץ שתרמו לאגרגציה — להודעות שגיאה */
+    rowNums: number[];
   };
 
   const aggregates = new Map<string, Aggregate>();
@@ -372,6 +417,7 @@ export async function POST(req: NextRequest) {
       const existing = existingByKey.get(key);
       agg = {
         studentId: student.id,
+        studentName: student.name,
         obligationId: obligation.id,
         classId: cls.id,
         subjectId: subject.id,
@@ -381,12 +427,16 @@ export async function POST(req: NextRequest) {
         qualitativeLevel: existing?.qualitativeLevel ?? null,
         componentScores: { ...(existing?.componentScores ?? {}) },
         subItemScores: { ...(existing?.subItemScores ?? {}) },
+        componentWeightOverrides: { ...(existing?.componentWeightOverrides ?? {}) },
+        subItemWeightOverrides: { ...(existing?.subItemWeightOverrides ?? {}) },
         status: (existing?.status as SubmissionStatus) ?? "NOT_STARTED",
         explicitStatus: false,
         touched: false,
+        rowNums: [],
       };
       aggregates.set(key, agg);
     }
+    if (!agg.rowNums.includes(rowNum)) agg.rowNums.push(rowNum);
 
     if (clearToUnentered) {
       if (isSocial || target.kind === "single" || target.kind === "ambiguous") {
@@ -394,13 +444,17 @@ export async function POST(req: NextRequest) {
         agg.qualitativeLevel = null;
         agg.componentScores = {};
         agg.subItemScores = {};
+        agg.componentWeightOverrides = {};
+        agg.subItemWeightOverrides = {};
       } else if (target.kind === "component") {
         delete agg.componentScores[target.sortOrder];
+        delete agg.componentWeightOverrides[target.sortOrder];
         if (Object.values(agg.componentScores).every((s) => s == null)) {
           agg.score = null;
         }
       } else {
         delete agg.subItemScores[target.sortOrder];
+        delete agg.subItemWeightOverrides[target.sortOrder];
         if (Object.values(agg.subItemScores).every((s) => s == null)) {
           agg.score = null;
         }
@@ -425,6 +479,72 @@ export async function POST(req: NextRequest) {
       agg.touched = true;
     }
 
+    if (
+      data.hasWeightCol &&
+      !isSocial &&
+      target.kind !== "ambiguous"
+    ) {
+      const defaultWeightForTarget = (): number | null => {
+        if (target.kind === "component") {
+          return (
+            obligation.components.find((c) => c.sortOrder === target.sortOrder)
+              ?.weightPercent ?? null
+          );
+        }
+        if (target.kind === "subItem") {
+          return (
+            obligation.subItems.find((s) => s.sortOrder === target.sortOrder)
+              ?.weightPercent ?? null
+          );
+        }
+        const tasks = expandObligationMatrixTasks(obligation, 0);
+        const only = tasks[0];
+        if (!only) return 100;
+        if (only.taskKind === "subItem") {
+          return (
+            obligation.subItems.find((s) => s.sortOrder === only.sortOrder)
+              ?.weightPercent ?? 100
+          );
+        }
+        return (
+          obligation.components.find((c) => c.sortOrder === only.sortOrder)
+            ?.weightPercent ?? 100
+        );
+      };
+
+      const applyWeight = (
+        kind: "component" | "subItem",
+        sortOrder: number,
+        value: number | null
+      ) => {
+        const defaults = defaultWeightForTarget();
+        const effective =
+          value == null || (defaults != null && value === defaults) ? null : value;
+        if (kind === "component") {
+          if (effective == null) delete agg.componentWeightOverrides[sortOrder];
+          else agg.componentWeightOverrides[sortOrder] = effective;
+        } else {
+          if (effective == null) delete agg.subItemWeightOverrides[sortOrder];
+          else agg.subItemWeightOverrides[sortOrder] = effective;
+        }
+      };
+
+      if (target.kind === "component") {
+        applyWeight("component", target.sortOrder, data.weightPercent ?? null);
+      } else if (target.kind === "subItem") {
+        applyWeight("subItem", target.sortOrder, data.weightPercent ?? null);
+      } else if (target.kind === "single") {
+        const tasks = expandObligationMatrixTasks(obligation, 0);
+        const only = tasks[0];
+        if (only?.taskKind === "subItem") {
+          applyWeight("subItem", only.sortOrder, data.weightPercent ?? null);
+        } else if (only) {
+          applyWeight("component", only.sortOrder, data.weightPercent ?? null);
+        }
+      }
+      agg.touched = true;
+    }
+
     if (data.status && !clearToUnentered) {
       agg.status = data.status;
       agg.explicitStatus = true;
@@ -432,55 +552,115 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const toUpsert = Array.from(aggregates.values())
-    .filter((agg) => agg.touched)
-    .map((agg) => {
-      const componentScores = Object.fromEntries(
-        Object.entries(agg.componentScores).filter(([, s]) => s != null)
-      ) as Record<number, number | null>;
-      const subItemScores = Object.fromEntries(
-        Object.entries(agg.subItemScores).filter(([, s]) => s != null)
-      ) as Record<number, number | null>;
+  const toUpsert: Array<{
+    studentId: string;
+    obligationId: string;
+    score: number | null;
+    qualitativeLevel: QualitativeLevel | null;
+    componentScores: Record<number, number | null> | null;
+    subItemScores: Record<number, number | null> | null;
+    componentWeightOverrides: Record<number, number> | null;
+    subItemWeightOverrides: Record<number, number> | null;
+    status: SubmissionStatus;
+    notes: null;
+  }> = [];
 
-      if (agg.isSocial) {
-        const status = agg.explicitStatus
-          ? agg.status
-          : agg.qualitativeLevel
-            ? autoStatusOnScore(0, agg.status)
-            : agg.status;
-        return {
-          studentId: agg.studentId,
-          obligationId: agg.obligationId,
-          score: null,
-          qualitativeLevel: agg.qualitativeLevel,
-          componentScores: null,
-          subItemScores: null,
-          status,
-          notes: null as null,
-        };
-      }
+  for (const agg of aggregates.values()) {
+    if (!agg.touched) continue;
 
-      const resolved = resolveObligationGradeScore(agg.obligation, {
-        score: agg.score,
-        componentScores,
-        subItemScores,
-      });
+    const componentScores = Object.fromEntries(
+      Object.entries(agg.componentScores).filter(([, s]) => s != null)
+    ) as Record<number, number | null>;
+    const subItemScores = Object.fromEntries(
+      Object.entries(agg.subItemScores).filter(([, s]) => s != null)
+    ) as Record<number, number | null>;
+    const componentWeightOverrides = Object.fromEntries(
+      Object.entries(agg.componentWeightOverrides).filter(
+        ([, w]) => w != null && !isNaN(w)
+      )
+    ) as Record<number, number>;
+    const subItemWeightOverrides = Object.fromEntries(
+      Object.entries(agg.subItemWeightOverrides).filter(
+        ([, w]) => w != null && !isNaN(w)
+      )
+    ) as Record<number, number>;
+
+    if (agg.isSocial) {
       const status = agg.explicitStatus
         ? agg.status
-        : autoStatusOnScore(resolved, agg.status);
-      return {
+        : agg.qualitativeLevel
+          ? autoStatusOnScore(0, agg.status)
+          : agg.status;
+      toUpsert.push({
         studentId: agg.studentId,
         obligationId: agg.obligationId,
-        score: agg.score,
-        qualitativeLevel: null,
-        componentScores:
-          Object.keys(componentScores).length > 0 ? componentScores : null,
-        subItemScores:
-          Object.keys(subItemScores).length > 0 ? subItemScores : null,
+        score: null,
+        qualitativeLevel: agg.qualitativeLevel,
+        componentScores: null,
+        subItemScores: null,
+        componentWeightOverrides: null,
+        subItemWeightOverrides: null,
         status,
-        notes: null as null,
-      };
+        notes: null,
+      });
+      continue;
+    }
+
+    const weightOverridesForCheck = {
+      componentWeightOverrides:
+        Object.keys(componentWeightOverrides).length > 0
+          ? componentWeightOverrides
+          : null,
+      subItemWeightOverrides:
+        Object.keys(subItemWeightOverrides).length > 0
+          ? subItemWeightOverrides
+          : null,
+    };
+
+    const weightCheck = validateObligationEffectiveWeightSum(
+      agg.obligation,
+      weightOverridesForCheck
+    );
+
+    if (weightCheck && !weightCheck.ok) {
+      const rowLabel =
+        agg.rowNums.length === 1
+          ? `שורה ${agg.rowNums[0]}`
+          : `שורות ${agg.rowNums.join(", ")}`;
+      const sumLabel = Number.isInteger(weightCheck.sum)
+        ? String(weightCheck.sum)
+        : String(Math.round(weightCheck.sum * 100) / 100);
+      errors.push(
+        `${rowLabel}: סכום אחוזי השקלול במטלה «${obligationDisplayLabel(agg.obligation)}» לתלמיד «${agg.studentName}» הוא ${sumLabel}% ולא 100% (${formatWeightPartsBreakdown(weightCheck.parts)}). יש לתקן כך שהסכום יהיה בדיוק 100%.`
+      );
+      skipped++;
+      continue;
+    }
+
+    const resolved = resolveObligationGradeScore(agg.obligation, {
+      score: agg.score,
+      componentScores,
+      subItemScores,
+      ...weightOverridesForCheck,
     });
+    const status = agg.explicitStatus
+      ? agg.status
+      : autoStatusOnScore(resolved, agg.status);
+    toUpsert.push({
+      studentId: agg.studentId,
+      obligationId: agg.obligationId,
+      score: resolved,
+      qualitativeLevel: null,
+      componentScores:
+        Object.keys(componentScores).length > 0 ? componentScores : null,
+      subItemScores:
+        Object.keys(subItemScores).length > 0 ? subItemScores : null,
+      componentWeightOverrides: weightOverridesForCheck.componentWeightOverrides,
+      subItemWeightOverrides: weightOverridesForCheck.subItemWeightOverrides,
+      status,
+      notes: null,
+    });
+  }
 
   let updated = 0;
   if (toUpsert.length > 0) {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { SubjectCard } from "@/components/subjects/SubjectCard";
-import { calcWeightedComponentScore, calcPartialWeightedSubItemScore, normalizeComponents, normalizeSubItems, resolveObligationGradeScore } from "@/lib/grade-components";
+import { calcWeightedComponentScore, calcPartialWeightedSubItemScore, normalizeComponents, normalizeSubItems, applyWeightOverrides, resolveObligationGradeScore, roundGradeScore } from "@/lib/grade-components";
 import { calcSubjectProgressForObligations } from "@/lib/progress";
 import { autoStatusOnScore, emptyGradeFields } from "@/lib/grade-status";
 import type { QualitativeLevel, SubmissionStatus } from "@/lib/types";
@@ -61,6 +61,8 @@ type Grade = {
   qualitativeLevel?: QualitativeLevel | null;
   componentScores?: Record<number, number | null> | null;
   subItemScores?: Record<number, number | null> | null;
+  componentWeightOverrides?: Record<number, number> | null;
+  subItemWeightOverrides?: Record<number, number> | null;
   status: string;
 };
 
@@ -70,6 +72,8 @@ type GradeRow = {
   qualitativeLevel?: QualitativeLevel | null;
   componentScores?: Record<number, number | null> | null;
   subItemScores?: Record<number, number | null> | null;
+  componentWeightOverrides?: Record<number, number> | null;
+  subItemWeightOverrides?: Record<number, number> | null;
   status: string;
 };
 
@@ -169,6 +173,8 @@ export default function GradesPage() {
       qualitativeLevel: g.qualitativeLevel ?? null,
       componentScores: g.componentScores ?? null,
       subItemScores: g.subItemScores ?? null,
+      componentWeightOverrides: g.componentWeightOverrides ?? null,
+      subItemWeightOverrides: g.subItemWeightOverrides ?? null,
       status: g.status,
     }));
     setGrades(initial);
@@ -276,7 +282,13 @@ export default function GradesPage() {
         const hasAnyScore = Object.values(rawScores).some((s) => s != null);
         const componentScores = hasAnyScore ? rawScores : null;
         const score = obligation && componentScores
-          ? calcWeightedComponentScore(normalizeComponents(obligation.components), componentScores)
+          ? calcWeightedComponentScore(
+              applyWeightOverrides(
+                normalizeComponents(obligation.components),
+                existing?.componentWeightOverrides
+              ),
+              componentScores
+            )
           : null;
         const status = (existing?.status ?? "NOT_STARTED") as SubmissionStatus;
         const nextStatus = autoStatusOnScore(hasAnyScore ? (score ?? 0) : null, status);
@@ -309,7 +321,13 @@ export default function GradesPage() {
         const hasAnyScore = Object.values(rawScores).some((s) => s != null);
         const subItemScores = hasAnyScore ? rawScores : null;
         const score = obligation && subItemScores
-          ? calcPartialWeightedSubItemScore(normalizeSubItems(obligation.subItems), subItemScores)
+          ? calcPartialWeightedSubItemScore(
+              applyWeightOverrides(
+                normalizeSubItems(obligation.subItems),
+                existing?.subItemWeightOverrides
+              ),
+              subItemScores
+            )
           : null;
         const status = (existing?.status ?? "NOT_STARTED") as SubmissionStatus;
         const nextStatus = autoStatusOnScore(hasAnyScore ? (score ?? 0) : null, status);
@@ -336,8 +354,13 @@ export default function GradesPage() {
       if (existing) {
         const next = { ...existing, [field]: value };
         if (field === "score") {
+          const rounded =
+            value == null || value === ""
+              ? null
+              : roundGradeScore(Number(value));
+          next.score = rounded;
           next.status = autoStatusOnScore(
-            value as number | null,
+            rounded,
             existing.status as SubmissionStatus
           );
         }
@@ -349,11 +372,17 @@ export default function GradesPage() {
         }
         return prev.map((g) => (g.obligationId === obligationId ? next : g));
       }
+      const roundedScore =
+        field === "score" && value != null && value !== ""
+          ? roundGradeScore(Number(value))
+          : field === "score"
+            ? null
+            : null;
       return [
         ...prev,
         {
           obligationId,
-          score: field === "score" ? (value as number | null) : null,
+          score: field === "score" ? roundedScore : null,
           qualitativeLevel: field === "qualitativeLevel" ? (value as QualitativeLevel | null) : null,
           componentScores: null,
           subItemScores: null,
@@ -363,7 +392,7 @@ export default function GradesPage() {
               : field === "qualitativeLevel" && value
                 ? autoStatusOnScore(0, "NOT_STARTED")
                 : field === "score"
-                  ? autoStatusOnScore(value as number | null, "NOT_STARTED")
+                  ? autoStatusOnScore(roundedScore, "NOT_STARTED")
                   : "NOT_STARTED",
         },
       ];
@@ -384,6 +413,8 @@ export default function GradesPage() {
                 qualitativeLevel: empty.qualitativeLevel,
                 componentScores: empty.componentScores,
                 subItemScores: empty.subItemScores,
+                componentWeightOverrides: empty.componentWeightOverrides,
+                subItemWeightOverrides: empty.subItemWeightOverrides,
                 status: empty.status,
               }
             : g
@@ -397,6 +428,8 @@ export default function GradesPage() {
           qualitativeLevel: empty.qualitativeLevel,
           componentScores: empty.componentScores,
           subItemScores: empty.subItemScores,
+          componentWeightOverrides: empty.componentWeightOverrides,
+          subItemWeightOverrides: empty.subItemWeightOverrides,
           status: empty.status,
         },
       ];

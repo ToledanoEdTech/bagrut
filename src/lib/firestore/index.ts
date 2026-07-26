@@ -837,6 +837,9 @@ export async function upsertGrades(
     qualitativeLevel?: QualitativeLevel | null;
     componentScores?: Record<number, number | null> | null;
     subItemScores?: Record<number, number | null> | null;
+    /** undefined = שמור קיים; null = נקה; object = החלף */
+    componentWeightOverrides?: Record<number, number> | null;
+    subItemWeightOverrides?: Record<number, number> | null;
     status: SubmissionStatus;
     notes?: string;
   }>
@@ -848,6 +851,27 @@ export async function upsertGrades(
     const componentScores = g.componentScores ?? null;
     const subItemScores = g.subItemScores ?? null;
     const notes = g.notes ?? null;
+
+    const existing = await adminDb
+      .collection("grades")
+      .where("studentId", "==", studentId)
+      .where("obligationId", "==", g.obligationId)
+      .limit(1)
+      .get();
+
+    const existingData = existing.empty
+      ? null
+      : ({ id: existing.docs[0]!.id, ...existing.docs[0]!.data() } as Grade);
+
+    const componentWeightOverrides =
+      g.componentWeightOverrides !== undefined
+        ? g.componentWeightOverrides
+        : (existingData?.componentWeightOverrides ?? null);
+    const subItemWeightOverrides =
+      g.subItemWeightOverrides !== undefined
+        ? g.subItemWeightOverrides
+        : (existingData?.subItemWeightOverrides ?? null);
+
     const cleared = shouldDeleteEmptyGrade({
       status: g.status,
       score,
@@ -856,13 +880,6 @@ export async function upsertGrades(
       subItemScores,
       notes,
     });
-
-    const existing = await adminDb
-      .collection("grades")
-      .where("studentId", "==", studentId)
-      .where("obligationId", "==", g.obligationId)
-      .limit(1)
-      .get();
 
     if (existing.empty) {
       if (cleared) continue;
@@ -875,6 +892,8 @@ export async function upsertGrades(
         qualitativeLevel,
         componentScores,
         subItemScores,
+        componentWeightOverrides,
+        subItemWeightOverrides,
         status: g.status,
         notes,
       };
@@ -891,6 +910,8 @@ export async function upsertGrades(
         qualitativeLevel,
         componentScores,
         subItemScores,
+        componentWeightOverrides,
+        subItemWeightOverrides,
         status: g.status,
         notes,
         updatedAt: FieldValue.serverTimestamp(),
@@ -905,6 +926,8 @@ export async function upsertGrades(
         qualitativeLevel,
         componentScores,
         subItemScores,
+        componentWeightOverrides,
+        subItemWeightOverrides,
         status: g.status,
         notes,
       });
@@ -965,6 +988,8 @@ export async function upsertGradesBulk(
     qualitativeLevel?: QualitativeLevel | null;
     componentScores?: Record<number, number | null> | null;
     subItemScores?: Record<number, number | null> | null;
+    componentWeightOverrides?: Record<number, number> | null;
+    subItemWeightOverrides?: Record<number, number> | null;
     status: SubmissionStatus;
     notes?: string | null;
   }>
@@ -1009,6 +1034,14 @@ export async function upsertGradesBulk(
     const qualitativeLevel = entry.qualitativeLevel ?? null;
     const componentScores = entry.componentScores ?? null;
     const subItemScores = entry.subItemScores ?? null;
+    const componentWeightOverrides =
+      entry.componentWeightOverrides !== undefined
+        ? entry.componentWeightOverrides
+        : (existing?.componentWeightOverrides ?? null);
+    const subItemWeightOverrides =
+      entry.subItemWeightOverrides !== undefined
+        ? entry.subItemWeightOverrides
+        : (existing?.subItemWeightOverrides ?? null);
     const notes = entry.notes ?? null;
     const cleared = shouldDeleteEmptyGrade({
       status: entry.status,
@@ -1028,6 +1061,8 @@ export async function upsertGradesBulk(
           qualitativeLevel,
           componentScores,
           subItemScores,
+          componentWeightOverrides,
+          subItemWeightOverrides,
           status: entry.status,
           notes,
           updatedAt: FieldValue.serverTimestamp(),
@@ -1038,6 +1073,8 @@ export async function upsertGradesBulk(
           qualitativeLevel,
           componentScores,
           subItemScores,
+          componentWeightOverrides,
+          subItemWeightOverrides,
           status: entry.status,
           notes,
         });
@@ -1052,6 +1089,8 @@ export async function upsertGradesBulk(
         qualitativeLevel,
         componentScores,
         subItemScores,
+        componentWeightOverrides,
+        subItemWeightOverrides,
         status: entry.status,
         notes,
       };
