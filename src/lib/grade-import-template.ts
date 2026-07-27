@@ -1,6 +1,9 @@
 import {
   expandObligationMatrixTasks,
+  getEffectiveWeightPercent,
+  getObligationWeightItems,
   obligationDisplayLabel,
+  pickWeightOverrides,
 } from "@/lib/grade-components";
 import { STATUS_LABELS } from "@/lib/grade-status";
 import { attachPathLabels } from "@/lib/subject-display";
@@ -76,6 +79,10 @@ export function buildGradeImportTemplateRows(params: {
         const statusLabel = grade ? STATUS_LABELS[grade.status]?.label ?? "" : "";
         const tasks = expandObligationMatrixTasks(ob, 0);
         const isSocial = isSocialInvolvementSubject(subject);
+        // האחוז שמופיע בקובץ הוא האחוז שחל היום על התלמיד: override אם הוזן לו,
+        // אחרת ברירת המחדל של המטלה.
+        const { kind: weightKind, items: weightItems } = getObligationWeightItems(ob);
+        const weightOverrides = pickWeightOverrides(weightKind, grade);
 
         for (const task of tasks) {
           const displayTaskName =
@@ -103,33 +110,13 @@ export function buildGradeImportTemplateRows(params: {
 
           let weightPercent: number | string = "";
           if (!isSocial) {
-            if (task.taskKind === "component") {
-              weightPercent =
-                grade?.componentWeightOverrides?.[task.sortOrder] ??
-                ob.components.find((c) => c.sortOrder === task.sortOrder)
-                  ?.weightPercent ??
-                "";
-            } else if (task.taskKind === "subItem") {
-              weightPercent =
-                grade?.subItemWeightOverrides?.[task.sortOrder] ??
-                ob.subItems.find((s) => s.sortOrder === task.sortOrder)
-                  ?.weightPercent ??
-                "";
-            } else {
-              const only =
-                ob.subItems[0] ??
-                ob.components[0] ??
-                null;
-              if (only) {
-                const override =
-                  ob.subItems.length > 0
-                    ? grade?.subItemWeightOverrides?.[only.sortOrder]
-                    : grade?.componentWeightOverrides?.[only.sortOrder];
-                weightPercent = override ?? only.weightPercent;
-              } else {
-                weightPercent = 100;
-              }
-            }
+            const item =
+              task.taskKind === "single"
+                ? weightItems[0]
+                : weightItems.find((i) => i.sortOrder === task.sortOrder);
+            weightPercent = item
+              ? getEffectiveWeightPercent(item, weightOverrides)
+              : 100;
           }
 
           rows.push({

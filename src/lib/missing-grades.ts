@@ -26,6 +26,8 @@ type GradeLike = {
   score?: number | null;
   componentScores?: Record<number, number | null> | null;
   subItemScores?: Record<number, number | null> | null;
+  componentWeightOverrides?: Record<number, number> | null;
+  subItemWeightOverrides?: Record<number, number> | null;
   status: string;
 };
 

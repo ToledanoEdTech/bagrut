@@ -13,10 +13,18 @@ import {
   isObligationRelevantForStudent,
 } from "@/lib/grade-matrix";
 import {
+  completeWeightOverrides,
+  formatWeightPartsBreakdown,
+  formatWeightPercent,
+  getEffectiveWeightPercent,
+  getObligationWeightItems,
   hasSeparateComponentGrades,
   hasSubItemGrades,
+  isValidWeightPercent,
   normalizeComponents,
   normalizeSubItems,
+  obligationDisplayLabel,
+  pickWeightOverrides,
   resolveObligationGradeScore,
   validateComponentScores,
   validateSubItemScores,
@@ -139,6 +147,8 @@ export async function PUT(req: NextRequest) {
       qualitativeLevel?: QualitativeLevel | null;
       componentScores?: Record<number, number | null> | null;
       subItemScores?: Record<number, number | null> | null;
+      /** אחוז שקלול למשבצת הנערכת בהזנה זו בלבד. null/חסר = ללא שינוי */
+      weightPercent?: number | null;
       status: string;
       notes?: string | null;
     }>;
@@ -159,6 +169,16 @@ export async function PUT(req: NextRequest) {
   const usesSubItems = hasSubItemGrades(subItems);
   const multiComponent = hasSeparateComponentGrades(components);
   const editingSingleTask = taskKind != null && taskSortOrder != null;
+
+  const { kind: weightKind, items: weightItems } = getObligationWeightItems(
+    found.obligation
+  );
+  const editedWeightItem =
+    editingSingleTask && taskSortOrder != null
+      ? weightItems.find((i) => i.sortOrder === taskSortOrder)
+      : undefined;
+  /** אחוז של פריט יחיד הוא תמיד 100% — אין מה להתאים */
+  const weightEditable = weightItems.length > 1 && editedWeightItem != null;
 
   const existingGrades = await getGradesByStudentsAndObligation(
     entries.map((e) => e.studentId),
@@ -210,8 +230,8 @@ export async function PUT(req: NextRequest) {
     }
 
     const existing = existingGrades.get(entry.studentId);
-    const componentWeightOverrides = existing?.componentWeightOverrides ?? null;
-    const subItemWeightOverrides = existing?.subItemWeightOverrides ?? null;
+    let componentWeightOverrides = existing?.componentWeightOverrides ?? null;
+    let subItemWeightOverrides = existing?.subItemWeightOverrides ?? null;
 
     if (isSocial) {
       const qualitativeLevel = entry.qualitativeLevel ?? null;
@@ -287,6 +307,55 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "ציון לא חוקי (0–100)" }, { status: 400 });
     } else {
       topLevelScore = score;
+    }
+
+    /**
+     * שינוי אחוז השקלול חל על ההזנה של התלמיד הזה בלבד. היתרה עד 100%
+     * מתחלקת אוטומטית בין שאר הרכיבים לפי משקלם הנוכחי, כך שהזנת
+     * «בחינה 60%» הופכת את «הגשה» ל-40% בלי לגעת בהגדרת המקצוע.
+     */
+    if (entry.weightPercent != null && editedWeightItem) {
+      if (!isValidWeightPercent(entry.weightPercent)) {
+        return NextResponse.json(
+          { error: "אחוז שקלול לא חוקי (0–100)" },
+          { status: 400 }
+        );
+      }
+
+      const currentOverrides = pickWeightOverrides(weightKind, existing);
+      const currentEffective = getEffectiveWeightPercent(
+        editedWeightItem,
+        currentOverrides
+      );
+
+      if (Math.abs(entry.weightPercent - currentEffective) > 0.01) {
+        if (!weightEditable) {
+          return NextResponse.json(
+            {
+              error: `למטלה «${obligationDisplayLabel(found.obligation)}» יש רכיב אחד בלבד, ולכן אחוז השקלול שלו הוא תמיד 100%`,
+            },
+            { status: 400 }
+          );
+        }
+        const completed = completeWeightOverrides({
+          items: weightItems,
+          current: currentOverrides,
+          explicit: { [editedWeightItem.sortOrder]: entry.weightPercent },
+        });
+        if (!completed.ok) {
+          return NextResponse.json(
+            {
+              error: `לא ניתן להגדיר ${formatWeightPercent(entry.weightPercent)}% לתלמיד ${student.name}: סכום אחוזי השקלול יוצא ${formatWeightPercent(completed.sum)}% ולא 100% (${formatWeightPartsBreakdown(completed.parts)})`,
+            },
+            { status: 400 }
+          );
+        }
+        if (weightKind === "subItem") {
+          subItemWeightOverrides = completed.overrides;
+        } else {
+          componentWeightOverrides = completed.overrides;
+        }
+      }
     }
 
     const studentClass = await getClassById(student.classId);

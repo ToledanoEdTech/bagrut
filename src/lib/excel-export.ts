@@ -826,7 +826,9 @@ export async function downloadGradesImportTemplate(
   workbook.created = new Date();
 
   const tasks = input.obligationTasks ?? [];
-  const useTaskColumn = tasks.length > 1;
+  // עמודת הרכיב נדרשת כדי לכוון ציון או אחוז שקלול למשבצת מסוימת;
+  // אפשר לוותר עליה רק כשידוע שלמטלה יש משבצת אחת בלבד.
+  const useTaskColumn = tasks.length !== 1;
   const columns = useTaskColumn ? FULL_GRADES_COLUMNS : IMPORT_COLUMNS;
 
   // Data sheet first; Lists is only for dropdown validations.

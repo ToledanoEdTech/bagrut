@@ -6,7 +6,17 @@ import {
   upsertGrades,
 } from "@/lib/firestore";
 import { checkPermission, requireAuth, requireGradeWrite, requireStaff, requireStudentView } from "@/lib/api-auth";
-import { validateComponentScores, validateSubItemScores } from "@/lib/grade-components";
+import {
+  formatWeightPartsBreakdown,
+  formatWeightPercent,
+  getObligationWeightItems,
+  isValidWeightPercent,
+  obligationDisplayLabel,
+  sanitizeWeightOverrides,
+  validateComponentScores,
+  validateObligationEffectiveWeightSum,
+  validateSubItemScores,
+} from "@/lib/grade-components";
 import { isValidSubmissionStatus, validateScore } from "@/lib/grade-status";
 import { isValidQualitativeLevel } from "@/lib/social-involvement";
 import { actorFromSession, recordActivity } from "@/lib/activity-log";
@@ -57,6 +67,8 @@ export async function PUT(req: NextRequest) {
       qualitativeLevel?: QualitativeLevel | null;
       componentScores?: Record<number, number | null> | null;
       subItemScores?: Record<number, number | null> | null;
+      componentWeightOverrides?: Record<number, number> | null;
+      subItemWeightOverrides?: Record<number, number> | null;
       status: string;
       notes?: string;
     }>;
@@ -65,6 +77,18 @@ export async function PUT(req: NextRequest) {
   if (!studentId) {
     return NextResponse.json({ error: "חסר מזהה תלמיד" }, { status: 400 });
   }
+
+  /**
+   * אחוזי שקלול מותאמים נשמרים לאחר ניקוי (ערך זהה לברירת המחדל נמחק)
+   * ובתנאי שסכום האחוזים האפקטיביים במטלה הוא בדיוק 100%.
+   */
+  const sanitizedWeights = new Map<
+    string,
+    {
+      componentWeightOverrides: Record<number, number> | null;
+      subItemWeightOverrides: Record<number, number> | null;
+    }
+  >();
 
   for (const g of grades) {
     const writeError = await requireGradeWrite(session, {
@@ -92,6 +116,47 @@ export async function PUT(req: NextRequest) {
     if (!validateSubItemScores(g.subItemScores)) {
       return NextResponse.json({ error: "ציון תת-מטלה לא חוקי (0–100)" }, { status: 400 });
     }
+
+    const hasWeightInput =
+      g.componentWeightOverrides !== undefined || g.subItemWeightOverrides !== undefined;
+    if (!hasWeightInput) continue;
+
+    const rawWeights = {
+      ...(g.componentWeightOverrides ?? {}),
+      ...(g.subItemWeightOverrides ?? {}),
+    };
+    if (Object.values(rawWeights).some((w) => !isValidWeightPercent(w))) {
+      return NextResponse.json({ error: "אחוז שקלול לא חוקי (0–100)" }, { status: 400 });
+    }
+
+    const found = await findObligation(g.obligationId);
+    if (!found) {
+      return NextResponse.json({ error: "מטלה לא נמצאה" }, { status: 404 });
+    }
+
+    const { kind, items } = getObligationWeightItems(found.obligation);
+    const overrides = sanitizeWeightOverrides(
+      items,
+      kind === "subItem" ? g.subItemWeightOverrides : g.componentWeightOverrides
+    );
+    const entry = {
+      componentWeightOverrides: kind === "component" ? overrides : null,
+      subItemWeightOverrides: kind === "subItem" ? overrides : null,
+    };
+
+    if (overrides) {
+      const weightCheck = validateObligationEffectiveWeightSum(found.obligation, entry);
+      if (weightCheck && !weightCheck.ok) {
+        return NextResponse.json(
+          {
+            error: `סכום אחוזי השקלול במטלה «${obligationDisplayLabel(found.obligation)}» הוא ${formatWeightPercent(weightCheck.sum)}% ולא 100% (${formatWeightPartsBreakdown(weightCheck.parts)})`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    sanitizedWeights.set(g.obligationId, entry);
   }
 
   const results = await upsertGrades(
@@ -102,6 +167,7 @@ export async function PUT(req: NextRequest) {
       qualitativeLevel: g.qualitativeLevel ?? null,
       componentScores: g.componentScores,
       subItemScores: g.subItemScores,
+      ...(sanitizedWeights.get(g.obligationId) ?? {}),
       status: g.status as SubmissionStatus,
       notes: g.notes,
     }))

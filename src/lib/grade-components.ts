@@ -66,6 +66,230 @@ export function normalizeSubItems(
 
 const WEIGHT_SUM_TOLERANCE = 0.01;
 
+export type ObligationWeightKind = "component" | "subItem";
+
+type WeightObligationLike = {
+  components: Array<{ name?: string; weightPercent: number; sortOrder?: number }>;
+  subItems: Array<{
+    name?: string;
+    weightPercent: number;
+    sortOrder?: number;
+    gradeYear?: string | null;
+  }>;
+};
+
+type WeightOverridesLike = {
+  componentWeightOverrides?: Record<number, number> | null;
+  subItemWeightOverrides?: Record<number, number> | null;
+};
+
+/**
+ * הפריטים שקובעים את שקלול המטלה: תתי-מטלות אם קיימות, אחרת רכיבים.
+ * זהו אותו סדר עדיפויות שבו מחושב ציון המטלה.
+ */
+export function getObligationWeightItems(obligation: WeightObligationLike): {
+  kind: ObligationWeightKind;
+  items: WeightedItemLike[];
+} {
+  const subItems = normalizeSubItems(obligation.subItems ?? []);
+  if (subItems.length > 0) return { kind: "subItem", items: subItems };
+  return { kind: "component", items: normalizeComponents(obligation.components ?? []) };
+}
+
+export function pickWeightOverrides(
+  kind: ObligationWeightKind,
+  grade: WeightOverridesLike | null | undefined
+): Record<number, number> | null {
+  if (!grade) return null;
+  return (
+    (kind === "subItem" ? grade.subItemWeightOverrides : grade.componentWeightOverrides) ??
+    null
+  );
+}
+
+function roundWeight(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function isSameWeight(a: number, b: number): boolean {
+  return Math.abs(a - b) <= WEIGHT_SUM_TOLERANCE;
+}
+
+export function isValidWeightPercent(value: unknown): value is number {
+  return typeof value === "number" && !isNaN(value) && value >= 0 && value <= 100;
+}
+
+/** האחוז שבפועל חל על פריט: override אם הוזן, אחרת ברירת המחדל של המטלה. */
+export function getEffectiveWeightPercent(
+  item: WeightedItemLike,
+  overrides: Record<number, number> | null | undefined
+): number {
+  const override = overrides?.[item.sortOrder];
+  return isValidWeightPercent(override) ? override : item.weightPercent;
+}
+
+/**
+ * משמיט override שזהה לברירת המחדל או שמצביע על פריט שכבר לא קיים,
+ * כדי שרק חריגות אמיתיות יישמרו בבסיס הנתונים.
+ */
+export function sanitizeWeightOverrides(
+  items: WeightedItemLike[],
+  overrides: Record<number, number> | null | undefined
+): Record<number, number> | null {
+  if (!overrides) return null;
+  const result: Record<number, number> = {};
+  for (const item of items) {
+    const raw = overrides[item.sortOrder];
+    if (!isValidWeightPercent(raw)) continue;
+    const value = roundWeight(raw);
+    if (isSameWeight(value, item.weightPercent)) continue;
+    result[item.sortOrder] = value;
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+export type ObligationWeightPart = {
+  name: string;
+  sortOrder: number;
+  defaultWeightPercent: number;
+  weightPercent: number;
+  isOverridden: boolean;
+};
+
+export type ObligationWeightInfo = {
+  kind: ObligationWeightKind;
+  parts: ObligationWeightPart[];
+  hasOverrides: boolean;
+};
+
+/** פירוט אחוזי השקלול שחלים על הזנה מסוימת, כולל סימון מה שונה מברירת המחדל. */
+export function getObligationWeightInfo(
+  obligation: WeightObligationLike,
+  grade?: WeightOverridesLike | null
+): ObligationWeightInfo | null {
+  const { kind, items } = getObligationWeightItems(obligation);
+  if (items.length === 0) return null;
+
+  const overrides = pickWeightOverrides(kind, grade);
+  const parts = items.map((item) => {
+    const override = overrides?.[item.sortOrder];
+    const isOverridden =
+      isValidWeightPercent(override) && !isSameWeight(override, item.weightPercent);
+    return {
+      name: item.name?.trim() || "ציון",
+      sortOrder: item.sortOrder,
+      defaultWeightPercent: item.weightPercent,
+      weightPercent: isOverridden ? roundWeight(override) : item.weightPercent,
+      isOverridden,
+    };
+  });
+
+  return { kind, parts, hasOverrides: parts.some((p) => p.isOverridden) };
+}
+
+export type WeightCompletionResult =
+  | {
+      ok: true;
+      overrides: Record<number, number> | null;
+      parts: Array<{ name: string; weightPercent: number }>;
+    }
+  | {
+      ok: false;
+      reason: "exceeds" | "sum";
+      sum: number;
+      parts: Array<{ name: string; weightPercent: number }>;
+    };
+
+function describeParts(
+  items: WeightedItemLike[],
+  weights: Record<number, number>
+): Array<{ name: string; weightPercent: number }> {
+  return items.map((item) => ({
+    name: item.name?.trim() || "רכיב",
+    weightPercent: weights[item.sortOrder] ?? item.weightPercent,
+  }));
+}
+
+/**
+ * מרכיב את אחוזי השקלול של הזנה אחת מתוך האחוזים שהוזנו בפועל.
+ * החלקים שהוזנו נשמרים כפי שהם, והיתרה עד 100% מתחלקת בין שאר החלקים
+ * ביחס למשקלם הנוכחי — כך שהזנה חלקית (למשל רק «ציון בחינה») עדיין תקפה.
+ */
+export function completeWeightOverrides(input: {
+  items: WeightedItemLike[];
+  /** אחוזים מותאמים שכבר שמורים להזנה זו */
+  current?: Record<number, number> | null;
+  /** אחוזים שהוזנו כעת, לפי sortOrder */
+  explicit: Record<number, number>;
+}): WeightCompletionResult {
+  const { items, current, explicit } = input;
+  if (items.length === 0) {
+    return { ok: true, overrides: null, parts: [] };
+  }
+
+  const explicitEntries = items
+    .map((item) => [item.sortOrder, explicit[item.sortOrder]] as const)
+    .filter((entry): entry is readonly [number, number] => isValidWeightPercent(entry[1]));
+
+  if (explicitEntries.length === 0) {
+    const kept = sanitizeWeightOverrides(items, current);
+    return { ok: true, overrides: kept, parts: describeParts(items, kept ?? {}) };
+  }
+
+  const explicitBySortOrder = new Map(explicitEntries);
+  const explicitSum = explicitEntries.reduce((sum, [, value]) => sum + value, 0);
+  const others = items.filter((item) => !explicitBySortOrder.has(item.sortOrder));
+
+  const next: Record<number, number> = {};
+  for (const [sortOrder, value] of explicitEntries) {
+    next[sortOrder] = roundWeight(value);
+  }
+
+  if (others.length === 0) {
+    if (!isSameWeight(explicitSum, 100)) {
+      return {
+        ok: false,
+        reason: "sum",
+        sum: roundWeight(explicitSum),
+        parts: describeParts(items, next),
+      };
+    }
+  } else {
+    const remaining = 100 - explicitSum;
+    if (remaining < -WEIGHT_SUM_TOLERANCE) {
+      return {
+        ok: false,
+        reason: "exceeds",
+        sum: roundWeight(explicitSum),
+        parts: describeParts(items, next),
+      };
+    }
+
+    const baseWeightOf = (item: WeightedItemLike) =>
+      Math.max(getEffectiveWeightPercent(item, current), 0);
+    const baseSum = others.reduce((sum, item) => sum + baseWeightOf(item), 0);
+
+    let assigned = 0;
+    others.forEach((item, index) => {
+      const isLast = index === others.length - 1;
+      const share = isLast
+        ? Math.max(remaining - assigned, 0)
+        : baseSum > 0
+          ? (baseWeightOf(item) / baseSum) * remaining
+          : remaining / others.length;
+      const value = roundWeight(Math.max(share, 0));
+      assigned += value;
+      next[item.sortOrder] = value;
+    });
+  }
+
+  return {
+    ok: true,
+    overrides: sanitizeWeightOverrides(items, next),
+    parts: describeParts(items, next),
+  };
+}
+
 /**
  * בודק שסכום אחוזי השקלול האפקטיביים (override או ברירת מחדל) במטלה הוא בדיוק 100%.
  * מחזיר null אם אין רכיבים/תתי-מטלות לבדיקה.
@@ -119,7 +343,7 @@ export function formatWeightPartsBreakdown(
     .join(", ");
 }
 
-function formatWeightPercent(n: number): string {
+export function formatWeightPercent(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
 }
 

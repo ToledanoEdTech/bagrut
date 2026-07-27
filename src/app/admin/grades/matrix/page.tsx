@@ -12,7 +12,12 @@ import { Input } from "@/components/ui/Input";
 import { Alert } from "@/components/ui/Alert";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { useToast } from "@/components/ui/Toast";
-import { GradeMatrixTable, type MatrixRow } from "@/components/grades/GradeMatrixTable";
+import {
+  GradeMatrixTable,
+  type MatrixField,
+  type MatrixRow,
+  type MatrixWeightColumn,
+} from "@/components/grades/GradeMatrixTable";
 import { invalidateCache, invalidateStudentDashboardCaches } from "@/lib/api-cache";
 import {
   buildMatrixSheet,
@@ -82,12 +87,17 @@ type MatrixData = {
     taskKind: "subItem" | "component" | "single" | null;
     taskSortOrder: number | null;
     components: Array<{ name: string; weightPercent: number; sortOrder: number }>;
+    weightKind: "component" | "subItem";
+    weightEditable: boolean;
+    taskDefaultWeightPercent: number | null;
+    otherWeightPartNames: string[];
   };
   rows: Array<{
     studentId: string;
     studentName: string;
     classId?: string;
     className?: string;
+    weightPercent: number | null;
     grade: {
       score: number | null;
       resolvedScore?: number | null;
@@ -108,9 +118,18 @@ type RowState = Record<
   {
     score: number | null;
     qualitativeLevel: QualitativeLevel | null;
+    /** אחוז השקלול של המשבצת הנבחרת אצל התלמיד (null = ברירת המחדל) */
+    weightPercent: number | null;
     status: SubmissionStatus;
   }
 >;
+
+const EMPTY_ROW: RowState[string] = {
+  score: null,
+  qualitativeLevel: null,
+  weightPercent: null,
+  status: "NOT_STARTED",
+};
 
 export default function GradesMatrixPage() {
   return (
@@ -142,6 +161,7 @@ function GradesMatrixPageContent() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [bulkScore, setBulkScore] = useState("");
   const [bulkLevel, setBulkLevel] = useState<QualitativeLevel | "">("");
+  const [bulkWeight, setBulkWeight] = useState("");
   const pendingObligationId = useRef<string | null>(initialObligationId);
   /** Skip cascade resets caused by initial URL hydration */
   const suppressCascade = useRef(
@@ -223,6 +243,7 @@ function GradesMatrixPageContent() {
       initial[row.studentId] = {
         score: row.grade?.score ?? null,
         qualitativeLevel: row.grade?.qualitativeLevel ?? null,
+        weightPercent: row.weightPercent ?? null,
         status: row.grade?.status ?? "NOT_STARTED",
       };
     }
@@ -231,6 +252,7 @@ function GradesMatrixPageContent() {
     setSaveError(null);
     setBulkScore("");
     setBulkLevel("");
+    setBulkWeight("");
   }, [matrixData]);
 
   const selectedSubject = options?.subjects.find((s) => s.id === subjectId);
@@ -267,23 +289,29 @@ function GradesMatrixPageContent() {
       qualitativeLevel: rowState[r.studentId]?.qualitativeLevel ?? null,
       componentScores: r.grade?.componentScores ?? null,
       componentWeightOverrides: r.grade?.componentWeightOverrides ?? null,
+      weightPercent: rowState[r.studentId]?.weightPercent ?? null,
       status: rowState[r.studentId]?.status ?? "NOT_STARTED",
     }));
   }, [matrixData, rowState]);
+
+  const weightColumn: MatrixWeightColumn | null = useMemo(() => {
+    if (!matrixData?.obligation.weightEditable) return null;
+    if (matrixData.obligation.taskDefaultWeightPercent == null) return null;
+    return {
+      defaultWeightPercent: matrixData.obligation.taskDefaultWeightPercent,
+      otherPartNames: matrixData.obligation.otherWeightPartNames,
+    };
+  }, [matrixData]);
 
   const isDirty = savedSnapshot !== "" && JSON.stringify(rowState) !== savedSnapshot;
 
   function handleChange(
     studentId: string,
-    field: "score" | "status" | "qualitativeLevel" | `componentScore:${number}`,
+    field: MatrixField,
     value: number | null | SubmissionStatus | QualitativeLevel | ""
   ) {
     setRowState((prev) => {
-      const current = prev[studentId] ?? {
-        score: null,
-        qualitativeLevel: null,
-        status: "NOT_STARTED" as SubmissionStatus,
-      };
+      const current = prev[studentId] ?? EMPTY_ROW;
 
       if (field === "qualitativeLevel") {
         const level =
@@ -293,9 +321,22 @@ function GradesMatrixPageContent() {
         return {
           ...prev,
           [studentId]: {
+            ...current,
             score: null,
             qualitativeLevel: level,
             status: autoStatusOnScore(level ? 0 : null, current.status),
+          },
+        };
+      }
+
+      if (field === "weightPercent") {
+        const weight = value as number | null;
+        return {
+          ...prev,
+          [studentId]: {
+            ...current,
+            weightPercent:
+              weight == null || isNaN(weight) ? null : weight,
           },
         };
       }
@@ -305,6 +346,7 @@ function GradesMatrixPageContent() {
         return {
           ...prev,
           [studentId]: {
+            ...current,
             score,
             qualitativeLevel: null,
             status: autoStatusOnScore(score, current.status),
@@ -327,9 +369,29 @@ function GradesMatrixPageContent() {
       [studentId]: {
         score: empty.score,
         qualitativeLevel: empty.qualitativeLevel,
+        // חוזרים לאחוז ברירת המחדל של המטלה
+        weightPercent: weightColumn?.defaultWeightPercent ?? null,
         status: empty.status,
       },
     }));
+    setSaveError(null);
+  }
+
+  function applyBulkWeight() {
+    if (!weightColumn) return;
+    const weight = parseFloat(bulkWeight);
+    if (isNaN(weight) || weight < 0 || weight > 100) return;
+
+    setRowState((prev) => {
+      const next = { ...prev };
+      for (const row of tableRows) {
+        next[row.studentId] = {
+          ...(next[row.studentId] ?? EMPTY_ROW),
+          weightPercent: weight,
+        };
+      }
+      return next;
+    });
     setSaveError(null);
   }
 
@@ -341,6 +403,7 @@ function GradesMatrixPageContent() {
         for (const row of tableRows) {
           if (next[row.studentId]?.qualitativeLevel == null) {
             next[row.studentId] = {
+              ...(next[row.studentId] ?? EMPTY_ROW),
               score: null,
               qualitativeLevel: bulkLevel,
               status: "GRADED",
@@ -360,6 +423,7 @@ function GradesMatrixPageContent() {
       for (const row of tableRows) {
         if (next[row.studentId]?.score == null) {
           next[row.studentId] = {
+            ...(next[row.studentId] ?? EMPTY_ROW),
             score,
             qualitativeLevel: null,
             status: "GRADED",
@@ -387,6 +451,11 @@ function GradesMatrixPageContent() {
             score: isSocial ? null : (rowState[r.studentId]?.score ?? null),
             qualitativeLevel: isSocial
               ? (rowState[r.studentId]?.qualitativeLevel ?? null)
+              : null,
+            // תא ריק = חזרה לאחוז ברירת המחדל של המטלה
+            weightPercent: weightColumn
+              ? (rowState[r.studentId]?.weightPercent ??
+                weightColumn.defaultWeightPercent)
               : null,
             status: rowState[r.studentId]?.status ?? "NOT_STARTED",
           })),
@@ -617,6 +686,29 @@ function GradesMatrixPageContent() {
                   החל לכל הריקים
                 </Button>
               </div>
+              {weightColumn && (
+                <div className="flex min-w-0 items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    inputMode="decimal"
+                    className="w-20 shrink-0 py-2 text-sm sm:py-1.5 sm:text-xs"
+                    placeholder="אחוז"
+                    value={bulkWeight}
+                    onChange={(e) => setBulkWeight(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="min-w-0 flex-1 sm:flex-none"
+                    onClick={applyBulkWeight}
+                  >
+                    אחוז שקלול לכולם
+                  </Button>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
                 <Button
                   onClick={saveGrades}
@@ -648,12 +740,27 @@ function GradesMatrixPageContent() {
             </Alert>
           )}
 
+          {weightColumn && (
+            <Alert variant="info" className="mt-4">
+              ניתן לשנות את אחוז השקלול של «{taskHeaderLabel}» לתלמידים מסוימים
+              בהזנה זו בלבד — הגדרת המקצוע נשארת {weightColumn.defaultWeightPercent}%.
+              {weightColumn.otherPartNames.length > 0 && (
+                <>
+                  {" "}
+                  היתרה עד 100% תתחלק אוטומטית בין{" "}
+                  {weightColumn.otherPartNames.join(", ")}.
+                </>
+              )}
+            </Alert>
+          )}
+
           <div className="mt-4">
             <GradeMatrixTable
               rows={tableRows}
               components={components}
               qualitative={isSocial}
               showClass={showClass}
+              weightColumn={weightColumn}
               onChange={handleChange}
               onClear={handleClear}
             />

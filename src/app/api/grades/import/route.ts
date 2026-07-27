@@ -18,11 +18,16 @@ import {
 } from "@/lib/student-subjects";
 import { parseStatusInput, validateScore, autoStatusOnScore } from "@/lib/grade-status";
 import {
+  completeWeightOverrides,
   expandObligationMatrixTasks,
   formatWeightPartsBreakdown,
+  formatWeightPercent,
+  getEffectiveWeightPercent,
+  getObligationWeightItems,
   obligationDisplayLabel,
   resolveObligationGradeScore,
   validateObligationEffectiveWeightSum,
+  type ObligationWeightKind,
 } from "@/lib/grade-components";
 import {
   isSocialInvolvementSubject,
@@ -42,7 +47,7 @@ type ImportRow = {
   qualitativeLevel: QualitativeLevel | null;
   status: SubmissionStatus | null;
   hasScoreCol: boolean;
-  /** undefined = העמודה לא קיימת/לא נגעו; null = ריק (חזרה לברירת מחדל); number = override */
+  /** undefined = אין עמודת אחוזים; null = תא ריק (אין הוראה); number = האחוז שהוזן */
   weightPercent: number | null | undefined;
   hasWeightCol: boolean;
 };
@@ -101,6 +106,21 @@ function resolveTaskTarget(ob: Obligation, taskName: string): TaskTarget {
   const match = options.find((o) => o.taskName.trim().toLowerCase() === trimmed);
   if (match) return { kind: match.taskKind, sortOrder: match.sortOrder };
   return null;
+}
+
+/**
+ * לאיזה פריט שקלול (רכיב / תת-מטלה) מתייחסת שורת הקובץ.
+ * שורת «ציון» יחידה מתייחסת לפריט היחיד של המטלה.
+ */
+function resolveWeightSortOrder(
+  target: Exclude<TaskTarget, null | { kind: "ambiguous" }>,
+  weightItems: Array<{ sortOrder: number }>
+): number | null {
+  if (weightItems.length === 0) return null;
+  if (target.kind === "single") return weightItems[0]!.sortOrder;
+  return weightItems.some((i) => i.sortOrder === target.sortOrder)
+    ? target.sortOrder
+    : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -291,8 +311,14 @@ export async function POST(req: NextRequest) {
     qualitativeLevel: QualitativeLevel | null;
     componentScores: Record<number, number | null>;
     subItemScores: Record<number, number | null>;
+    /** אחוזי השקלול המותאמים ששמורים כבר להזנה זו */
     componentWeightOverrides: Record<number, number>;
     subItemWeightOverrides: Record<number, number>;
+    weightKind: ObligationWeightKind;
+    weightItems: ReturnType<typeof getObligationWeightItems>["items"];
+    /** אחוזים שהוזנו בקובץ ושונים מהאחוז שחל כיום */
+    explicitWeights: Record<number, number>;
+    weightTouched: boolean;
     status: SubmissionStatus;
     explicitStatus: boolean;
     touched: boolean;
@@ -416,6 +442,8 @@ export async function POST(req: NextRequest) {
     let agg = aggregates.get(key);
     if (!agg) {
       const existing = existingByKey.get(key);
+      const { kind: weightKind, items: weightItems } =
+        getObligationWeightItems(obligation);
       agg = {
         studentId: student.id,
         studentName: student.name,
@@ -430,6 +458,10 @@ export async function POST(req: NextRequest) {
         subItemScores: { ...(existing?.subItemScores ?? {}) },
         componentWeightOverrides: { ...(existing?.componentWeightOverrides ?? {}) },
         subItemWeightOverrides: { ...(existing?.subItemWeightOverrides ?? {}) },
+        weightKind,
+        weightItems,
+        explicitWeights: {},
+        weightTouched: false,
         status: (existing?.status as SubmissionStatus) ?? "NOT_STARTED",
         explicitStatus: false,
         touched: false,
@@ -447,15 +479,18 @@ export async function POST(req: NextRequest) {
         agg.subItemScores = {};
         agg.componentWeightOverrides = {};
         agg.subItemWeightOverrides = {};
+        agg.explicitWeights = {};
       } else if (target.kind === "component") {
         delete agg.componentScores[target.sortOrder];
         delete agg.componentWeightOverrides[target.sortOrder];
+        delete agg.explicitWeights[target.sortOrder];
         if (Object.values(agg.componentScores).every((s) => s == null)) {
           agg.score = null;
         }
       } else {
         delete agg.subItemScores[target.sortOrder];
         delete agg.subItemWeightOverrides[target.sortOrder];
+        delete agg.explicitWeights[target.sortOrder];
         if (Object.values(agg.subItemScores).every((s) => s == null)) {
           agg.score = null;
         }
@@ -480,70 +515,47 @@ export async function POST(req: NextRequest) {
       agg.touched = true;
     }
 
-    if (
-      data.hasWeightCol &&
-      !isSocial &&
-      target.kind !== "ambiguous"
-    ) {
-      const defaultWeightForTarget = (): number | null => {
-        if (target.kind === "component") {
-          return (
-            obligation.components.find((c) => c.sortOrder === target.sortOrder)
-              ?.weightPercent ?? null
-          );
-        }
-        if (target.kind === "subItem") {
-          return (
-            obligation.subItems.find((s) => s.sortOrder === target.sortOrder)
-              ?.weightPercent ?? null
-          );
-        }
-        const tasks = expandObligationMatrixTasks(obligation, 0);
-        const only = tasks[0];
-        if (!only) return 100;
-        if (only.taskKind === "subItem") {
-          return (
-            obligation.subItems.find((s) => s.sortOrder === only.sortOrder)
-              ?.weightPercent ?? 100
-          );
-        }
-        return (
-          obligation.components.find((c) => c.sortOrder === only.sortOrder)
-            ?.weightPercent ?? 100
+    /**
+     * אחוז שקלול נחשב «שינוי» רק כשהוא שונה מהאחוז שחל כיום על התלמיד.
+     * כך קובץ מלא שהאחוזים בו לא נגעו לא נחשב עריכה, וכל השורות שנותרו
+     * בברירת המחדל פנויות לחלוקת היתרה עד 100%.
+     */
+    if (data.hasWeightCol && !isSocial && data.weightPercent != null) {
+      if (target.kind === "ambiguous") {
+        errors.push(
+          `שורה ${rowNum}: יש לציין רכיב/תת-מטלה כדי לשנות אחוז שקלול במטלה «${data.obligationName}»`
         );
-      };
+        skipped++;
+        continue;
+      }
 
-      const applyWeight = (
-        kind: "component" | "subItem",
-        sortOrder: number,
-        value: number | null
-      ) => {
-        const defaults = defaultWeightForTarget();
-        const effective =
-          value == null || (defaults != null && value === defaults) ? null : value;
-        if (kind === "component") {
-          if (effective == null) delete agg.componentWeightOverrides[sortOrder];
-          else agg.componentWeightOverrides[sortOrder] = effective;
-        } else {
-          if (effective == null) delete agg.subItemWeightOverrides[sortOrder];
-          else agg.subItemWeightOverrides[sortOrder] = effective;
+      const weightSortOrder = resolveWeightSortOrder(target, agg.weightItems);
+      const weightItem =
+        weightSortOrder == null
+          ? undefined
+          : agg.weightItems.find((i) => i.sortOrder === weightSortOrder);
+
+      if (!weightItem || agg.weightItems.length === 1) {
+        // מטלה עם משבצת ציון אחת — אין בין מה לחלק, והאחוז שלה הוא תמיד 100%
+        if (Math.abs(data.weightPercent - 100) > 0.01) {
+          errors.push(
+            `שורה ${rowNum}: למטלה «${obligationDisplayLabel(obligation)}» יש רכיב אחד בלבד, ולכן אחוז השקלול שלו הוא תמיד 100%`
+          );
+          skipped++;
+          continue;
         }
-      };
-
-      if (target.kind === "component") {
-        applyWeight("component", target.sortOrder, data.weightPercent ?? null);
-      } else if (target.kind === "subItem") {
-        applyWeight("subItem", target.sortOrder, data.weightPercent ?? null);
-      } else if (target.kind === "single") {
-        const tasks = expandObligationMatrixTasks(obligation, 0);
-        const only = tasks[0];
-        if (only?.taskKind === "subItem") {
-          applyWeight("subItem", only.sortOrder, data.weightPercent ?? null);
-        } else if (only) {
-          applyWeight("component", only.sortOrder, data.weightPercent ?? null);
+      } else {
+        const currentOverrides =
+          agg.weightKind === "subItem"
+            ? agg.subItemWeightOverrides
+            : agg.componentWeightOverrides;
+        const currentEffective = getEffectiveWeightPercent(weightItem, currentOverrides);
+        if (Math.abs(data.weightPercent - currentEffective) > 0.01) {
+          agg.explicitWeights[weightItem.sortOrder] = data.weightPercent;
+          agg.weightTouched = true;
+          agg.touched = true;
         }
       }
-      agg.touched = true;
     }
 
     if (data.status && !clearToUnentered) {
@@ -575,17 +587,6 @@ export async function POST(req: NextRequest) {
     const subItemScores = Object.fromEntries(
       Object.entries(agg.subItemScores).filter(([, s]) => s != null)
     ) as Record<number, number | null>;
-    const componentWeightOverrides = Object.fromEntries(
-      Object.entries(agg.componentWeightOverrides).filter(
-        ([, w]) => w != null && !isNaN(w)
-      )
-    ) as Record<number, number>;
-    const subItemWeightOverrides = Object.fromEntries(
-      Object.entries(agg.subItemWeightOverrides).filter(
-        ([, w]) => w != null && !isNaN(w)
-      )
-    ) as Record<number, number>;
-
     if (agg.isSocial) {
       const status = agg.explicitStatus
         ? agg.status
@@ -607,35 +608,56 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const weightOverridesForCheck = {
-      componentWeightOverrides:
-        Object.keys(componentWeightOverrides).length > 0
-          ? componentWeightOverrides
-          : null,
-      subItemWeightOverrides:
-        Object.keys(subItemWeightOverrides).length > 0
-          ? subItemWeightOverrides
-          : null,
-    };
+    const rowLabel =
+      agg.rowNums.length === 1
+        ? `שורה ${agg.rowNums[0]}`
+        : `שורות ${agg.rowNums.join(", ")}`;
 
-    const weightCheck = validateObligationEffectiveWeightSum(
-      agg.obligation,
-      weightOverridesForCheck
-    );
+    const savedOverrides =
+      agg.weightKind === "subItem"
+        ? agg.subItemWeightOverrides
+        : agg.componentWeightOverrides;
 
-    if (weightCheck && !weightCheck.ok) {
-      const rowLabel =
-        agg.rowNums.length === 1
-          ? `שורה ${agg.rowNums[0]}`
-          : `שורות ${agg.rowNums.join(", ")}`;
-      const sumLabel = Number.isInteger(weightCheck.sum)
-        ? String(weightCheck.sum)
-        : String(Math.round(weightCheck.sum * 100) / 100);
+    const completed = completeWeightOverrides({
+      items: agg.weightItems,
+      current: savedOverrides,
+      explicit: agg.explicitWeights,
+    });
+
+    if (!completed.ok) {
+      const detail = formatWeightPartsBreakdown(completed.parts);
       errors.push(
-        `${rowLabel}: סכום אחוזי השקלול במטלה «${obligationDisplayLabel(agg.obligation)}» לתלמיד «${agg.studentName}» הוא ${sumLabel}% ולא 100% (${formatWeightPartsBreakdown(weightCheck.parts)}). יש לתקן כך שהסכום יהיה בדיוק 100%.`
+        completed.reason === "exceeds"
+          ? `${rowLabel}: אחוזי השקלול שהוזנו במטלה «${obligationDisplayLabel(agg.obligation)}» לתלמיד «${agg.studentName}» מסתכמים ל-${formatWeightPercent(completed.sum)}% — יותר מ-100% (${detail}).`
+          : `${rowLabel}: סכום אחוזי השקלול במטלה «${obligationDisplayLabel(agg.obligation)}» לתלמיד «${agg.studentName}» הוא ${formatWeightPercent(completed.sum)}% ולא 100% (${detail}). יש לתקן כך שהסכום יהיה בדיוק 100%.`
       );
       skipped++;
       continue;
+    }
+
+    const weightOverridesForCheck = {
+      componentWeightOverrides:
+        agg.weightKind === "component" ? completed.overrides : null,
+      subItemWeightOverrides:
+        agg.weightKind === "subItem" ? completed.overrides : null,
+    };
+
+    /**
+     * בדיקת השפיות מופעלת רק כשהאחוזים שונו בייבוא הזה — אחרת מטלה
+     * שברירות המחדל שלה אינן מסתכמות ל-100% הייתה חוסמת גם הזנת ציון רגילה.
+     */
+    if (agg.weightTouched) {
+      const weightCheck = validateObligationEffectiveWeightSum(
+        agg.obligation,
+        weightOverridesForCheck
+      );
+      if (weightCheck && !weightCheck.ok) {
+        errors.push(
+          `${rowLabel}: סכום אחוזי השקלול במטלה «${obligationDisplayLabel(agg.obligation)}» לתלמיד «${agg.studentName}» הוא ${formatWeightPercent(weightCheck.sum)}% ולא 100% (${formatWeightPartsBreakdown(weightCheck.parts)}). יש לתקן כך שהסכום יהיה בדיוק 100%.`
+        );
+        skipped++;
+        continue;
+      }
     }
 
     const resolved = resolveObligationGradeScore(agg.obligation, {

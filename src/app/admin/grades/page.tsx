@@ -3,7 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { SubjectCard } from "@/components/subjects/SubjectCard";
-import { calcWeightedComponentScore, calcPartialWeightedSubItemScore, normalizeComponents, normalizeSubItems, applyWeightOverrides, resolveObligationGradeScore, roundGradeScore } from "@/lib/grade-components";
+import {
+  calcWeightedComponentScore,
+  calcPartialWeightedSubItemScore,
+  completeWeightOverrides,
+  getObligationWeightItems,
+  normalizeComponents,
+  normalizeSubItems,
+  applyWeightOverrides,
+  resolveObligationGradeScore,
+  roundGradeScore,
+} from "@/lib/grade-components";
 import { calcSubjectProgressForObligations } from "@/lib/progress";
 import { autoStatusOnScore, emptyGradeFields } from "@/lib/grade-status";
 import type { QualitativeLevel, SubmissionStatus } from "@/lib/types";
@@ -272,6 +282,61 @@ export default function GradesPage() {
         .flatMap((s) => s.obligations)
         .find((o) => o.id === obligationId);
       const existing = prev.find((g) => g.obligationId === obligationId);
+
+      /**
+       * אחוזי שקלול מותאמים חלים על ההזנה של התלמיד הזה בלבד.
+       * היתרה עד 100% מתחלקת אוטומטית בין שאר הרכיבים.
+       */
+      if (
+        field === "weightReset" ||
+        field.startsWith("componentWeight:") ||
+        field.startsWith("subItemWeight:")
+      ) {
+        if (!obligation) return prev;
+        const { kind, items } = getObligationWeightItems(obligation);
+        const base: GradeRow = existing ?? {
+          obligationId,
+          score: null,
+          qualitativeLevel: null,
+          componentScores: null,
+          subItemScores: null,
+          componentWeightOverrides: null,
+          subItemWeightOverrides: null,
+          status: "NOT_STARTED",
+        };
+
+        let overrides: Record<number, number> | null = null;
+        if (field !== "weightReset") {
+          const sortOrder = Number(field.split(":")[1]);
+          const item = items.find((i) => i.sortOrder === sortOrder);
+          if (!item) return prev;
+          // ניקוי השדה מחזיר את הרכיב לאחוז ברירת המחדל שלו
+          const requested =
+            value == null || value === "" ? item.weightPercent : Number(value);
+          if (isNaN(requested) || requested < 0 || requested > 100) return prev;
+          const completed = completeWeightOverrides({
+            items,
+            current:
+              kind === "subItem"
+                ? base.subItemWeightOverrides
+                : base.componentWeightOverrides,
+            explicit: { [sortOrder]: requested },
+          });
+          if (!completed.ok) return prev;
+          overrides = completed.overrides;
+        }
+
+        const next: GradeRow = {
+          ...base,
+          componentWeightOverrides: kind === "component" ? overrides : null,
+          subItemWeightOverrides: kind === "subItem" ? overrides : null,
+        };
+        next.score = resolveObligationGradeScore(obligation, next);
+
+        return existing
+          ? prev.map((g) => (g.obligationId === obligationId ? next : g))
+          : [...prev, next];
+      }
 
       if (field.startsWith("componentScore:")) {
         const sortOrder = Number(field.split(":")[1]);

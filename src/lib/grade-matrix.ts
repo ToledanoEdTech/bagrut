@@ -22,12 +22,15 @@ import {
 import {
   expandObligationMatrixTasks,
   formatSubItemProgressLabel,
+  getEffectiveWeightPercent,
   getObligationSubItemProgress,
+  getObligationWeightItems,
   hasSeparateComponentGrades,
   hasSubItemGrades,
   isObligationSubItemsComplete,
   normalizeComponents,
   normalizeSubItems,
+  pickWeightOverrides,
   resolveObligationGradeScore,
   type MatrixTaskKind,
   type MatrixTaskOption,
@@ -254,6 +257,24 @@ async function buildMatrixRows(
   const pathLabelsBySubjectId = buildPathLabelsBySubjectId(await listExamPaths());
   const subjectPathLabels = pathLabelsBySubjectId.get(found.subject.id) ?? [];
 
+  /**
+   * אחוז השקלול ניתן לעריכה רק כשעורכים משבצת אחת מתוך כמה,
+   * כי אחוז של פריט יחיד הוא תמיד 100%.
+   */
+  const { kind: weightKind, items: weightItems } = getObligationWeightItems(
+    found.obligation
+  );
+  const editedWeightItem =
+    taskSortOrder != null
+      ? weightItems.find((i) => i.sortOrder === taskSortOrder)
+      : undefined;
+  const weightEditable = weightItems.length > 1 && editedWeightItem != null;
+  const otherWeightPartNames = weightEditable
+    ? weightItems
+        .filter((i) => i.sortOrder !== taskSortOrder)
+        .map((i) => i.name?.trim() || "ציון")
+    : [];
+
   return {
     class: scope.class ?? null,
     gradeYear: scope.gradeYear ?? scope.class?.gradeYear ?? null,
@@ -278,11 +299,21 @@ async function buildMatrixRows(
       taskKind: taskKind ?? null,
       taskSortOrder: taskSortOrder ?? null,
       components: tableComponents,
+      weightKind,
+      weightEditable,
+      taskDefaultWeightPercent: editedWeightItem?.weightPercent ?? null,
+      otherWeightPartNames,
     },
     rows: relevantStudents.map((ms) => {
       const s = ms.student;
       const grade = gradesMap.get(s.id);
       const studentGradeYear = ms.cls.gradeYear;
+      const effectiveWeightPercent = editedWeightItem
+        ? getEffectiveWeightPercent(
+            editedWeightItem,
+            pickWeightOverrides(weightKind, grade)
+          )
+        : null;
 
       /** אותו חישוב כמו כרטיס התלמיד */
       const resolvedScore = resolveObligationGradeScore(
@@ -309,6 +340,7 @@ async function buildMatrixRows(
         studentName: s.name,
         classId: ms.cls.id,
         className: ms.cls.name,
+        weightPercent: effectiveWeightPercent,
         grade: grade
           ? {
               score: itemScore,

@@ -10,13 +10,16 @@ import {
   calcObligationProgressContribution,
   formatObligationEarnedScoreLabel,
   formatSubItemProgressLabel,
+  formatWeightPercent,
   getObligationSubItemProgress,
+  getObligationWeightInfo,
   hasSeparateComponentGrades,
   hasSubItemGrades,
   isObligationSubItemsComplete,
   normalizeComponents,
   normalizeSubItems,
   resolveObligationGradeScore,
+  type ObligationWeightPart,
 } from "@/lib/grade-components";
 import {
   STATUS_LABELS,
@@ -66,6 +69,9 @@ type Grade = {
   qualitativeLevel?: QualitativeLevel | null;
   componentScores?: Record<number, number | null> | null;
   subItemScores?: Record<number, number | null> | null;
+  /** אחוזי שקלול שהוזנו לתלמיד זה בלבד, במקום ברירת המחדל של המטלה */
+  componentWeightOverrides?: Record<number, number> | null;
+  subItemWeightOverrides?: Record<number, number> | null;
   status: string;
   notes?: string | null;
 };
@@ -113,6 +119,30 @@ function hasOpenTiming(
     return grade.subItemScores?.[sortOrder] == null;
   });
 }
+
+function WeightPartChip({ part }: { part: ObligationWeightPart }) {
+  if (!part.isOverridden) {
+    return (
+      <span className="badge-muted text-sm font-medium">
+        {part.name}: <strong>{formatWeightPercent(part.weightPercent)}%</strong>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-900 ring-1 ring-amber-300">
+      {part.name}: <strong>{formatWeightPercent(part.weightPercent)}%</strong>
+      <span className="text-xs font-normal text-amber-700">
+        (במקום {formatWeightPercent(part.defaultWeightPercent)}%)
+      </span>
+    </span>
+  );
+}
+
+const CUSTOM_WEIGHT_BADGE = (
+  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-0.5 text-xs font-bold text-white">
+    שקלול מותאם
+  </span>
+);
 
 export function SubjectCard({
   name,
@@ -410,6 +440,19 @@ export function SubjectCard({
                   const usesSubItems = hasSubItemGrades(normalizedSubItems);
                   const multiComponent =
                     !usesSubItems && hasSeparateComponentGrades(normalizedComponents);
+                  const weightInfo = getObligationWeightInfo(o, grade);
+                  const weightBySortOrder = new Map(
+                    (weightInfo?.parts ?? []).map((p) => [p.sortOrder, p])
+                  );
+                  const canEditWeights =
+                    !readOnly &&
+                    !!onGradeChange &&
+                    !isSocial &&
+                    (weightInfo?.parts.length ?? 0) > 1;
+                  const weightSum = (weightInfo?.parts ?? []).reduce(
+                    (sum, p) => sum + p.weightPercent,
+                    0
+                  );
                   const displayScore = resolveObligationGradeScore(o, grade ?? {}, {
                     studentGradeYear,
                   });
@@ -541,6 +584,7 @@ export function SubjectCard({
                                 לשנים הבאות
                               </span>
                             )}
+                            {weightInfo?.hasOverrides && CUSTOM_WEIGHT_BADGE}
                           </div>
 
                           <div className="mt-3 grid w-full grid-cols-2 gap-x-6 gap-y-2 text-base sm:grid-cols-4">
@@ -612,13 +656,25 @@ export function SubjectCard({
                               <div className="flex w-full flex-wrap items-end gap-2 sm:w-auto sm:items-center">
                                 {o.components.map((c, i) => {
                                   const sortOrder = c.sortOrder ?? i;
+                                  const part = weightBySortOrder.get(sortOrder);
                                   return (
                                     <label
                                       key={sortOrder}
                                       className="flex min-w-[calc(50%-0.25rem)] flex-1 flex-col items-stretch gap-1 sm:min-w-0 sm:flex-none sm:items-end"
                                     >
-                                      <span className="text-xs font-medium text-slate-600">
-                                        {c.name} ({c.weightPercent}%)
+                                      <span
+                                        className={clsx(
+                                          "text-xs font-medium",
+                                          part?.isOverridden
+                                            ? "text-amber-700"
+                                            : "text-slate-600"
+                                        )}
+                                      >
+                                        {c.name} (
+                                        {formatWeightPercent(
+                                          part?.weightPercent ?? c.weightPercent
+                                        )}
+                                        %)
                                       </span>
                                       <input
                                         type="number"
@@ -774,18 +830,110 @@ export function SubjectCard({
                         </div>
                       )}
 
-                      {o.components.length > 0 && (
-                        <div className="mt-4 border-t border-slate-100 pt-4">
-                          <p className="mb-2 text-base font-semibold text-slate-800">שקלול ציון:</p>
-                          <div className="flex flex-wrap gap-2">
-                            {o.components.map((c, i) => (
-                              <span key={i} className="badge-muted text-sm font-medium">
-                                {c.name}: <strong>{c.weightPercent}%</strong>
-                              </span>
-                            ))}
+                      {weightInfo &&
+                        weightInfo.parts.length > 0 &&
+                        (weightInfo.kind === "component" || canEditWeights) && (
+                          <div className="mt-4 border-t border-slate-100 pt-4">
+                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-base font-semibold text-slate-800">
+                                {weightInfo.kind === "subItem"
+                                  ? "אחוזי שקלול תתי-המטלות:"
+                                  : "שקלול ציון:"}
+                              </p>
+                              {weightInfo.hasOverrides && !canEditWeights && (
+                                <span className="text-xs font-medium text-amber-700">
+                                  אחוזים שהוגדרו לתלמיד זה בהזנה זו בלבד
+                                </span>
+                              )}
+                            </div>
+
+                            {canEditWeights && onGradeChange ? (
+                              <>
+                                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                  {weightInfo.parts.map((part) => (
+                                    <label
+                                      key={part.sortOrder}
+                                      className={clsx(
+                                        "flex items-center justify-between gap-2 rounded-lg px-3 py-2 ring-1",
+                                        part.isOverridden
+                                          ? "bg-amber-50 ring-amber-300"
+                                          : "bg-white ring-slate-200"
+                                      )}
+                                    >
+                                      <span className="min-w-0 flex-1 truncate text-sm text-slate-700">
+                                        {part.name}
+                                        {part.isOverridden && (
+                                          <span className="ms-1 text-xs text-amber-700">
+                                            (ברירת מחדל{" "}
+                                            {formatWeightPercent(part.defaultWeightPercent)}
+                                            %)
+                                          </span>
+                                        )}
+                                      </span>
+                                      <span className="flex shrink-0 items-center gap-1">
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          max={100}
+                                          step="any"
+                                          inputMode="decimal"
+                                          className="input w-20 py-1.5 text-sm"
+                                          value={part.weightPercent}
+                                          onChange={(e) =>
+                                            onGradeChange(
+                                              o.id,
+                                              `${weightInfo.kind === "subItem" ? "subItemWeight" : "componentWeight"}:${part.sortOrder}`,
+                                              e.target.value
+                                                ? parseFloat(e.target.value)
+                                                : null
+                                            )
+                                          }
+                                        />
+                                        <span className="text-sm text-slate-500">%</span>
+                                      </span>
+                                    </label>
+                                  ))}
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                                  <span
+                                    className={clsx(
+                                      "font-medium",
+                                      Math.abs(weightSum - 100) > 0.01
+                                        ? "text-red-600"
+                                        : "text-slate-500"
+                                    )}
+                                  >
+                                    סה&quot;כ {formatWeightPercent(weightSum)}%
+                                    {Math.abs(weightSum - 100) > 0.01
+                                      ? " — הסכום חייב להיות 100%"
+                                      : ""}
+                                  </span>
+                                  {weightInfo.hasOverrides && (
+                                    <button
+                                      type="button"
+                                      className="font-medium text-primary-600 underline-offset-2 hover:underline"
+                                      onClick={() =>
+                                        onGradeChange(o.id, "weightReset", null)
+                                      }
+                                    >
+                                      איפוס לאחוזי ברירת המחדל
+                                    </button>
+                                  )}
+                                </div>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  שינוי האחוזים כאן חל על התלמיד הזה בלבד ואינו משנה את
+                                  הגדרת המקצוע.
+                                </p>
+                              </>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {weightInfo.parts.map((part) => (
+                                  <WeightPartChip key={part.sortOrder} part={part} />
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      )}
+                        )}
 
                       {usesSubItems && (
                         <div className="mt-4 border-t border-slate-100 pt-4">
@@ -843,9 +991,28 @@ export function SubjectCard({
                                         />
                                       )}
                                       <span className="font-medium text-slate-800">{si.name}</span>
-                                      <span className="text-sm text-primary-600">
-                                        ({si.weightPercent}%)
-                                      </span>
+                                      {(() => {
+                                        const part = weightBySortOrder.get(sortOrder);
+                                        const weight =
+                                          part?.weightPercent ?? si.weightPercent;
+                                        return (
+                                          <span
+                                            className={clsx(
+                                              "text-sm",
+                                              part?.isOverridden
+                                                ? "font-semibold text-amber-700"
+                                                : "text-primary-600"
+                                            )}
+                                            title={
+                                              part?.isOverridden
+                                                ? `אחוז מותאם לתלמיד זה (ברירת המחדל: ${formatWeightPercent(part.defaultWeightPercent)}%)`
+                                                : undefined
+                                            }
+                                          >
+                                            ({formatWeightPercent(weight)}%)
+                                          </span>
+                                        );
+                                      })()}
                                       {subItemDone ? (
                                         <span className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
                                           הושלם

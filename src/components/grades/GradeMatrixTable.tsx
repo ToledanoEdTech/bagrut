@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useCallback, useSyncExternalStore } from "react";
+import clsx from "clsx";
 import { RotateCcw } from "lucide-react";
 import { STATUS_LABELS, SUBMISSION_STATUSES, hasClearableGradeEntry } from "@/lib/grade-status";
 import {
@@ -39,6 +40,13 @@ export type MatrixComponent = {
   sortOrder: number;
 };
 
+/** עריכת אחוז השקלול של המשבצת הנבחרת, לכל תלמיד בנפרד */
+export type MatrixWeightColumn = {
+  defaultWeightPercent: number;
+  /** שאר הרכיבים במטלה — היתרה עד 100% מתחלקת ביניהם */
+  otherPartNames: string[];
+};
+
 export type MatrixRow = {
   studentId: string;
   studentName: string;
@@ -49,8 +57,17 @@ export type MatrixRow = {
   qualitativeLevel?: QualitativeLevel | null;
   componentScores?: Record<number, number | null> | null;
   componentWeightOverrides?: Record<number, number> | null;
+  /** האחוז שחל על המשבצת הנבחרת אצל תלמיד זה */
+  weightPercent?: number | null;
   status: SubmissionStatus;
 };
+
+export type MatrixField =
+  | "score"
+  | "status"
+  | "qualitativeLevel"
+  | "weightPercent"
+  | `componentScore:${number}`;
 
 type Props = {
   rows: MatrixRow[];
@@ -59,9 +76,10 @@ type Props = {
   qualitative?: boolean;
   /** הצגת עמודת כיתה (הזנה לפי שכבה) */
   showClass?: boolean;
+  weightColumn?: MatrixWeightColumn | null;
   onChange: (
     studentId: string,
-    field: "score" | "status" | "qualitativeLevel" | `componentScore:${number}`,
+    field: MatrixField,
     value: number | null | SubmissionStatus | QualitativeLevel | ""
   ) => void;
   onClear?: (studentId: string) => void;
@@ -105,6 +123,44 @@ function ClearButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+function WeightInput({
+  value,
+  defaultWeightPercent,
+  className,
+  onChange,
+}: {
+  value: number | null | undefined;
+  defaultWeightPercent: number;
+  className: string;
+  onChange: (value: number | null) => void;
+}) {
+  const isCustom = value != null && Math.abs(value - defaultWeightPercent) > 0.01;
+  return (
+    <input
+      type="number"
+      min={0}
+      max={100}
+      step="any"
+      inputMode="decimal"
+      className={clsx(
+        className,
+        isCustom && "border-amber-400 bg-amber-50 font-semibold text-amber-900"
+      )}
+      placeholder={String(defaultWeightPercent)}
+      title={
+        isCustom
+          ? `אחוז מותאם לתלמיד זה (ברירת המחדל: ${defaultWeightPercent}%)`
+          : `ברירת המחדל של המטלה: ${defaultWeightPercent}%`
+      }
+      value={value ?? ""}
+      onChange={(e) => {
+        const raw = e.target.value;
+        onChange(raw === "" ? null : parseFloat(raw));
+      }}
+    />
+  );
+}
+
 /** אותו כלל כמו resolveObligationGradeScore לציון משוקלל מרכיבים */
 function resolveMatrixWeightedScore(
   components: MatrixComponent[],
@@ -122,11 +178,13 @@ export function GradeMatrixTable({
   components = [],
   qualitative = false,
   showClass = false,
+  weightColumn = null,
   onChange,
   onClear,
 }: Props) {
   const isDesktop = useIsDesktop();
   const multiComponent = !qualitative && hasSeparateComponentGrades(components);
+  const showWeight = !qualitative && !multiComponent && weightColumn != null;
   const scoreRefs = useRef<(HTMLInputElement | null)[]>([]);
   const levelRefs = useRef<(HTMLSelectElement | null)[]>([]);
   const scoreHeader = components[0]?.name ?? "ציון";
@@ -262,7 +320,14 @@ export function GradeMatrixTable({
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] gap-2.5">
+                <div
+                  className={clsx(
+                    "grid gap-2.5",
+                    showWeight
+                      ? "grid-cols-[minmax(0,1fr)_5rem_5rem]"
+                      : "grid-cols-[minmax(0,1fr)_5.5rem]"
+                  )}
+                >
                   <label className="block min-w-0">
                     <span className="mb-1 block text-xs font-medium text-slate-500">סטטוס</span>
                     <StatusSelect
@@ -293,6 +358,21 @@ export function GradeMatrixTable({
                       onKeyDown={(e) => handleScoreKeyDown(index, e)}
                     />
                   </label>
+                  {showWeight && weightColumn && (
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium text-slate-500">
+                        אחוז
+                      </span>
+                      <WeightInput
+                        value={row.weightPercent}
+                        defaultWeightPercent={weightColumn.defaultWeightPercent}
+                        className="input w-full py-2 text-center text-base"
+                        onChange={(value) =>
+                          onChange(row.studentId, "weightPercent", value)
+                        }
+                      />
+                    </label>
+                  )}
                 </div>
               )}
             </div>
@@ -335,6 +415,14 @@ export function GradeMatrixTable({
             ) : (
               <th className="px-4 py-3 text-sm font-semibold text-slate-600">
                 {scoreHeader}
+              </th>
+            )}
+            {showWeight && weightColumn && (
+              <th className="px-4 py-3 text-sm font-semibold text-slate-600">
+                אחוז שקלול
+                <span className="block text-xs font-normal normal-case text-slate-400">
+                  ברירת מחדל: {weightColumn.defaultWeightPercent}%
+                </span>
               </th>
             )}
             {onClear && (
@@ -432,6 +520,18 @@ export function GradeMatrixTable({
                         onChange(row.studentId, "score", score);
                       }}
                       onKeyDown={(e) => handleScoreKeyDown(index, e)}
+                    />
+                  </td>
+                )}
+                {showWeight && weightColumn && (
+                  <td className="px-4 py-2.5">
+                    <WeightInput
+                      value={row.weightPercent}
+                      defaultWeightPercent={weightColumn.defaultWeightPercent}
+                      className="input w-24 py-1.5 text-sm"
+                      onChange={(value) =>
+                        onChange(row.studentId, "weightPercent", value)
+                      }
                     />
                   </td>
                 )}
