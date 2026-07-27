@@ -3,6 +3,7 @@ import {
   createSubject,
   deleteSubject,
   ensureSocialInvolvementSubject,
+  getSubjectById,
   listSubjectsByPath,
   listSubjectsEnriched,
   updateSubject,
@@ -10,6 +11,7 @@ import {
 import { requireAdmin } from "@/lib/api-auth";
 import { defaultGradeEntryDueDate } from "@/lib/grade-due-date";
 import { validateCanonicalGradeYear } from "@/lib/grade-year";
+import { actorFromSession, recordActivity } from "@/lib/activity-log";
 
 export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
@@ -29,8 +31,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { error } = await requireAdmin();
-  if (error) return error;
+  const { error, session } = await requireAdmin();
+  if (error || !session) return error;
 
   const body = await req.json();
   const rawObligations = body.obligations ?? [];
@@ -103,12 +105,22 @@ export async function POST(req: NextRequest) {
     obligations,
   });
 
+  void recordActivity({
+    actor: actorFromSession(session),
+    action: "subject.create",
+    category: "subjects",
+    entityType: "subject",
+    entityId: subject.id,
+    summaryHe: `נוסף מקצוע חדש: ${subject.name}`,
+    meta: { subjectId: subject.id, subjectName: subject.name },
+  });
+
   return NextResponse.json(subject);
 }
 
 export async function PATCH(req: NextRequest) {
-  const { error } = await requireAdmin();
-  if (error) return error;
+  const { error, session } = await requireAdmin();
+  if (error || !session) return error;
 
   const body = await req.json();
   const { id, teacherId, ...data } = body;
@@ -117,17 +129,46 @@ export async function PATCH(req: NextRequest) {
     patch.teacherId = teacherId || null;
   }
   const subject = await updateSubject(id, patch);
+
+  if (subject) {
+    void recordActivity({
+      actor: actorFromSession(session),
+      action: "subject.update",
+      category: "subjects",
+      entityType: "subject",
+      entityId: subject.id,
+      summaryHe: `עודכן מקצוע: ${subject.name}`,
+      meta: {
+        subjectId: subject.id,
+        subjectName: subject.name,
+        fields: Object.keys(patch),
+      },
+    });
+  }
+
   return NextResponse.json(subject);
 }
 
 export async function DELETE(req: NextRequest) {
-  const { error } = await requireAdmin();
-  if (error) return error;
+  const { error, session } = await requireAdmin();
+  if (error || !session) return error;
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "חסר מזהה" }, { status: 400 });
 
+  const existing = await getSubjectById(id);
   await deleteSubject(id);
+
+  void recordActivity({
+    actor: actorFromSession(session),
+    action: "subject.delete",
+    category: "subjects",
+    entityType: "subject",
+    entityId: id,
+    summaryHe: `נמחק מקצוע: ${existing?.name ?? id}`,
+    meta: { subjectId: id, subjectName: existing?.name ?? null },
+  });
+
   return NextResponse.json({ success: true });
 }

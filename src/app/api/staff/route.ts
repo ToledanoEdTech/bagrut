@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/api-auth";
 import { listStaff } from "@/lib/firestore";
 import { isAdminEmail } from "@/lib/roles";
 import { invalidateServerCache } from "@/lib/server-cache";
+import { actorFromSession, recordActivity } from "@/lib/activity-log";
 import type { StaffPermission, StaffRole } from "@/lib/types";
 
 function normalizePermissions(permissions: unknown): StaffPermission[] | undefined {
@@ -75,10 +76,21 @@ export async function POST(req: NextRequest) {
   const doc = await adminDb.collection("staff").add(docData);
   await invalidateServerCache("staff");
 
+  const displayName = name ?? normalized;
+  void recordActivity({
+    actor: actorFromSession(session),
+    action: "staff.create",
+    category: "staff",
+    entityType: "staff",
+    entityId: doc.id,
+    summaryHe: `נוסף חבר צוות: ${displayName} (${staffRole === "ADMIN" ? "מנהל" : "מורה"})`,
+    meta: { staffId: doc.id, email: normalized, role: staffRole },
+  });
+
   return NextResponse.json({
     id: doc.id,
     email: normalized,
-    name: name ?? normalized,
+    name: displayName,
     role: staffRole,
     permissions: staffPermissions,
     createdAt: now,
@@ -162,6 +174,22 @@ export async function PATCH(req: NextRequest) {
   await ref.update(updates);
   await invalidateServerCache("staff");
   const updated = await ref.get();
+  const updatedData = updated.data() as { name?: string; role?: StaffRole; email?: string };
+
+  void recordActivity({
+    actor: actorFromSession(session),
+    action: "staff.update",
+    category: "staff",
+    entityType: "staff",
+    entityId: id,
+    summaryHe: `עודכן חבר צוות: ${updatedData.name ?? existing.name}`,
+    meta: {
+      staffId: id,
+      email: existing.email,
+      fields: Object.keys(updates).filter((k) => k !== "updatedAt"),
+    },
+  });
+
   return NextResponse.json({ id: updated.id, ...updated.data() });
 }
 
@@ -200,5 +228,16 @@ export async function DELETE(req: NextRequest) {
 
   await ref.delete();
   await invalidateServerCache("staff");
+
+  void recordActivity({
+    actor: actorFromSession(session),
+    action: "staff.delete",
+    category: "staff",
+    entityType: "staff",
+    entityId: id,
+    summaryHe: `הוסר חבר צוות: ${data.email}`,
+    meta: { staffId: id, email: data.email, role: data.role },
+  });
+
   return NextResponse.json({ success: true });
 }

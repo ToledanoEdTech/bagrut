@@ -27,6 +27,7 @@ import {
   ChevronDown,
   FolderKanban,
   Grid3X3,
+  History,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { SiteLogos } from "@/components/ui/SiteLogos";
@@ -60,6 +61,7 @@ const reportsLinks: NavLink[] = [
 ];
 
 const managementLinks: NavLink[] = [
+  { href: "/admin/activity", label: "שינויים אחרונים", icon: History },
   { href: "/admin/classes", label: "כיתות ותוכניות", icon: School },
   { href: "/admin/subjects", label: "מקצועות וחובות", icon: BookOpen },
   { href: "/admin/obligations", label: "לוח מטלות וציונים", icon: CalendarDays },

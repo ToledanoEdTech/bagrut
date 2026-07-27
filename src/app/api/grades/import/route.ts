@@ -29,6 +29,7 @@ import {
   parseQualitativeLevelInput,
 } from "@/lib/social-involvement";
 import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
+import { actorFromSession, recordActivity } from "@/lib/activity-log";
 import type { QualitativeLevel, SubmissionStatus, Subject, Obligation } from "@/lib/types";
 
 type ImportRow = {
@@ -667,6 +668,20 @@ export async function POST(req: NextRequest) {
     await upsertGradesBulk(toUpsert);
     // כולל מחיקות (איפוס למצב שלא הוזן) — לא רק מסמכים שנותרו
     updated = toUpsert.length;
+  }
+
+  if (updated > 0) {
+    void recordActivity({
+      actor: actorFromSession(session),
+      action: "grade.import",
+      category: "grades",
+      entityType: "grade",
+      entityId: "import",
+      summaryHe: `ייבוא ציונים מקובץ: ${updated} רשומות עודכנו${
+        skipped > 0 ? ` · ${skipped} דולגו` : ""
+      }`,
+      meta: { updated, skipped, errorCount: errors.length },
+    });
   }
 
   return NextResponse.json({ updated, skipped, errors });

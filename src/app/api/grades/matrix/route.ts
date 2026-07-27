@@ -30,6 +30,11 @@ import {
 import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
 import { getAllowedClassIds } from "@/lib/permissions";
 import { normalizeGradeYear } from "@/lib/grade-year";
+import {
+  actorFromSession,
+  obligationLabel,
+  recordActivity,
+} from "@/lib/activity-log";
 import type { QualitativeLevel, SubmissionStatus } from "@/lib/types";
 
 function parseTaskKind(value: string | null): MatrixTaskKind | undefined {
@@ -318,5 +323,25 @@ export async function PUT(req: NextRequest) {
   }
 
   const grades = await upsertGradesBulk(validated);
+
+  if (validated.length > 0) {
+    const taskName = obligationLabel(found.obligation);
+    void recordActivity({
+      actor: actorFromSession(session),
+      action: "grade.bulk",
+      category: "grades",
+      entityType: "grade",
+      entityId: obligationId,
+      summaryHe: `הזנת ציונים במטריצה: ${found.subject.name} — ${taskName} (${validated.length} תלמידים)`,
+      meta: {
+        obligationId,
+        subjectId: found.subject.id,
+        subjectName: found.subject.name,
+        obligationName: taskName,
+        count: validated.length,
+      },
+    });
+  }
+
   return NextResponse.json({ updated: grades.length, grades });
 }

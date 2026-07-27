@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getGradesByStudent, upsertGrades } from "@/lib/firestore";
+import {
+  findObligation,
+  getGradesByStudent,
+  getStudentById,
+  upsertGrades,
+} from "@/lib/firestore";
 import { checkPermission, requireAuth, requireGradeWrite, requireStaff, requireStudentView } from "@/lib/api-auth";
 import { validateComponentScores, validateSubItemScores } from "@/lib/grade-components";
 import { isValidSubmissionStatus, validateScore } from "@/lib/grade-status";
 import { isValidQualitativeLevel } from "@/lib/social-involvement";
+import { actorFromSession, recordActivity } from "@/lib/activity-log";
 import type { QualitativeLevel, SubmissionStatus } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
@@ -100,6 +106,43 @@ export async function PUT(req: NextRequest) {
       notes: g.notes,
     }))
   );
+
+  if (results.length > 0) {
+    const student = await getStudentById(studentId);
+    const studentName = student?.name ?? studentId;
+    const firstFound = await findObligation(results[0]!.obligationId);
+    const subjectName = firstFound?.subject.name;
+    const details = results
+      .slice(0, 3)
+      .map((g) => {
+        const scorePart =
+          g.score != null
+            ? String(g.score)
+            : g.qualitativeLevel
+              ? g.qualitativeLevel
+              : g.status;
+        return scorePart;
+      })
+      .join(", ");
+    const more =
+      results.length > 3 ? ` ועוד ${results.length - 3}` : "";
+    void recordActivity({
+      actor: actorFromSession(session),
+      action: "grade.upsert",
+      category: "grades",
+      entityType: "grade",
+      entityId: studentId,
+      summaryHe: `עדכון ציונים לתלמיד ${studentName}${
+        subjectName ? ` · ${subjectName}` : ""
+      } (${results.length} מטלות${details ? `: ${details}${more}` : ""})`,
+      meta: {
+        studentId,
+        studentName,
+        count: results.length,
+        obligationIds: results.map((g) => g.obligationId),
+      },
+    });
+  }
 
   return NextResponse.json(results);
 }

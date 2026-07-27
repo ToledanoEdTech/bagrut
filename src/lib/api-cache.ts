@@ -62,11 +62,20 @@ export function invalidateCache(key?: string) {
     listeners.forEach((_, k) => notify(k));
     return;
   }
+  // Collect first, then delete, then notify. Notifying synchronously can
+  // re-insert the same key via fetchCached (subscribers force-refetch), and
+  // Map iteration would visit that new entry again → infinite loop / tab hang.
+  const toInvalidate: string[] = [];
   for (const k of cache.keys()) {
     if (k === key || k.startsWith(key)) {
-      cache.delete(k);
-      notify(k);
+      toInvalidate.push(k);
     }
+  }
+  for (const k of toInvalidate) {
+    cache.delete(k);
+  }
+  for (const k of toInvalidate) {
+    notify(k);
   }
 }
 

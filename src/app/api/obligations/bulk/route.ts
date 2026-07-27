@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/api-auth";
 import type { Obligation } from "@/lib/types";
 import { defaultGradeEntryDueDate } from "@/lib/grade-due-date";
 import { validateCanonicalGradeYear } from "@/lib/grade-year";
+import { actorFromSession, recordActivity } from "@/lib/activity-log";
 
 type AllowedField =
   | "name"
@@ -29,8 +30,8 @@ const ALLOWED_FIELDS: AllowedField[] = [
 ];
 
 export async function PATCH(req: NextRequest) {
-  const { error } = await requireAdmin();
-  if (error) return error;
+  const { error, session } = await requireAdmin();
+  if (error || !session) return error;
 
   const body = await req.json().catch(() => null);
   const rawUpdates = body?.updates;
@@ -125,6 +126,17 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const updated = await bulkUpdateObligationFields(updates);
+    if (updated > 0) {
+      void recordActivity({
+        actor: actorFromSession(session),
+        action: "obligation.update",
+        category: "subjects",
+        entityType: "obligation",
+        entityId: "bulk",
+        summaryHe: `עדכון מרובה של מטלות: ${updated} מטלות עודכנו`,
+        meta: { count: updated },
+      });
+    }
     return NextResponse.json({ updated });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "שגיאה בעדכון מטלות";

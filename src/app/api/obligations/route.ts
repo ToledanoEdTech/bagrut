@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   addObligation,
   deleteObligation,
+  getSubjectById,
   updateObligation,
 } from "@/lib/firestore";
 import { requireAdmin } from "@/lib/api-auth";
 import { defaultGradeEntryDueDate } from "@/lib/grade-due-date";
 import { validateCanonicalGradeYear } from "@/lib/grade-year";
+import {
+  actorFromSession,
+  obligationLabel,
+  recordActivity,
+} from "@/lib/activity-log";
 
 function normalizeSubItemGradeYear(
   value: string | null | undefined
@@ -53,8 +59,8 @@ function mapSubItems(
 }
 
 export async function POST(req: NextRequest) {
-  const { error } = await requireAdmin();
-  if (error) return error;
+  const { error, session } = await requireAdmin();
+  if (error || !session) return error;
 
   try {
     const body = await req.json();
@@ -88,6 +94,25 @@ export async function POST(req: NextRequest) {
       subItems: subItemsMapped.value,
     });
 
+    const subject = await getSubjectById(body.subjectId);
+    const taskName = obligationLabel(obligation);
+    void recordActivity({
+      actor: actorFromSession(session),
+      action: "obligation.create",
+      category: "subjects",
+      entityType: "obligation",
+      entityId: obligation.id,
+      summaryHe: `נוספה מטלה: ${taskName}${
+        subject ? ` במקצוע ${subject.name}` : ""
+      }`,
+      meta: {
+        obligationId: obligation.id,
+        subjectId: body.subjectId,
+        subjectName: subject?.name ?? null,
+        obligationName: taskName,
+      },
+    });
+
     return NextResponse.json(obligation);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "שגיאה בשמירת מטלה";
@@ -96,8 +121,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const { error } = await requireAdmin();
-  if (error) return error;
+  const { error, session } = await requireAdmin();
+  if (error || !session) return error;
 
   try {
     const body = await req.json();
@@ -126,6 +151,26 @@ export async function PATCH(req: NextRequest) {
       ),
       subItems: subItemsMapped.value,
     });
+
+    const subject = await getSubjectById(subjectId);
+    const taskName = obligationLabel(result);
+    void recordActivity({
+      actor: actorFromSession(session),
+      action: "obligation.update",
+      category: "subjects",
+      entityType: "obligation",
+      entityId: result.id,
+      summaryHe: `עודכנה מטלה: ${taskName}${
+        subject ? ` במקצוע ${subject.name}` : ""
+      }`,
+      meta: {
+        obligationId: result.id,
+        subjectId,
+        subjectName: subject?.name ?? null,
+        obligationName: taskName,
+      },
+    });
+
     return NextResponse.json(result);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "שגיאה בעדכון מטלה";
@@ -134,8 +179,8 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const { error } = await requireAdmin();
-  if (error) return error;
+  const { error, session } = await requireAdmin();
+  if (error || !session) return error;
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
@@ -144,6 +189,28 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "חסר מזהה" }, { status: 400 });
   }
 
+  const subject = await getSubjectById(subjectId);
+  const existing = subject?.obligations.find((o) => o.id === id);
+  const taskName = existing ? obligationLabel(existing) : id;
+
   await deleteObligation(subjectId, id);
+
+  void recordActivity({
+    actor: actorFromSession(session),
+    action: "obligation.delete",
+    category: "subjects",
+    entityType: "obligation",
+    entityId: id,
+    summaryHe: `נמחקה מטלה: ${taskName}${
+      subject ? ` במקצוע ${subject.name}` : ""
+    }`,
+    meta: {
+      obligationId: id,
+      subjectId,
+      subjectName: subject?.name ?? null,
+      obligationName: taskName,
+    },
+  });
+
   return NextResponse.json({ success: true });
 }
