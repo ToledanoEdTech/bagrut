@@ -3,6 +3,7 @@
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { Alert } from "@/components/ui/Alert";
+import { DossierExportButton } from "@/components/ui/DossierExportButton";
 import { useRegisterPageMeta } from "@/components/layout/PageMetaContext";
 import { StudentDashboardContent } from "@/components/students/StudentDashboardContent";
 import { useApi } from "@/hooks/useApi";
@@ -76,6 +77,10 @@ export default function StudentDashboard() {
                 {chip}
               </span>
             ))}
+        </div>
+
+        <div className="mt-5 flex justify-start">
+          <DossierExportButton kind="student" label="ייצוא התיק שלי" audience="student" />
         </div>
 
         <div className="mt-7 max-w-lg rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-md">

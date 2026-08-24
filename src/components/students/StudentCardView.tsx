@@ -1,5 +1,6 @@
 "use client";
 
+import { DossierExportButton } from "@/components/ui/DossierExportButton";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { useApi } from "@/hooks/useApi";
 import {
@@ -24,5 +25,12 @@ export function StudentCardView({ studentId, apiPath }: Props) {
     return <div className="text-center text-base text-slate-500">שגיאה בטעינת הנתונים</div>;
   }
 
-  return <StudentDashboardContent data={data} subjectsTitle="מקצועות" audience="staff" />;
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <DossierExportButton kind="student" studentId={studentId} label="ייצוא תיק תלמיד" />
+      </div>
+      <StudentDashboardContent data={data} subjectsTitle="מקצועות" audience="staff" />
+    </div>
+  );
 }

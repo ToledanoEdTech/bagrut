@@ -3,6 +3,15 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: process.cwd(),
+  serverExternalPackages: [
+    "@react-pdf/renderer",
+    "@react-pdf/font",
+    "@react-pdf/layout",
+    "@react-pdf/pdfkit",
+    "@react-pdf/render",
+    "fontkit",
+    "jszip",
+  ],
   async redirects() {
     return [
       {

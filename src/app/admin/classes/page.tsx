@@ -8,6 +8,7 @@ import { PageLoader } from "@/components/ui/PageLoader";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { DossierExportButton } from "@/components/ui/DossierExportButton";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
@@ -242,11 +243,20 @@ export default function ClassesPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {view !== "detail" && (
-            <ExportButton
-              onExport={handleExport}
-              disabled={view === "students" ? classStudents.length === 0 : classes.length === 0}
-              label={view === "students" ? "ייצוא תלמידי כיתה" : "ייצוא כיתות"}
-            />
+            <>
+              <ExportButton
+                onExport={handleExport}
+                disabled={view === "students" ? classStudents.length === 0 : classes.length === 0}
+                label={view === "students" ? "ייצוא תלמידי כיתה" : "ייצוא כיתות"}
+              />
+              {view === "students" && selectedClass ? (
+                <DossierExportButton
+                  kind="class"
+                  classId={selectedClass.id}
+                  label="ייצוא תיקי תלמידים"
+                />
+              ) : null}
+            </>
           )}
           {view === "classes" && (
             <Button onClick={() => setShowNew(true)}>
