@@ -88,6 +88,8 @@ export async function GET(req: NextRequest) {
     });
   } catch (err) {
     console.error("class dossier export failed", err);
-    return NextResponse.json({ error: "הייצוא נכשל. נסו שוב." }, { status: 500 });
+    const message =
+      err instanceof Error && err.message ? err.message : "הייצוא נכשל. נסו שוב.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

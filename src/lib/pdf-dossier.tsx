@@ -16,24 +16,37 @@ import type { StudentDossier } from "@/lib/student-dossier";
 
 let fontsRegistered = false;
 
-function heeboFontPath(filename: string): string {
-  return path.join(
-    process.cwd(),
-    "node_modules",
-    "@fontsource",
-    "heebo",
-    "files",
-    filename
-  );
+function resolveExistingFile(candidates: string[]): string | null {
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      // ignore and try next candidate
+    }
+  }
+  return null;
+}
+
+function resolveHeeboFont(weight: 400 | 700): string {
+  const publicName = weight === 400 ? "heebo-400.woff" : "heebo-700.woff";
+  const nodeModulesName =
+    weight === 400 ? "heebo-hebrew-400-normal.woff" : "heebo-hebrew-700-normal.woff";
+  const found = resolveExistingFile([
+    path.join(process.cwd(), "public", "fonts", publicName),
+    path.join(process.cwd(), "node_modules", "@fontsource", "heebo", "files", nodeModulesName),
+  ]);
+  if (!found) {
+    throw new Error(
+      `פונט עברי לייצוא PDF לא נמצא בשרת (Heebo ${weight}). ודאו שקבצי הפונט הועלו לפריסה.`
+    );
+  }
+  return found;
 }
 
 function ensurePdfFonts() {
   if (fontsRegistered) return;
-  const regular = heeboFontPath("heebo-hebrew-400-normal.woff");
-  const bold = heeboFontPath("heebo-hebrew-700-normal.woff");
-  if (!fs.existsSync(regular) || !fs.existsSync(bold)) {
-    throw new Error("פונט עברי לייצוא PDF לא נמצא בשרת");
-  }
+  const regular = resolveHeeboFont(400);
+  const bold = resolveHeeboFont(700);
   Font.register({
     family: "Heebo",
     fonts: [
@@ -632,22 +645,18 @@ function StudentPage({
 }
 
 function resolveLogoDataUrl(): string | null {
-  const candidates = [
+  const candidate = resolveExistingFile([
     path.join(process.cwd(), "public", "logos", "logo-2.png"),
     path.join(process.cwd(), "public", "logo-2.png"),
     path.join(process.cwd(), "public", "logos", "logo-1.png"),
-  ];
-  for (const candidate of candidates) {
-    try {
-      if (fs.existsSync(candidate)) {
-        const buffer = fs.readFileSync(candidate);
-        return `data:image/png;base64,${buffer.toString("base64")}`;
-      }
-    } catch {
-      // ignore and try next candidate
-    }
+  ]);
+  if (!candidate) return null;
+  try {
+    const buffer = fs.readFileSync(candidate);
+    return `data:image/png;base64,${buffer.toString("base64")}`;
+  } catch {
+    return null;
   }
-  return null;
 }
 
 function StudentDossierDocument({
