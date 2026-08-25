@@ -13,6 +13,7 @@ import {
 } from "@react-pdf/renderer";
 import { exportTimestamp } from "@/lib/excel-export";
 import type { StudentDossier } from "@/lib/student-dossier";
+import { HEEBO_400_BASE64, HEEBO_700_BASE64 } from "@/lib/pdf-fonts";
 
 let fontsRegistered = false;
 
@@ -27,31 +28,18 @@ function resolveExistingFile(candidates: string[]): string | null {
   return null;
 }
 
-function resolveHeeboFont(weight: 400 | 700): string {
-  const publicName = weight === 400 ? "heebo-400.woff" : "heebo-700.woff";
-  const nodeModulesName =
-    weight === 400 ? "heebo-hebrew-400-normal.woff" : "heebo-hebrew-700-normal.woff";
-  const found = resolveExistingFile([
-    path.join(process.cwd(), "public", "fonts", publicName),
-    path.join(process.cwd(), "node_modules", "@fontsource", "heebo", "files", nodeModulesName),
-  ]);
-  if (!found) {
-    throw new Error(
-      `פונט עברי לייצוא PDF לא נמצא בשרת (Heebo ${weight}). ודאו שקבצי הפונט הועלו לפריסה.`
-    );
-  }
-  return found;
-}
-
 function ensurePdfFonts() {
   if (fontsRegistered) return;
-  const regular = resolveHeeboFont(400);
-  const bold = resolveHeeboFont(700);
+  // Fonts are embedded as base64 to guarantee availability on serverless
+  // runtimes (Vercel) where filesystem lookups for node_modules/public assets
+  // can silently fail after bundling.
+  const regularBuffer = Buffer.from(HEEBO_400_BASE64, "base64");
+  const boldBuffer = Buffer.from(HEEBO_700_BASE64, "base64");
   Font.register({
     family: "Heebo",
     fonts: [
-      { src: regular, fontWeight: 400 },
-      { src: bold, fontWeight: 700 },
+      { src: regularBuffer as unknown as string, fontWeight: 400 },
+      { src: boldBuffer as unknown as string, fontWeight: 700 },
     ],
   });
   // Disable hyphenation for Hebrew — it does not apply.
