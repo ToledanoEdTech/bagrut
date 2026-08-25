@@ -23,10 +23,18 @@ import {
   EMPTY_OBLIGATION,
   type ObligationDraft,
 } from "@/components/subjects/ObligationEditor";
+import {
+  ObligationGradeYearOverrideButton,
+  ObligationGradeYearOverridesModal,
+  type OverrideModalTarget,
+} from "@/components/subjects/ObligationGradeYearOverridesModal";
+import { countOverridesForSubItem } from "@/lib/obligation-grade-year-overrides";
+import type { ObligationClassGradeYearOverride } from "@/lib/types";
 import { defaultGradeEntryDueDate, resolveGradeEntryDueDate } from "@/lib/grade-due-date";
 
 type WeightedItem = { name: string; weightPercent: number };
 type SubItem = WeightedItem & {
+  sortOrder?: number;
   gradeEntryDueDate?: string | null;
   gradeYear?: string | null;
 };
@@ -121,6 +129,14 @@ export default function SubjectsPage() {
   const confirm = useConfirm();
   const toast = useToast();
   const { data: subjects = [], loading, mutate: refreshSubjects } = useApi<Subject[]>("/api/subjects");
+  const { data: classes = [] } = useApi<Array<{ id: string; name: string; gradeYear: string | null }>>(
+    "/api/classes"
+  );
+  const {
+    data: gradeYearOverrides = [],
+    mutate: mutateGradeYearOverrides,
+  } = useApi<ObligationClassGradeYearOverride[]>("/api/obligations/grade-year-overrides");
+  const [overrideModal, setOverrideModal] = useState<OverrideModalTarget | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -140,6 +156,15 @@ export default function SubjectsPage() {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function getOverrideCount(obligationId: string, subItemSortOrder?: number | null) {
+    if (subItemSortOrder != null) {
+      return countOverridesForSubItem(gradeYearOverrides, obligationId, subItemSortOrder);
+    }
+    return gradeYearOverrides.filter(
+      (o) => o.obligationId === obligationId && (o.subItemSortOrder ?? null) == null
+    ).length;
+  }
 
   async function load() {
     try {
@@ -721,6 +746,11 @@ export default function SubjectsPage() {
                             saving={saving}
                             error={error}
                             onClearError={() => setError(null)}
+                            obligationId={o.id}
+                            onManageGradeYearOverrides={setOverrideModal}
+                            getOverrideCount={(subItemSortOrder) =>
+                              getOverrideCount(o.id, subItemSortOrder)
+                            }
                           />
                         ) : (
                           <div className="rounded-xl border border-slate-200 bg-white p-5">
@@ -748,6 +778,18 @@ export default function SubjectsPage() {
                                       {o.gradeYear}
                                     </span>
                                   )}
+                                  <ObligationGradeYearOverrideButton
+                                    compact
+                                    overrideCount={getOverrideCount(o.id, null)}
+                                    onClick={() =>
+                                      setOverrideModal({
+                                        obligationId: o.id,
+                                        obligationLabel: o.name || o.examEvent || "מטלה",
+                                        defaultGradeYear: o.gradeYear,
+                                        subItemSortOrder: null,
+                                      })
+                                    }
+                                  />
                                 </div>
 
                                 {o.studyMaterial && (
@@ -772,7 +814,9 @@ export default function SubjectsPage() {
 
                                 {o.subItems.length > 0 && (
                                   <div className="mt-4 grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                    {o.subItems.map((si, i) => (
+                                    {o.subItems.map((si, i) => {
+                                      const sortOrder = si.sortOrder ?? i;
+                                      return (
                                       <div
                                         key={i}
                                         className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-4 py-2.5 text-base"
@@ -787,11 +831,29 @@ export default function SubjectsPage() {
                                             </span>
                                           )}
                                         </div>
-                                        <span className="shrink-0 font-semibold text-primary-600">
-                                          {si.weightPercent}%
-                                        </span>
+                                        <div className="flex shrink-0 items-center gap-2">
+                                          <ObligationGradeYearOverrideButton
+                                            compact
+                                            overrideCount={getOverrideCount(o.id, sortOrder)}
+                                            onClick={() =>
+                                              setOverrideModal({
+                                                obligationId: o.id,
+                                                obligationLabel:
+                                                  o.name || o.examEvent || "מטלה",
+                                                defaultGradeYear:
+                                                  si.gradeYear ?? o.gradeYear,
+                                                subItemSortOrder: sortOrder,
+                                                subItemLabel: si.name || `תת-מטלה ${i + 1}`,
+                                              })
+                                            }
+                                          />
+                                          <span className="font-semibold text-primary-600">
+                                            {si.weightPercent}%
+                                          </span>
+                                        </div>
                                       </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </div>
@@ -829,6 +891,19 @@ export default function SubjectsPage() {
           );
         })}
       </div>
+
+      {overrideModal && (
+        <ObligationGradeYearOverridesModal
+          open
+          onClose={() => setOverrideModal(null)}
+          {...overrideModal}
+          classes={classes}
+          overrides={gradeYearOverrides}
+          onChanged={() => {
+            void mutateGradeYearOverrides();
+          }}
+        />
+      )}
     </>
   );
 }

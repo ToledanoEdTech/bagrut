@@ -16,7 +16,7 @@ import {
 } from "@/lib/grade-components";
 import { calcSubjectProgressForObligations } from "@/lib/progress";
 import { autoStatusOnScore, emptyGradeFields } from "@/lib/grade-status";
-import type { QualitativeLevel, SubmissionStatus } from "@/lib/types";
+import type { ObligationClassGradeYearOverride, QualitativeLevel, SubmissionStatus } from "@/lib/types";
 import { Save, Loader2, ChevronRight, ChevronLeft, ArrowLeft, AlertCircle, Check } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -92,6 +92,9 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 export default function GradesPage() {
   const confirm = useConfirm();
   const { data: students = [], loading: studentsLoading } = useApi<Student[]>("/api/students");
+  const { data: obligationGradeYearOverrides = [] } = useApi<
+    ObligationClassGradeYearOverride[]
+  >("/api/obligations/grade-year-overrides");
   const [classFilter, setClassFilter] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [jumpSubjectId, setJumpSubjectId] = useState("");
@@ -733,6 +736,8 @@ export default function GradesPage() {
                     grades={subjectGrades}
                     progress={progress}
                     studentGradeYear={selectedStudent?.class.gradeYear}
+                    classId={selectedStudent?.class.id}
+                    obligationGradeYearOverrides={obligationGradeYearOverrides}
                     readOnly={false}
                     onGradeChange={handleGradeChange}
                     onGradeClear={handleGradeClear}

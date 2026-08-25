@@ -23,14 +23,19 @@ import {
   collectNegativeGrades,
   formatObligationLabel,
 } from "@/lib/missing-grades";
-import { filterObligationsDueForStudent } from "@/lib/grade-year";
+import {
+  buildObligationGradeYearOverrideLookup,
+  filterObligationsDueForClass,
+} from "@/lib/obligation-grade-year-overrides";
 import { formatSubjectDisplayName } from "@/lib/subject-display";
 import { isSocialInvolvementSubject } from "@/lib/social-involvement";
-import type { QualitativeLevel } from "@/lib/types";
+import type { ObligationClassGradeYearOverride, QualitativeLevel } from "@/lib/types";
 import { BookOpen, AlertCircle, CheckCircle2, Circle } from "lucide-react";
 
 export type StudentDashboardData = {
   student: {
+    id?: string;
+    classId?: string;
     user: { name: string };
     class: { name: string; gradeYear: string | null };
     tracks: { name: string }[];
@@ -82,6 +87,7 @@ export type StudentDashboardData = {
   outstandingBagrut?: OutstandingBagrutResult;
   hightechBagrut?: HightechBagrutResult;
   bagrutEligibility?: BagrutEligibilityResult;
+  obligationGradeYearOverrides?: ObligationClassGradeYearOverride[];
 };
 
 type ObligationBreakdownItem = {
@@ -102,9 +108,20 @@ type StudentDashboardContentProps = {
 
 function buildObligationBreakdown(
   subjects: StudentDashboardData["subjects"],
-  studentGradeYear: string | null
-): ObligationBreakdownItem[] {
+  studentGradeYear: string | null,
+  classId?: string,
+  obligationGradeYearOverrides?: ObligationClassGradeYearOverride[]
+) {
   const items: ObligationBreakdownItem[] = [];
+  const gradeYearContext =
+    classId != null
+      ? {
+          classId,
+          overrideLookup: buildObligationGradeYearOverrideLookup(
+            obligationGradeYearOverrides ?? []
+          ),
+        }
+      : null;
 
   for (const subject of subjects) {
     if (isSocialInvolvementSubject(subject)) {
@@ -113,7 +130,13 @@ function buildObligationBreakdown(
         units: subject.units,
         category: subject.category,
       });
-      const due = filterObligationsDueForStudent(subject.obligations, studentGradeYear);
+      const due = gradeYearContext
+        ? filterObligationsDueForClass(
+            subject.obligations,
+            studentGradeYear,
+            gradeYearContext
+          )
+        : subject.obligations;
       for (const obligation of due) {
         const grade = subject.grades.find((g) => g.obligationId === obligation.id);
         const done =
@@ -136,7 +159,9 @@ function buildObligationBreakdown(
       units: subject.units,
       category: subject.category,
     });
-    const due = filterObligationsDueForStudent(subject.obligations, studentGradeYear);
+    const due = gradeYearContext
+      ? filterObligationsDueForClass(subject.obligations, studentGradeYear, gradeYearContext)
+      : subject.obligations;
 
     for (const obligation of due) {
       const grade = subject.grades.find((g) => g.obligationId === obligation.id);
@@ -166,10 +191,29 @@ export function StudentDashboardContent({
 }: StudentDashboardContentProps) {
   const [obligationsModalOpen, setObligationsModalOpen] = useState(false);
   const studentGradeYear = data.student.class.gradeYear;
+  const classId = data.student.classId;
+  const gradeYearContext = useMemo(
+    () =>
+      classId
+        ? {
+            classId,
+            overrideLookup: buildObligationGradeYearOverrideLookup(
+              data.obligationGradeYearOverrides ?? []
+            ),
+          }
+        : null,
+    [classId, data.obligationGradeYearOverrides]
+  );
 
   const obligationBreakdown = useMemo(
-    () => buildObligationBreakdown(data.subjects, studentGradeYear),
-    [data.subjects, studentGradeYear]
+    () =>
+      buildObligationBreakdown(
+        data.subjects,
+        studentGradeYear,
+        classId,
+        data.obligationGradeYearOverrides
+      ),
+    [data.subjects, studentGradeYear, classId, data.obligationGradeYearOverrides]
   );
 
   const completedItems = useMemo(
@@ -194,7 +238,11 @@ export function StudentDashboardContent({
   const avgGrade = weightedAverage.average;
 
   const missingGrades = collectMissingGrades(data.subjects);
-  const negativeGrades = collectNegativeGrades(data.subjects, studentGradeYear);
+  const negativeGrades = collectNegativeGrades(
+    data.subjects,
+    studentGradeYear,
+    gradeYearContext
+  );
 
   const eligibility = data.bagrutEligibility;
   const ineligibilityMessage =
@@ -495,6 +543,8 @@ export function StudentDashboardContent({
                   grades={subject.grades}
                   progress={subject.progress}
                   studentGradeYear={studentGradeYear}
+                  classId={classId}
+                  obligationGradeYearOverrides={data.obligationGradeYearOverrides}
                   readOnly
                 />
               </StaggerItem>

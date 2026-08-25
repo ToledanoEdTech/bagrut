@@ -16,7 +16,10 @@ import {
 } from "@/lib/missing-grades";
 import { collectPendingTasks } from "@/lib/pending-tasks";
 import { STATUS_LABELS } from "@/lib/grade-status";
-import { filterObligationsDueForStudent } from "@/lib/grade-year";
+import {
+  buildObligationGradeYearOverrideLookup,
+  filterObligationsDueForClass,
+} from "@/lib/obligation-grade-year-overrides";
 import {
   formatBagrutIneligibilityMessage,
   formatBagrutIneligibilityMessageForStaff,
@@ -129,13 +132,20 @@ export function sanitizeFilenamePart(value: string): string {
 
 function buildObligationBreakdown(
   subjects: DashboardData["subjects"],
-  studentGradeYear: string | null
+  studentGradeYear: string | null,
+  classId: string,
+  overrideLookup: ReturnType<typeof buildObligationGradeYearOverrideLookup>
 ) {
   const items: Array<{ subjectLabel: string; obligationLabel: string; done: boolean }> = [];
+  const gradeYearContext = { classId, overrideLookup };
 
   for (const subject of subjects) {
     const subjectLabel = subject.displayName;
-    const due = filterObligationsDueForStudent(subject.obligations, studentGradeYear);
+    const due = filterObligationsDueForClass(
+      subject.obligations,
+      studentGradeYear,
+      gradeYearContext
+    );
 
     for (const obligation of due) {
       const grade = subject.grades.find((entry) => entry.obligationId === obligation.id);
@@ -165,6 +175,9 @@ function buildPendingTaskRows(snapshot: SchoolSnapshot, studentId: string) {
       examPaths: snapshot.examPaths,
       tracks: snapshot.tracks,
       grades: snapshot.grades,
+      overrideLookup: buildObligationGradeYearOverrideLookup(
+        snapshot.obligationGradeYearOverrides
+      ),
     },
     { groupBy: "student", studentId }
   ).map((entry) => ({
@@ -182,6 +195,13 @@ function buildDossierFromDashboard(
   audience: Audience
 ): StudentDossier {
   const studentGradeYear = dashboard.student.class.gradeYear;
+  const overrideLookup = buildObligationGradeYearOverrideLookup(
+    snapshot.obligationGradeYearOverrides
+  );
+  const gradeYearContext = {
+    classId: dashboard.student.classId,
+    overrideLookup,
+  };
   const weighted = calcWeightedBagrutAverage(
     dashboard.subjects.map((subject) => ({
       units: subject.units,
@@ -197,8 +217,17 @@ function buildDossierFromDashboard(
       grade: subject.progress.estimatedGrade!,
     }));
   const missingGrades = collectMissingGrades(dashboard.subjects);
-  const negativeGrades = collectNegativeGrades(dashboard.subjects, studentGradeYear);
-  const obligationBreakdown = buildObligationBreakdown(dashboard.subjects, studentGradeYear);
+  const negativeGrades = collectNegativeGrades(
+    dashboard.subjects,
+    studentGradeYear,
+    gradeYearContext
+  );
+  const obligationBreakdown = buildObligationBreakdown(
+    dashboard.subjects,
+    studentGradeYear,
+    dashboard.student.classId,
+    overrideLookup
+  );
   const completedObligations = obligationBreakdown.filter((item) => item.done).length;
   const totalObligations = obligationBreakdown.length;
   const pendingTasks = buildPendingTaskRows(snapshot, dashboard.student.id);
@@ -293,7 +322,11 @@ function buildDossierFromDashboard(
       estimatedGrade: subject.progress.estimatedGrade,
       isFinal: subject.progress.isFinal === true,
       qualitativeLevelLabel: formatQualitativeLevel(subject.progress.qualitativeLevel),
-      obligations: filterObligationsDueForStudent(subject.obligations, studentGradeYear).map(
+      obligations: filterObligationsDueForClass(
+        subject.obligations,
+        studentGradeYear,
+        gradeYearContext
+      ).map(
         (obligation) => {
           const grade = subject.grades.find((entry) => entry.obligationId === obligation.id);
           return {

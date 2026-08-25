@@ -7,6 +7,7 @@ import {
 } from "@/lib/grade-reminders";
 import { cached } from "@/lib/server-cache";
 import { isFullAdmin } from "@/lib/permissions";
+import { buildObligationGradeYearOverrideLookup } from "@/lib/obligation-grade-year-overrides";
 import { loadSchoolSnapshot } from "@/lib/school-snapshot";
 import type { AuthSession, StaffRecord, Subject } from "@/lib/types";
 
@@ -75,7 +76,7 @@ function itemToTask(
 }
 
 async function computeMissingEntries(): Promise<MissingEntriesResponse> {
-  const { subjects, students, classes, examPaths, tracks, grades, staff } =
+  const { subjects, students, classes, examPaths, tracks, grades, staff, obligationGradeYearOverrides } =
     await loadSchoolSnapshot();
 
   const today = getIsraelYmd();
@@ -87,6 +88,7 @@ async function computeMissingEntries(): Promise<MissingEntriesResponse> {
     examPaths,
     tracks,
     grades,
+    overrideLookup: buildObligationGradeYearOverrideLookup(obligationGradeYearOverrides),
   };
 
   const overdueItems = collectPastDueGradeItems(reminderInput);

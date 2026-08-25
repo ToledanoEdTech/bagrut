@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Circle, RotateCcw } from "lucide-react";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -30,12 +30,17 @@ import {
 import { formatSubjectDisplayName } from "@/lib/subject-display";
 import { formatObligationLabel, getNegativeGradeScore } from "@/lib/missing-grades";
 import {
-  getObligationTiming,
-  getSubItemTiming,
-  isObligationRelevantForStudent,
-  resolveSubItemGradeYear,
   type ObligationTiming,
 } from "@/lib/grade-year";
+import {
+  buildObligationGradeYearOverrideLookup,
+  getEffectiveObligationTiming,
+  getEffectiveSubItemTiming,
+  isObligationRelevantForClass,
+  resolveEffectiveObligationGradeYear,
+  resolveEffectiveSubItemGradeYear,
+  type ObligationGradeYearContext,
+} from "@/lib/obligation-grade-year-overrides";
 import {
   SOCIAL_INVOLVEMENT_LABELS,
   SOCIAL_INVOLVEMENT_LEVELS,
@@ -43,7 +48,7 @@ import {
   isSocialInvolvementSubject,
   isSocialInvolvementPassed,
 } from "@/lib/social-involvement";
-import type { QualitativeLevel } from "@/lib/types";
+import type { ObligationClassGradeYearOverride, QualitativeLevel } from "@/lib/types";
 
 type Obligation = {
   id: string;
@@ -99,21 +104,30 @@ function hasOpenTiming(
   obligation: Obligation,
   grade: Grade | undefined,
   studentGradeYear: string | null | undefined,
-  timing: "past" | "current"
+  timing: "past" | "current",
+  gradeYearContext?: ObligationGradeYearContext | null
 ): boolean {
   if (studentGradeYear === undefined) return false;
   if (!isObligationOpenForStudent(obligation, grade, studentGradeYear)) return false;
 
   const subItems = obligation.subItems ?? [];
   if (subItems.length === 0) {
-    return getObligationTiming(obligation.gradeYear, studentGradeYear) === timing;
+    return getEffectiveObligationTiming(obligation, studentGradeYear, gradeYearContext) === timing;
   }
 
   return subItems.some((si, i) => {
-    if (getSubItemTiming(si.gradeYear, obligation.gradeYear, studentGradeYear) !== timing) {
+    const sortOrder = si.sortOrder ?? i;
+    if (
+      getEffectiveSubItemTiming(
+        si.gradeYear,
+        obligation,
+        sortOrder,
+        studentGradeYear,
+        gradeYearContext
+      ) !== timing
+    ) {
       return false;
     }
-    const sortOrder = si.sortOrder ?? i;
     if (!grade) return true;
     if (grade.status === "EXEMPT") return false;
     return grade.subItemScores?.[sortOrder] == null;
@@ -156,6 +170,8 @@ export function SubjectCard({
   onGradeChange,
   onGradeClear,
   studentGradeYear,
+  classId,
+  obligationGradeYearOverrides,
 }: {
   name: string;
   pathLabels?: string[];
@@ -175,8 +191,21 @@ export function SubjectCard({
   onGradeClear?: (obligationId: string) => void;
   /** שכבת התלמיד — לסימון מטלות עתידיות */
   studentGradeYear?: string | null;
+  /** מזהה כיתה — לחריגי שכבה */
+  classId?: string;
+  /** חריגי שכבה למטלות (לפי כיתות) */
+  obligationGradeYearOverrides?: ObligationClassGradeYearOverride[];
 }) {
   const [expanded, setExpanded] = useState(false);
+  const gradeYearContext = useMemo<ObligationGradeYearContext | null>(() => {
+    if (!classId) return null;
+    return {
+      classId,
+      overrideLookup: buildObligationGradeYearOverrideLookup(
+        obligationGradeYearOverrides ?? []
+      ),
+    };
+  }, [classId, obligationGradeYearOverrides]);
   const isSocial = isSocialInvolvementSubject({ name, category });
   const gradeMap = new Map(grades.map((g) => [g.obligationId, g]));
   const missingObligations = obligations.filter((o) =>
@@ -185,7 +214,7 @@ export function SubjectCard({
   const negativeObligations = isSocial
     ? []
     : obligations
-        .filter((o) => isObligationRelevantForStudent(o, studentGradeYear))
+        .filter((o) => isObligationRelevantForClass(o, studentGradeYear, gradeYearContext))
         .map((o) => ({
           obligation: o,
           score: getNegativeGradeScore(o, gradeMap.get(o.id)),
@@ -200,19 +229,26 @@ export function SubjectCard({
     category !== "ENGLISH" &&
     category !== "SOCIAL";
   const openCurrentYear = obligations.filter((o) =>
-    hasOpenTiming(o, gradeMap.get(o.id), studentGradeYear, "current")
+    hasOpenTiming(o, gradeMap.get(o.id), studentGradeYear, "current", gradeYearContext)
   );
   const openPastYear = obligations.filter((o) =>
-    hasOpenTiming(o, gradeMap.get(o.id), studentGradeYear, "past")
+    hasOpenTiming(o, gradeMap.get(o.id), studentGradeYear, "past", gradeYearContext)
   );
   const futureCount = obligations.filter((o) => {
     if (studentGradeYear === undefined) return false;
     const subItems = o.subItems ?? [];
     if (subItems.length === 0) {
-      return getObligationTiming(o.gradeYear, studentGradeYear) === "future";
+      return getEffectiveObligationTiming(o, studentGradeYear, gradeYearContext) === "future";
     }
     return subItems.some(
-      (si) => getSubItemTiming(si.gradeYear, o.gradeYear, studentGradeYear) === "future"
+      (si, i) =>
+        getEffectiveSubItemTiming(
+          si.gradeYear,
+          o,
+          si.sortOrder ?? i,
+          studentGradeYear,
+          gradeYearContext
+        ) === "future"
     );
   }).length;
   const hasOpenCurrent = openCurrentYear.length > 0;
@@ -493,11 +529,11 @@ export function SubjectCard({
                   const isNegative = negativeScore != null;
                   const timing: ObligationTiming =
                     studentGradeYear !== undefined
-                      ? getObligationTiming(o.gradeYear, studentGradeYear)
+                      ? getEffectiveObligationTiming(o, studentGradeYear, gradeYearContext)
                       : "unknown";
                   const isFuture =
                     studentGradeYear !== undefined &&
-                    !isObligationRelevantForStudent(o, studentGradeYear);
+                    !isObligationRelevantForClass(o, studentGradeYear, gradeYearContext);
                   // השלמת מטלה לפי כל תתי-המטלות של הבגרות (לא רק השנה)
                   const obligationDone = isSocial
                     ? grade?.status === "EXEMPT" ||
@@ -953,15 +989,19 @@ export function SubjectCard({
                                 grade?.status === "EXEMPT" || subItemScore != null;
                               const subTiming =
                                 studentGradeYear !== undefined
-                                  ? getSubItemTiming(
+                                  ? getEffectiveSubItemTiming(
                                       si.gradeYear,
-                                      o.gradeYear,
-                                      studentGradeYear
+                                      o,
+                                      sortOrder,
+                                      studentGradeYear,
+                                      gradeYearContext
                                     )
                                   : "unknown";
-                              const effectiveGy = resolveSubItemGradeYear(
+                              const effectiveGy = resolveEffectiveSubItemGradeYear(
                                 si.gradeYear,
-                                o.gradeYear
+                                o,
+                                sortOrder,
+                                gradeYearContext
                               );
                               return (
                                 <div

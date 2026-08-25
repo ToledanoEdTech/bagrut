@@ -10,6 +10,9 @@ export type ActivityAction =
   | "obligation.create"
   | "obligation.update"
   | "obligation.delete"
+  | "obligation.gradeYearOverride.create"
+  | "obligation.gradeYearOverride.update"
+  | "obligation.gradeYearOverride.delete"
   | "staff.create"
   | "staff.update"
   | "staff.delete";

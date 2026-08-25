@@ -5,6 +5,7 @@ import type {
   ExamPath,
   Grade,
   Obligation,
+  ObligationClassGradeYearOverride,
   Role,
   StaffPermission,
   QualitativeLevel,
@@ -759,6 +760,7 @@ export async function deleteObligation(subjectId: string, obligationId: string) 
   subject.obligations = subject.obligations.filter((o) => o.id !== obligationId);
   await adminDb.collection("subjects").doc(subjectId).update({ obligations: subject.obligations });
   await invalidateServerCache("subjects");
+  await deleteObligationGradeYearOverridesForObligation(obligationId);
 }
 
 /** עדכון שדות נבחרים על מספר מטלות בבת אחת (ללא נגיעה ברכיבים/תתי-מטלה) */
@@ -1118,6 +1120,100 @@ export async function listClassesSimple() {
       examPathId: cls.examPathId,
     }));
   });
+}
+
+// ─── obligation grade year overrides ───────────────────────────────────────
+
+const OBLIGATION_GRADE_YEAR_OVERRIDES = "obligationGradeYearOverrides";
+
+export async function listObligationGradeYearOverrides(): Promise<
+  ObligationClassGradeYearOverride[]
+> {
+  return cached("obligationGradeYearOverrides", 60_000, async () => {
+    const snap = await adminDb.collection(OBLIGATION_GRADE_YEAR_OVERRIDES).get();
+    return docsData<ObligationClassGradeYearOverride>(snap);
+  });
+}
+
+export async function getObligationGradeYearOverridesForObligation(
+  obligationId: string
+): Promise<ObligationClassGradeYearOverride[]> {
+  const all = await listObligationGradeYearOverrides();
+  return all.filter((o) => o.obligationId === obligationId);
+}
+
+export async function createObligationGradeYearOverride(
+  input: Omit<ObligationClassGradeYearOverride, "id" | "createdAt" | "updatedAt">
+): Promise<ObligationClassGradeYearOverride> {
+  const id = newId();
+  const record: ObligationClassGradeYearOverride = {
+    id,
+    obligationId: input.obligationId,
+    subItemSortOrder: input.subItemSortOrder ?? null,
+    classIds: [...new Set(input.classIds)],
+    effectiveGradeYear: input.effectiveGradeYear,
+    note: input.note ?? null,
+  };
+  await adminDb.collection(OBLIGATION_GRADE_YEAR_OVERRIDES).doc(id).set({
+    ...record,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  await invalidateServerCache("obligationGradeYearOverrides");
+  return record;
+}
+
+export async function updateObligationGradeYearOverride(
+  id: string,
+  input: Partial<
+    Pick<ObligationClassGradeYearOverride, "classIds" | "effectiveGradeYear" | "note">
+  >
+): Promise<ObligationClassGradeYearOverride | null> {
+  const ref = adminDb.collection(OBLIGATION_GRADE_YEAR_OVERRIDES).doc(id);
+  const existing = docData<ObligationClassGradeYearOverride>(await ref.get());
+  if (!existing) return null;
+
+  const updates: Partial<ObligationClassGradeYearOverride> = {};
+  if (input.classIds !== undefined) {
+    updates.classIds = [...new Set(input.classIds)];
+  }
+  if (input.effectiveGradeYear !== undefined) {
+    updates.effectiveGradeYear = input.effectiveGradeYear;
+  }
+  if (input.note !== undefined) {
+    updates.note = input.note;
+  }
+
+  await ref.update({ ...updates, updatedAt: FieldValue.serverTimestamp() });
+  await invalidateServerCache("obligationGradeYearOverrides");
+  return { ...existing, ...updates };
+}
+
+export async function deleteObligationGradeYearOverride(id: string): Promise<boolean> {
+  const ref = adminDb.collection(OBLIGATION_GRADE_YEAR_OVERRIDES).doc(id);
+  const existing = await ref.get();
+  if (!existing.exists) return false;
+  await ref.delete();
+  await invalidateServerCache("obligationGradeYearOverrides");
+  return true;
+}
+
+export async function deleteObligationGradeYearOverridesForObligation(
+  obligationId: string
+): Promise<number> {
+  const snap = await adminDb
+    .collection(OBLIGATION_GRADE_YEAR_OVERRIDES)
+    .where("obligationId", "==", obligationId)
+    .get();
+  if (snap.empty) return 0;
+
+  const batch = adminDb.batch();
+  for (const doc of snap.docs) {
+    batch.delete(doc.ref);
+  }
+  await batch.commit();
+  await invalidateServerCache("obligationGradeYearOverrides");
+  return snap.size;
 }
 
 // ─── counts ────────────────────────────────────────────────────────────────

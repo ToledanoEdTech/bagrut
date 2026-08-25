@@ -22,6 +22,7 @@ const SCHOOL_DATA_PREFIXES = new Set([
   "tracks",
   "examPaths",
   "staff",
+  "obligationGradeYearOverrides",
 ]);
 
 /** Last shared epoch this instance has applied. */

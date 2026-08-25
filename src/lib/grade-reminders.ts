@@ -6,10 +6,17 @@ import {
   normalizeSubItems,
 } from "@/lib/grade-components";
 import { resolveGradeEntryDueDate } from "@/lib/grade-due-date";
-import { isObligationDueForStudent, isSubItemDueForStudent, normalizeGradeYear } from "@/lib/grade-year";
+import { isSubItemDueForStudent, normalizeGradeYear } from "@/lib/grade-year";
 import { isMissingGradeStatus } from "@/lib/grade-status";
 import { LEGACY_TEACHER_PERMISSIONS } from "@/lib/permissions";
 import { ADMIN_EMAILS } from "@/lib/roles";
+import {
+  isObligationDueForClass,
+  isSubItemDueForClass,
+  resolveEffectiveObligationGradeYear,
+  resolveEffectiveSubItemGradeYear,
+  type ObligationGradeYearOverrideLookup,
+} from "@/lib/obligation-grade-year-overrides";
 import type {
   Class,
   ExamPath,
@@ -282,6 +289,10 @@ function collectGradeItemsMatchingDue(
   const tracksById = new Map(input.tracks.map((t) => [t.id, t]));
   const gradeMap = buildGradeMap(input.grades);
   const items: OverdueGradeItem[] = [];
+  const gradeYearContext = (classId: string) => ({
+    classId,
+    overrideLookup: input.overrideLookup,
+  });
 
   for (const subject of input.subjects) {
     for (const obligation of subject.obligations) {
@@ -313,14 +324,26 @@ function collectGradeItemsMatchingDue(
           if (!matchedSubject?.obligations.some((o) => o.id === obligation.id)) continue;
 
           // תת-מטלה: בודקים שכבה של התת-מטלה; מטלה שלמה: שכבת המטלה
+          const matchedSubItem =
+            target.subItemSortOrder !== undefined
+              ? obligation.subItems.find(
+                  (s, i) => (s.sortOrder ?? i) === target.subItemSortOrder
+                )
+              : undefined;
+
           if (target.subItemSortOrder !== undefined) {
-            const si = obligation.subItems.find(
-              (s, i) => (s.sortOrder ?? i) === target.subItemSortOrder
-            );
-            if (!isSubItemDueForStudent(si?.gradeYear, obligation.gradeYear, cls.gradeYear)) {
+            if (
+              !isSubItemDueForClass(
+                matchedSubItem?.gradeYear,
+                obligation,
+                target.subItemSortOrder,
+                cls.gradeYear,
+                gradeYearContext(cls.id)
+              )
+            ) {
               continue;
             }
-          } else if (!isObligationDueForStudent(obligation.gradeYear, cls.gradeYear)) {
+          } else if (!isObligationDueForClass(obligation, cls.gradeYear, gradeYearContext(cls.id))) {
             continue;
           }
 
@@ -347,9 +370,24 @@ function collectGradeItemsMatchingDue(
               .filter((y): y is string => !!y)
           ),
         ];
+        const sampleClassId = [...missingByClass.keys()][0];
+        const sampleContext = sampleClassId
+          ? gradeYearContext(sampleClassId)
+          : undefined;
         const obligationGradeYear =
           target.gradeYear ??
-          normalizeGradeYear(obligation.gradeYear) ??
+          (target.subItemSortOrder !== undefined && sampleContext
+            ? resolveEffectiveSubItemGradeYear(
+                obligation.subItems.find(
+                  (s, i) => (s.sortOrder ?? i) === target.subItemSortOrder
+                )?.gradeYear,
+                obligation,
+                target.subItemSortOrder,
+                sampleContext
+              )
+            : sampleContext
+              ? resolveEffectiveObligationGradeYear(obligation, sampleContext)
+              : normalizeGradeYear(obligation.gradeYear)) ??
           affectedGradeYears[0] ??
           null;
 
@@ -395,6 +433,7 @@ export interface GradeReminderDataInput {
   examPaths: ExamPath[];
   tracks: Track[];
   grades: Grade[];
+  overrideLookup?: ObligationGradeYearOverrideLookup;
 }
 
 function withClass(student: Student, cls: Class): StudentWithRelations {

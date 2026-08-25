@@ -4,6 +4,10 @@ import {
 } from "@/lib/grade-components";
 import { isFailingGradeScore, isMissingGradeStatus } from "@/lib/grade-status";
 import { filterObligationsDueForStudent } from "@/lib/grade-year";
+import {
+  filterObligationsDueForClass,
+  type ObligationGradeYearContext,
+} from "@/lib/obligation-grade-year-overrides";
 import { formatSubjectDisplayName } from "@/lib/subject-display";
 
 type ObligationLike = {
@@ -125,7 +129,8 @@ export function collectMissingGrades(subjects: SubjectLike[]): MissingGradeEntry
 
 export function collectNegativeGrades(
   subjects: SubjectLike[],
-  studentGradeYear?: string | null
+  studentGradeYear?: string | null,
+  gradeYearContext?: ObligationGradeYearContext | null
 ): NegativeGradeEntry[] {
   const entries: NegativeGradeEntry[] = [];
 
@@ -138,7 +143,13 @@ export function collectNegativeGrades(
 
     const obligations =
       studentGradeYear !== undefined
-        ? filterObligationsDueForStudent(subject.obligations, studentGradeYear)
+        ? gradeYearContext?.classId && gradeYearContext.overrideLookup?.size
+          ? filterObligationsDueForClass(
+              subject.obligations,
+              studentGradeYear,
+              gradeYearContext
+            )
+          : filterObligationsDueForStudent(subject.obligations, studentGradeYear)
         : subject.obligations;
 
     for (const obligation of obligations) {

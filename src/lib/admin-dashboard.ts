@@ -14,7 +14,11 @@ import {
   formatObligationLabel,
   getNegativeGradeScore,
 } from "@/lib/missing-grades";
-import { isObligationRelevantForStudent } from "@/lib/grade-year";
+import {
+  buildObligationGradeYearOverrideLookup,
+  isObligationRelevantForClass,
+  type ObligationGradeYearOverrideLookup,
+} from "@/lib/obligation-grade-year-overrides";
 import { getGradeReminderSettings } from "@/lib/firestore/settings";
 import { loadSchoolSnapshot } from "@/lib/school-snapshot";
 import { cached } from "@/lib/server-cache";
@@ -43,6 +47,7 @@ import type {
   Class,
   ExamPath,
   Grade,
+  ObligationClassGradeYearOverride,
   Student,
   Subject,
   Track,
@@ -188,6 +193,8 @@ type RawData = {
   grades: Grade[];
   reminderSettings: GradeReminderSettings;
   staff: import("@/lib/types").StaffRecord[];
+  obligationGradeYearOverrides: ObligationClassGradeYearOverride[];
+  overrideLookup: ObligationGradeYearOverrideLookup;
 };
 
 type ScopedData = RawData & {
@@ -321,7 +328,10 @@ function computeGradeGaps(data: ScopedData): GradeGaps {
       if (allowedSubjects && !allowedSubjects.has(subject.id)) continue;
 
       for (const obligation of subject.obligations) {
-        if (!isObligationRelevantForStudent(obligation, cls.gradeYear)) continue;
+        if (!isObligationRelevantForClass(obligation, cls.gradeYear, {
+          classId: cls.id,
+          overrideLookup: data.overrideLookup,
+        })) continue;
 
         classEntry.total += 1;
         const grade = gradeMap.get(`${student.id}::${obligation.id}`);
@@ -367,6 +377,7 @@ function computeGradeGaps(data: ScopedData): GradeGaps {
     examPaths: data.examPaths,
     tracks: data.tracks,
     grades: data.grades,
+    overrideLookup: data.overrideLookup,
   };
 
   const overdueItems = collectPastDueGradeItems(reminderInput);
@@ -460,7 +471,10 @@ function computeSchoolProgress(data: ScopedData): SchoolProgress {
       if (allowedSubjects && !allowedSubjects.has(subject.id)) continue;
 
       const dueObligations = subject.obligations.filter((o) =>
-        isObligationRelevantForStudent(o, cls.gradeYear)
+        isObligationRelevantForClass(o, cls.gradeYear, {
+          classId: cls.id,
+          overrideLookup: data.overrideLookup,
+        })
       );
 
       const subjectGrades = dueObligations
@@ -584,6 +598,10 @@ async function loadRawData(): Promise<RawData> {
     grades: snapshot.grades,
     reminderSettings,
     staff: snapshot.staff,
+    obligationGradeYearOverrides: snapshot.obligationGradeYearOverrides,
+    overrideLookup: buildObligationGradeYearOverrideLookup(
+      snapshot.obligationGradeYearOverrides
+    ),
   };
 }
 
@@ -616,6 +634,7 @@ function computeTeacherAlerts(raw: RawData): TeacherAlerts {
     examPaths: raw.examPaths,
     tracks: raw.tracks,
     grades: raw.grades,
+    overrideLookup: raw.overrideLookup,
   };
 
   const overdueItems = collectPastDueGradeItems(reminderInput);

@@ -3,7 +3,9 @@
 import { Plus, X, Check } from "lucide-react";
 import { Alert } from "@/components/ui/Alert";
 import { defaultGradeEntryDueDate } from "@/lib/grade-due-date";
-import { CANONICAL_GRADE_YEARS } from "@/lib/grade-year";
+import { CANONICAL_GRADE_YEARS, normalizeGradeYear } from "@/lib/grade-year";
+import { ObligationGradeYearOverrideButton } from "@/components/subjects/ObligationGradeYearOverridesModal";
+import type { OverrideModalTarget } from "@/components/subjects/ObligationGradeYearOverridesModal";
 
 export type WeightedItem = { name: string; weightPercent: number };
 
@@ -121,9 +123,19 @@ function WeightedListEditor({
 function SubItemsListEditor({
   items,
   onChange,
+  obligationGradeYear,
+  onManageGradeYearOverride,
+  getSubItemOverrideCount,
 }: {
   items: SubItemDraft[];
   onChange: (items: SubItemDraft[]) => void;
+  obligationGradeYear?: string;
+  onManageGradeYearOverride?: (
+    sortOrder: number,
+    label: string,
+    defaultGradeYear: string | null
+  ) => void;
+  getSubItemOverrideCount?: (sortOrder: number) => number;
 }) {
   const total = items.reduce((s, i) => s + (i.weightPercent || 0), 0);
 
@@ -157,7 +169,13 @@ function SubItemsListEditor({
         <p className="text-xs text-slate-400">אין פריטים</p>
       ) : (
         <div className="space-y-2">
-          {items.map((item, i) => (
+          {items.map((item, i) => {
+            const sortOrder = i;
+            const defaultSubGradeYear =
+              normalizeGradeYear(item.gradeYear) ??
+              normalizeGradeYear(obligationGradeYear) ??
+              null;
+            return (
             <div key={i} className="flex flex-wrap items-center gap-2">
               <input
                 className="input min-w-[8rem] flex-1 py-1.5 text-sm"
@@ -215,6 +233,19 @@ function SubItemsListEditor({
                   onChange(next);
                 }}
               />
+              {onManageGradeYearOverride && (
+                <ObligationGradeYearOverrideButton
+                  compact
+                  overrideCount={getSubItemOverrideCount?.(sortOrder) ?? 0}
+                  onClick={() =>
+                    onManageGradeYearOverride(
+                      sortOrder,
+                      item.name || `תת-מטלה ${i + 1}`,
+                      defaultSubGradeYear
+                    )
+                  }
+                />
+              )}
               <button
                 type="button"
                 onClick={() => onChange(items.filter((_, j) => j !== i))}
@@ -223,7 +254,8 @@ function SubItemsListEditor({
                 <X className="h-4 w-4" />
               </button>
             </div>
-          ))}
+            );
+          })}
           <p className="text-xs text-slate-400">סה&quot;כ: {total.toFixed(1)}%</p>
         </div>
       )}
@@ -243,6 +275,9 @@ export function ObligationEditor({
   compact = false,
   error,
   onClearError,
+  obligationId,
+  onManageGradeYearOverrides,
+  getOverrideCount,
 }: {
   draft: ObligationDraft;
   onChange: (d: ObligationDraft) => void;
@@ -255,7 +290,33 @@ export function ObligationEditor({
   compact?: boolean;
   error?: string | null;
   onClearError?: () => void;
+  /** נדרש לניהול חריגי שכבה (רק למטלה קיימת) */
+  obligationId?: string;
+  onManageGradeYearOverrides?: (target: OverrideModalTarget) => void;
+  getOverrideCount?: (subItemSortOrder?: number | null) => number;
 }) {
+  const canManageOverrides = !!obligationId && !!onManageGradeYearOverrides;
+
+  function openObligationOverrides() {
+    if (!canManageOverrides) return;
+    onManageGradeYearOverrides!({
+      obligationId: obligationId!,
+      obligationLabel: draft.name || draft.examEvent || "מטלה",
+      defaultGradeYear: draft.gradeYear || null,
+      subItemSortOrder: null,
+    });
+  }
+
+  function openSubItemOverrides(sortOrder: number, label: string, defaultGradeYear: string | null) {
+    if (!canManageOverrides) return;
+    onManageGradeYearOverrides!({
+      obligationId: obligationId!,
+      obligationLabel: draft.name || draft.examEvent || "מטלה",
+      defaultGradeYear,
+      subItemSortOrder: sortOrder,
+      subItemLabel: label,
+    });
+  }
   return (
     <div className="space-y-3 rounded-xl border border-primary-200 bg-primary-50/30 p-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -304,18 +365,26 @@ export function ObligationEditor({
         </div>
         <div>
           <label className="label">שכבה</label>
-          <select
-            className="input"
-            value={draft.gradeYear}
-            onChange={(e) => onChange({ ...draft, gradeYear: e.target.value })}
-          >
-            <option value="">בחר שכבה</option>
-            {CANONICAL_GRADE_YEARS.map((gy) => (
-              <option key={gy} value={gy}>
-                {gy}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="input min-w-[10rem] flex-1"
+              value={draft.gradeYear}
+              onChange={(e) => onChange({ ...draft, gradeYear: e.target.value })}
+            >
+              <option value="">בחר שכבה</option>
+              {CANONICAL_GRADE_YEARS.map((gy) => (
+                <option key={gy} value={gy}>
+                  {gy}
+                </option>
+              ))}
+            </select>
+            {canManageOverrides && (
+              <ObligationGradeYearOverrideButton
+                overrideCount={getOverrideCount?.(null) ?? 0}
+                onClick={openObligationOverrides}
+              />
+            )}
+          </div>
         </div>
         <div>
           <label className="label">אירוע בחינה</label>
@@ -358,6 +427,15 @@ export function ObligationEditor({
         <SubItemsListEditor
           items={draft.subItems}
           onChange={(subItems) => onChange({ ...draft, subItems })}
+          obligationGradeYear={draft.gradeYear}
+          onManageGradeYearOverride={
+            canManageOverrides ? openSubItemOverrides : undefined
+          }
+          getSubItemOverrideCount={
+            canManageOverrides
+              ? (sortOrder) => getOverrideCount?.(sortOrder) ?? 0
+              : undefined
+          }
         />
       </div>
 

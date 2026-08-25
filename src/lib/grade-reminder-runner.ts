@@ -21,6 +21,7 @@ import {
   updateGradeReminderSettings,
 } from "@/lib/firestore/settings";
 import { loadSchoolSnapshot } from "@/lib/school-snapshot";
+import { buildObligationGradeYearOverrideLookup } from "@/lib/obligation-grade-year-overrides";
 import { sendMail } from "@/lib/mailer";
 
 export type RunGradeRemindersOptions = {
@@ -50,7 +51,7 @@ export async function runGradeReminders(
     };
   }
 
-  const { subjects, students, classes, examPaths, tracks, grades, staff } =
+  const { subjects, students, classes, examPaths, tracks, grades, staff, obligationGradeYearOverrides } =
     await loadSchoolSnapshot();
 
   const today = getIsraelYmd();
@@ -62,6 +63,7 @@ export async function runGradeReminders(
     examPaths,
     tracks,
     grades,
+    overrideLookup: buildObligationGradeYearOverrideLookup(obligationGradeYearOverrides),
   };
 
   const postDueEnabled = settings.postDueEnabled ?? true;

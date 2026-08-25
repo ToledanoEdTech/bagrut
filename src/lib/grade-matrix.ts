@@ -36,7 +36,13 @@ import {
   type MatrixTaskOption,
 } from "@/lib/grade-components";
 import type { Class, ExamPath, Student } from "@/lib/types";
-import { isObligationDueForStudent, normalizeGradeYear } from "@/lib/grade-year";
+import {
+  buildObligationGradeYearOverrideLookup,
+  isObligationDueForClass,
+  type ObligationGradeYearOverrideLookup,
+} from "@/lib/obligation-grade-year-overrides";
+import { normalizeGradeYear } from "@/lib/grade-year";
+import { listObligationGradeYearOverrides } from "@/lib/firestore";
 
 type ClassRef = {
   id: string;
@@ -99,7 +105,8 @@ function accumulateSubjectsForStudent(
   subjectsMap: SubjectsMap,
   student: MatrixStudent,
   ctx: SubjectContext,
-  layerGradeYear: string | null
+  layerGradeYear: string | null,
+  overrideLookup: ObligationGradeYearOverrideLookup
 ) {
   const withRelations = withClass(student.student, student.cls);
   const subjects = resolveRelevantSubjects(
@@ -122,7 +129,10 @@ function accumulateSubjectsForStudent(
     }
     const entry = subjectsMap.get(subject.id)!;
     for (const ob of subject.obligations) {
-      if (!isObligationDueForStudent(ob.gradeYear, layerGradeYear)) continue;
+      if (!isObligationDueForClass(ob, layerGradeYear, {
+        classId: student.cls.id,
+        overrideLookup,
+      })) continue;
       const existing = entry.obligations.get(ob.id);
       if (existing) {
         existing.relevantStudentCount++;
@@ -135,14 +145,15 @@ function accumulateSubjectsForStudent(
 
 async function buildOptionsFromStudents(
   matrixStudents: MatrixStudent[],
-  layerGradeYear: string | null
+  layerGradeYear: string | null,
+  overrideLookup: ObligationGradeYearOverrideLookup
 ) {
   const ctx = await loadSubjectContext();
   const pathLabelsBySubjectId = buildPathLabelsBySubjectId(await listExamPaths());
   const subjectsMap: SubjectsMap = new Map();
 
   for (const ms of matrixStudents) {
-    accumulateSubjectsForStudent(subjectsMap, ms, ctx, layerGradeYear);
+    accumulateSubjectsForStudent(subjectsMap, ms, ctx, layerGradeYear, overrideLookup);
   }
 
   return {
@@ -458,11 +469,20 @@ async function loadGradeYearMatrixStudents(
   return { gradeYear: normalized, matrixStudents };
 }
 
+async function loadOverrideLookup() {
+  return buildObligationGradeYearOverrideLookup(await listObligationGradeYearOverrides());
+}
+
 export async function getMatrixOptions(classId: string) {
   const loaded = await loadClassMatrixStudents(classId);
   if (!loaded) throw new Error("כיתה לא נמצאה");
 
-  return buildOptionsFromStudents(loaded.matrixStudents, loaded.cls.gradeYear);
+  const overrideLookup = await loadOverrideLookup();
+  return buildOptionsFromStudents(
+    loaded.matrixStudents,
+    loaded.cls.gradeYear,
+    overrideLookup
+  );
 }
 
 export async function getMatrixOptionsByGradeYear(
@@ -472,7 +492,8 @@ export async function getMatrixOptionsByGradeYear(
   const loaded = await loadGradeYearMatrixStudents(gradeYear, allowedClassIds);
   if (!loaded) throw new Error("לא נמצאו כיתות בשכבה זו");
 
-  return buildOptionsFromStudents(loaded.matrixStudents, loaded.gradeYear);
+  const overrideLookup = await loadOverrideLookup();
+  return buildOptionsFromStudents(loaded.matrixStudents, loaded.gradeYear, overrideLookup);
 }
 
 export async function getMatrixData(
@@ -488,7 +509,13 @@ export async function getMatrixData(
   if (!loaded) throw new Error("כיתה לא נמצאה");
 
   const { cls, matrixStudents } = loaded;
-  if (!isObligationDueForStudent(found.obligation.gradeYear, cls.gradeYear)) {
+  const overrideLookup = await loadOverrideLookup();
+  if (
+    !isObligationDueForClass(found.obligation, cls.gradeYear, {
+      classId: cls.id,
+      overrideLookup,
+    })
+  ) {
     throw new Error("מטלה זו אינה רלוונטית לשכבת הכיתה");
   }
 
@@ -530,7 +557,14 @@ export async function getMatrixDataByGradeYear(
   const loaded = await loadGradeYearMatrixStudents(gradeYear, allowedClassIds);
   if (!loaded) throw new Error("לא נמצאו כיתות בשכבה זו");
 
-  if (!isObligationDueForStudent(found.obligation.gradeYear, loaded.gradeYear)) {
+  const overrideLookup = await loadOverrideLookup();
+  const anyRelevant = loaded.matrixStudents.some((ms) =>
+    isObligationDueForClass(found.obligation, ms.cls.gradeYear, {
+      classId: ms.cls.id,
+      overrideLookup,
+    })
+  );
+  if (!anyRelevant) {
     throw new Error("מטלה זו אינה רלוונטית לשכבה");
   }
 
@@ -570,9 +604,16 @@ export async function isObligationRelevantForStudent(
   obligationId: string
 ): Promise<boolean> {
   const withRelations = await buildStudentWithRelations(student);
-  const [examPath, ctx] = await Promise.all([
+  const [examPath, ctx, overrideLookup, found] = await Promise.all([
     getExamPathById(withRelations.class.examPathId),
     loadSubjectContext(),
+    loadOverrideLookup(),
+    findObligation(obligationId),
   ]);
-  return studentHasObligation(withRelations, obligationId, examPath, ctx);
+  if (!found) return false;
+  if (!studentHasObligation(withRelations, obligationId, examPath, ctx)) return false;
+  return isObligationDueForClass(found.obligation, withRelations.class.gradeYear, {
+    classId: student.classId,
+    overrideLookup,
+  });
 }

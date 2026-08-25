@@ -11,13 +11,14 @@ import {
   getStudentTrackIds,
   getTrackById,
   listExamPaths,
+  listObligationGradeYearOverrides,
 } from "@/lib/firestore";
 import { getBagrutEligibilitySettings } from "@/lib/firestore/settings";
 import { evaluateOutstandingBagrut } from "@/lib/outstanding-bagrut";
 import { evaluateHightechBagrut } from "@/lib/hightech-bagrut";
 import { evaluateBagrutEligibility } from "@/lib/bagrut-eligibility";
 import { attachPathLabels, buildPathLabelsBySubjectId } from "@/lib/subject-display";
-import type { Grade, Student, Track } from "@/lib/types";
+import type { Grade, ObligationClassGradeYearOverride, Student, Track } from "@/lib/types";
 import type { SchoolSnapshot } from "@/lib/school-snapshot";
 
 export type StudentDashboardResult = Awaited<ReturnType<typeof buildStudentDashboard>>;
@@ -30,6 +31,7 @@ type StudentDashboardInput = {
   subjects: Awaited<ReturnType<typeof getRelevantSubjects>>;
   examPaths: Awaited<ReturnType<typeof listExamPaths>>;
   eligibilitySettings: Awaited<ReturnType<typeof getBagrutEligibilitySettings>>;
+  obligationGradeYearOverrides: ObligationClassGradeYearOverride[];
 };
 
 function assembleStudentDashboard(input: StudentDashboardInput) {
@@ -76,6 +78,7 @@ function assembleStudentDashboard(input: StudentDashboardInput) {
     outstandingBagrut,
     hightechBagrut,
     bagrutEligibility,
+    obligationGradeYearOverrides: input.obligationGradeYearOverrides,
   };
 }
 
@@ -119,6 +122,7 @@ export function buildStudentDashboardFromSnapshot(
     subjects,
     examPaths: snapshot.examPaths,
     eligibilitySettings,
+    obligationGradeYearOverrides: snapshot.obligationGradeYearOverrides,
   });
 }
 
@@ -127,14 +131,16 @@ export async function buildStudentDashboard(studentId: string) {
   if (!student) return null;
 
   const trackIds = getStudentTrackIds(student);
-  const [studentWithRelations, grades, tracks, eligibilitySettings] = await Promise.all([
-    buildStudentWithRelations(student),
-    getGradesByStudent(student.id),
-    Promise.all(trackIds.map((id) => getTrackById(id))).then((items) =>
-      items.filter((item): item is Track => item != null)
-    ),
-    getBagrutEligibilitySettings(),
-  ]);
+  const [studentWithRelations, grades, tracks, eligibilitySettings, obligationGradeYearOverrides] =
+    await Promise.all([
+      buildStudentWithRelations(student),
+      getGradesByStudent(student.id),
+      Promise.all(trackIds.map((id) => getTrackById(id))).then((items) =>
+        items.filter((item): item is Track => item != null)
+      ),
+      getBagrutEligibilitySettings(),
+      listObligationGradeYearOverrides(),
+    ]);
   const [subjects, examPaths] = await Promise.all([
     getRelevantSubjects(studentWithRelations),
     listExamPaths(),
@@ -147,5 +153,6 @@ export async function buildStudentDashboard(studentId: string) {
     subjects,
     examPaths,
     eligibilitySettings,
+    obligationGradeYearOverrides,
   });
 }

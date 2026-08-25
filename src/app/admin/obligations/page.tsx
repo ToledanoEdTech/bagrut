@@ -21,12 +21,22 @@ import {
   normalizeComponents,
   normalizeSubItems,
 } from "@/lib/grade-components";
+import {
+  ObligationGradeYearOverrideButton,
+  ObligationGradeYearOverridesModal,
+  type OverrideModalTarget,
+} from "@/components/subjects/ObligationGradeYearOverridesModal";
+import {
+  countOverridesForSubItem,
+} from "@/lib/obligation-grade-year-overrides";
+import type { ObligationClassGradeYearOverride } from "@/lib/types";
 
 type SubItem = {
   name: string;
   weightPercent: number;
   sortOrder?: number;
   gradeEntryDueDate?: string | null;
+  gradeYear?: string | null;
 };
 
 type Obligation = {
@@ -62,6 +72,14 @@ type StaffMember = {
   email: string;
   role: string;
 };
+
+type ClassItem = {
+  id: string;
+  name: string;
+  gradeYear: string | null;
+};
+
+type OverrideModalState = OverrideModalTarget | null;
 
 type EditableField =
   | "name"
@@ -106,9 +124,15 @@ export default function ObligationsBoardPage() {
   const toast = useToast();
   const { data: subjects = [], loading, mutate } = useApi<Subject[]>("/api/subjects");
   const { data: staff = [] } = useApi<StaffMember[]>("/api/staff");
+  const { data: classes = [] } = useApi<ClassItem[]>("/api/classes");
+  const {
+    data: gradeYearOverrides = [],
+    mutate: mutateGradeYearOverrides,
+  } = useApi<ObligationClassGradeYearOverride[]>("/api/obligations/grade-year-overrides");
   const [search, setSearch] = useState("");
   const [subjectFilter, setSubjectFilter] = useState("");
   const [gradeYearFilter, setGradeYearFilter] = useState("");
+  const [overrideModal, setOverrideModal] = useState<OverrideModalState>(null);
   const [edits, setEdits] = useState<Record<string, RowEdits>>({});
   const [subjectEdits, setSubjectEdits] = useState<Record<string, string>>({});
   const [subItemEdits, setSubItemEdits] = useState<Record<string, Record<number, string>>>({});
@@ -125,6 +149,17 @@ export default function ObligationsBoardPage() {
   );
 
   const staffById = useMemo(() => new Map(staff.map((m) => [m.id, m])), [staff]);
+
+  const getOverrideCount = useMemo(() => {
+    return (obligationId: string, subItemSortOrder?: number | null) => {
+      if (subItemSortOrder != null) {
+        return countOverridesForSubItem(gradeYearOverrides, obligationId, subItemSortOrder);
+      }
+      return gradeYearOverrides.filter(
+        (o) => o.obligationId === obligationId && (o.subItemSortOrder ?? null) == null
+      ).length;
+    };
+  }, [gradeYearOverrides]);
 
   const rows = useMemo(() => {
     const flat = subjects.flatMap((s) =>
@@ -574,20 +609,37 @@ export default function ObligationsBoardPage() {
                         />
                       </td>
                       <td className="px-3 py-2">
-                        <select
-                          className="input w-28 py-1.5 text-sm"
-                          value={fieldValue(obligation, "gradeYear")}
-                          onChange={(e) =>
-                            setField(subject.id, obligation.id, "gradeYear", e.target.value)
-                          }
-                        >
-                          <option value="">—</option>
-                          {CANONICAL_GRADE_YEARS.map((gy) => (
-                            <option key={gy} value={gy}>
-                              {gy}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex flex-col gap-1.5">
+                          <select
+                            className="input w-28 py-1.5 text-sm"
+                            value={fieldValue(obligation, "gradeYear")}
+                            onChange={(e) =>
+                              setField(subject.id, obligation.id, "gradeYear", e.target.value)
+                            }
+                          >
+                            <option value="">—</option>
+                            {CANONICAL_GRADE_YEARS.map((gy) => (
+                              <option key={gy} value={gy}>
+                                {gy}
+                              </option>
+                            ))}
+                          </select>
+                          <ObligationGradeYearOverrideButton
+                            overrideCount={getOverrideCount(obligation.id, null)}
+                            onClick={() =>
+                              setOverrideModal({
+                                obligationId: obligation.id,
+                                obligationLabel:
+                                  obligation.name ||
+                                  obligation.examEvent ||
+                                  subject.name,
+                                defaultGradeYear:
+                                  String(fieldValue(obligation, "gradeYear") || "") || null,
+                                subItemSortOrder: null,
+                              })
+                            }
+                          />
+                        </div>
                       </td>
                       <td className="px-3 py-2">
                         <input
@@ -670,15 +722,36 @@ export default function ObligationsBoardPage() {
                           <td colSpan={3} />
                           <td className="px-3 py-1.5 text-sm font-medium">{si.weightPercent}%</td>
                           <td className="px-3 py-1.5">
-                            <input
-                              type="date"
-                              className="input w-36 py-1 text-sm"
-                              dir="ltr"
-                              value={subItemDueValue(obligation, sortOrder)}
-                              onChange={(e) =>
-                                setSubItemDue(obligation.id, sortOrder, e.target.value)
-                              }
-                            />
+                            <div className="flex flex-wrap items-center gap-2">
+                              <input
+                                type="date"
+                                className="input w-36 py-1 text-sm"
+                                dir="ltr"
+                                value={subItemDueValue(obligation, sortOrder)}
+                                onChange={(e) =>
+                                  setSubItemDue(obligation.id, sortOrder, e.target.value)
+                                }
+                              />
+                              <ObligationGradeYearOverrideButton
+                                compact
+                                overrideCount={getOverrideCount(obligation.id, sortOrder)}
+                                onClick={() =>
+                                  setOverrideModal({
+                                    obligationId: obligation.id,
+                                    obligationLabel:
+                                      obligation.name ||
+                                      obligation.examEvent ||
+                                      subject.name,
+                                    defaultGradeYear:
+                                      si.gradeYear ||
+                                      String(fieldValue(obligation, "gradeYear") || "") ||
+                                      null,
+                                    subItemSortOrder: sortOrder,
+                                    subItemLabel: si.name || `תת-מטלה ${i + 1}`,
+                                  })
+                                }
+                              />
+                            </div>
                           </td>
                           <td />
                         </tr>
@@ -691,6 +764,19 @@ export default function ObligationsBoardPage() {
           </table>
         </div>
       </Card>
+
+      {overrideModal && (
+        <ObligationGradeYearOverridesModal
+          open
+          onClose={() => setOverrideModal(null)}
+          {...overrideModal}
+          classes={classes}
+          overrides={gradeYearOverrides}
+          onChanged={() => {
+            void mutateGradeYearOverrides();
+          }}
+        />
+      )}
     </>
   );
 }

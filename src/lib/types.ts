@@ -87,6 +87,22 @@ export interface Obligation {
   subItems: ObligationSubItem[];
 }
 
+/**
+ * חריג: כיתות נבחרות ניגשות למטלה (או תת-מטלה) בשכבה אחרת מברירת המחדל.
+ * subItemSortOrder = null → חריג על המטלה השלמה; מספר → חריג על תת-מטלה בלבד.
+ */
+export interface ObligationClassGradeYearOverride {
+  id: string;
+  obligationId: string;
+  /** null/undefined = המטלה השלמה; מספר = sortOrder של תת-המטלה */
+  subItemSortOrder?: number | null;
+  classIds: string[];
+  effectiveGradeYear: string;
+  note?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Subject {
   id: string;
   name: string;

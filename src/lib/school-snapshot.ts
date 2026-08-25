@@ -2,13 +2,21 @@ import {
   listAllGrades,
   listClasses,
   listExamPaths,
+  listObligationGradeYearOverrides,
   listStaff,
   listStudents,
   listSubjects,
   listTracks,
 } from "@/lib/firestore";
 import { cached } from "@/lib/server-cache";
-import type { Grade, StaffRecord, Student, Subject, Track } from "@/lib/types";
+import type {
+  Grade,
+  ObligationClassGradeYearOverride,
+  StaffRecord,
+  Student,
+  Subject,
+  Track,
+} from "@/lib/types";
 
 /** Must match the key cleared in `invalidateServerCache`. */
 const SCHOOL_SNAPSHOT_KEY = "school:snapshot";
@@ -22,6 +30,7 @@ export type SchoolSnapshot = {
   tracks: Track[];
   grades: Grade[];
   staff: StaffRecord[];
+  obligationGradeYearOverrides: ObligationClassGradeYearOverride[];
 };
 
 /**
@@ -31,7 +40,7 @@ export type SchoolSnapshot = {
  */
 export async function loadSchoolSnapshot(): Promise<SchoolSnapshot> {
   return cached(SCHOOL_SNAPSHOT_KEY, SNAPSHOT_TTL_MS, async () => {
-    const [subjects, students, classes, examPaths, tracks, grades, staff] =
+    const [subjects, students, classes, examPaths, tracks, grades, staff, obligationGradeYearOverrides] =
       await Promise.all([
         listSubjects(),
         listStudents(),
@@ -40,6 +49,7 @@ export async function loadSchoolSnapshot(): Promise<SchoolSnapshot> {
         listTracks(),
         listAllGrades(),
         listStaff(),
+        listObligationGradeYearOverrides(),
       ]);
 
     return {
@@ -50,6 +60,7 @@ export async function loadSchoolSnapshot(): Promise<SchoolSnapshot> {
       tracks,
       grades,
       staff,
+      obligationGradeYearOverrides,
     };
   });
 }

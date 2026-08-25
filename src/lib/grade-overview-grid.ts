@@ -23,7 +23,13 @@ import {
   type StudentWithRelations,
   type SubjectWithObligations,
 } from "@/lib/student-subjects";
-import { isObligationDueForStudent, normalizeGradeYear } from "@/lib/grade-year";
+import {
+  buildObligationGradeYearOverrideLookup,
+  isObligationDueForClass,
+  type ObligationGradeYearOverrideLookup,
+} from "@/lib/obligation-grade-year-overrides";
+import { normalizeGradeYear } from "@/lib/grade-year";
+import { listObligationGradeYearOverrides } from "@/lib/firestore";
 import {
   formatQualitativeLevel,
   isSocialInvolvementSubject,
@@ -343,7 +349,9 @@ function summarizeSubjectForStudent(
   layerGradeYear: string | null,
   gradesMap: Map<string, Grade>,
   studentId: string,
-  studentGradeYear?: string | null
+  studentGradeYear?: string | null,
+  classId?: string,
+  overrideLookup?: ObligationGradeYearOverrideLookup
 ): OverviewCell {
   // כמו כרטיס התלמיד: שקלול על כל מטלות המקצוע (לא ממוצע פשוט)
   const obligations = subject.obligations;
@@ -373,8 +381,14 @@ function summarizeSubjectForStudent(
     };
   });
 
+  const gradeYearContext = {
+    classId,
+    overrideLookup,
+  };
+  const effectiveStudentGradeYear = studentGradeYear ?? layerGradeYear;
+
   const dueObligations = obligations.filter((o) =>
-    isObligationDueForStudent(o.gradeYear, layerGradeYear)
+    isObligationDueForClass(o, effectiveStudentGradeYear, gradeYearContext)
   );
   let filled = 0;
   for (const obligation of dueObligations) {
@@ -536,10 +550,11 @@ export async function getOverviewGrid(opts: {
     );
   }
 
-  const [ctx, allTracks, gradesMap] = await Promise.all([
+  const [ctx, allTracks, gradesMap, overrideLookup] = await Promise.all([
     loadSubjectContext(),
     listTracks(),
     getGradesByStudentIds(matrixStudents.map((ms) => ms.student.id)),
+    listObligationGradeYearOverrides().then(buildObligationGradeYearOverrideLookup),
   ]);
 
   const tracksById = new Map(allTracks.map((t) => [t.id, t]));
@@ -649,7 +664,13 @@ export async function getOverviewGrid(opts: {
     >();
     for (const subject of variantSubjects) {
       for (const ob of subject.obligations) {
-        if (!isObligationDueForStudent(ob.gradeYear, layerGradeYear)) continue;
+        const relevantForScope = matrixStudents.some((ms) =>
+          isObligationDueForClass(ob, ms.cls.gradeYear, {
+            classId: ms.cls.id,
+            overrideLookup,
+          })
+        );
+        if (!relevantForScope) continue;
         if (!slotMap.has(ob.sortOrder)) {
           slotMap.set(ob.sortOrder, {
             sortOrder: ob.sortOrder,
@@ -686,7 +707,12 @@ export async function getOverviewGrid(opts: {
           const subject = subjectById.get(id);
           if (!subject) return 0;
           return subject.obligations.filter((o) =>
-            isObligationDueForStudent(o.gradeYear, layerGradeYear)
+            matrixStudents.some((ms) =>
+              isObligationDueForClass(o, ms.cls.gradeYear, {
+                classId: ms.cls.id,
+                overrideLookup,
+              })
+            )
           ).length;
         })
       );
@@ -745,7 +771,9 @@ export async function getOverviewGrid(opts: {
             layerGradeYear,
             gradesMap,
             ms.student.id,
-            ms.cls.gradeYear
+            ms.cls.gradeYear,
+            ms.cls.id,
+            overrideLookup
           );
           if (cell.filled) filledCells++;
           cells[col.key] = cell;
@@ -763,7 +791,10 @@ export async function getOverviewGrid(opts: {
           const obligation = subject.obligations.find(
             (o) =>
               o.sortOrder === col.sortOrder &&
-              isObligationDueForStudent(o.gradeYear, layerGradeYear)
+              isObligationDueForClass(o, ms.cls.gradeYear, {
+                classId: ms.cls.id,
+                overrideLookup,
+              })
           );
           if (!obligation) {
             cells[col.key] = {

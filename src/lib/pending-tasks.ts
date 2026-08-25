@@ -6,10 +6,17 @@ import {
 import { STATUS_LABELS } from "@/lib/grade-status";
 import {
   gradeYearOrder,
-  isObligationDueForStudent,
   isSubItemDueForStudent,
   normalizeGradeYear,
 } from "@/lib/grade-year";
+import {
+  buildObligationGradeYearOverrideLookup,
+  isObligationDueForClass,
+  isSubItemDueForClass,
+  resolveEffectiveObligationGradeYear,
+  resolveEffectiveSubItemGradeYear,
+  type ObligationGradeYearOverrideLookup,
+} from "@/lib/obligation-grade-year-overrides";
 import {
   getAllowedSubjectIds,
   isFullAdmin,
@@ -57,6 +64,7 @@ type PendingTasksInput = {
   tracks: Track[];
   grades: Grade[];
   today?: string;
+  overrideLookup?: ObligationGradeYearOverrideLookup;
 };
 
 function withClass(student: Student, cls: Class): StudentWithRelations {
@@ -140,6 +148,10 @@ export function collectPendingTasks(
   const tracksById = new Map(input.tracks.map((t) => [t.id, t]));
   const gradeMap = buildGradeMap(input.grades);
   const entries: PendingTaskEntry[] = [];
+  const gradeYearContext = (classId: string) => ({
+    classId,
+    overrideLookup: input.overrideLookup,
+  });
 
   let students = input.students.filter((s) => classById.has(s.classId));
 
@@ -186,19 +198,39 @@ export function collectPendingTasks(
         const targets = getGradeEntryTargets(obligation);
 
         for (const target of targets) {
+          const matchedSubItem =
+            target.subItemSortOrder !== undefined
+              ? obligation.subItems.find(
+                  (s, i) => (s.sortOrder ?? i) === target.subItemSortOrder
+                )
+              : undefined;
+
           if (target.subItemSortOrder !== undefined) {
-            const si = obligation.subItems.find(
-              (s, i) => (s.sortOrder ?? i) === target.subItemSortOrder
-            );
-            if (!isSubItemDueForStudent(si?.gradeYear, obligation.gradeYear, cls.gradeYear)) {
+            if (
+              !isSubItemDueForClass(
+                matchedSubItem?.gradeYear,
+                obligation,
+                target.subItemSortOrder,
+                cls.gradeYear,
+                gradeYearContext(cls.id)
+              )
+            ) {
               continue;
             }
-          } else if (!isObligationDueForStudent(obligation.gradeYear, cls.gradeYear)) {
+          } else if (!isObligationDueForClass(obligation, cls.gradeYear, gradeYearContext(cls.id))) {
             continue;
           }
 
           const obligationGY =
-            target.gradeYear ?? normalizeGradeYear(obligation.gradeYear);
+            target.gradeYear ??
+            (target.subItemSortOrder !== undefined
+              ? resolveEffectiveSubItemGradeYear(
+                  matchedSubItem?.gradeYear,
+                  obligation,
+                  target.subItemSortOrder,
+                  gradeYearContext(cls.id)
+                )
+              : resolveEffectiveObligationGradeYear(obligation, gradeYearContext(cls.id)));
           if (filter.groupBy === "gradeYear" && filterGradeYear) {
             if (obligationGY !== filterGradeYear) continue;
           }
@@ -273,7 +305,7 @@ export async function getPendingTasksForSession(
   filter: PendingTasksFilter
 ): Promise<PendingTasksMeta> {
   return cached(buildPendingTasksCacheKey(session, filter), 60_000, async () => {
-    const { subjects, students, classes, examPaths, tracks, grades } =
+    const { subjects, students, classes, examPaths, tracks, grades, obligationGradeYearOverrides } =
       await loadSchoolSnapshot();
 
     const scopedStudents = filterStudentsForScope(
@@ -294,6 +326,7 @@ export async function getPendingTasksForSession(
         examPaths,
         tracks,
         grades,
+        overrideLookup: buildObligationGradeYearOverrideLookup(obligationGradeYearOverrides),
       },
       filter
     );
