@@ -30,16 +30,17 @@ function resolveExistingFile(candidates: string[]): string | null {
 
 function ensurePdfFonts() {
   if (fontsRegistered) return;
-  // Fonts are embedded as base64 to guarantee availability on serverless
-  // runtimes (Vercel) where filesystem lookups for node_modules/public assets
-  // can silently fail after bundling.
-  const regularBuffer = Buffer.from(HEEBO_400_BASE64, "base64");
-  const boldBuffer = Buffer.from(HEEBO_700_BASE64, "base64");
+  // @react-pdf/font v4 accepts data URLs (strings), file paths, or HTTP URLs —
+  // but NOT Buffers. We pass the fonts as base64 data URLs so no filesystem or
+  // network I/O is required at runtime; guarantees identical behaviour locally
+  // and on Vercel serverless functions.
+  const regularDataUrl = `data:font/woff;base64,${HEEBO_400_BASE64}`;
+  const boldDataUrl = `data:font/woff;base64,${HEEBO_700_BASE64}`;
   Font.register({
     family: "Heebo",
     fonts: [
-      { src: regularBuffer as unknown as string, fontWeight: 400 },
-      { src: boldBuffer as unknown as string, fontWeight: 700 },
+      { src: regularDataUrl, fontWeight: 400 },
+      { src: boldDataUrl, fontWeight: 700 },
     ],
   });
   // Disable hyphenation for Hebrew — it does not apply.
