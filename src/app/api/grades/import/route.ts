@@ -74,12 +74,54 @@ function findObligationInSubject(
   const questionnaireMatch = normalized.match(/שאלון\s*(\d+)/);
   const questionnaireNum = questionnaireMatch?.[1];
 
-  for (const ob of subject.obligations) {
-    if (questionnaireNum && ob.questionnaireNumber === questionnaireNum) {
-      return ob;
+  // «name — שאלון N» → "name" part before the em-dash. Also handles a plain
+  // hyphen for backwards compatibility with files edited outside our export.
+  const namePart = normalized
+    .replace(/שאלון\s*\d+.*/u, "")
+    .replace(/[—–\-]\s*$/u, "")
+    .trim();
+
+  if (questionnaireNum) {
+    const candidates = subject.obligations.filter(
+      (o) => o.questionnaireNumber === questionnaireNum
+    );
+
+    if (candidates.length === 1) return candidates[0]!;
+
+    if (candidates.length > 1) {
+      if (namePart) {
+        const byName = candidates.find((o) => {
+          const obName = (o.name ?? "").trim().toLowerCase();
+          return obName === namePart;
+        });
+        if (byName) return byName;
+
+        const byNamePartial = candidates.find((o) => {
+          const obName = (o.name ?? "").trim().toLowerCase();
+          return (
+            obName &&
+            (obName.includes(namePart) || namePart.includes(obName))
+          );
+        });
+        if (byNamePartial) return byNamePartial;
+      }
+      // Ambiguous — refuse to guess rather than silently write into the wrong
+      // obligation. The caller surfaces this as a helpful error.
+      return null;
     }
+    // No obligation with this questionnaire number — fall through to name-only.
+  }
+
+  // Fallback: match by obligation name (or by "שאלון N" text when the file
+  // does not include a name at all).
+  for (const ob of subject.obligations) {
     const obName = (ob.name ?? "").trim().toLowerCase();
-    if (obName && (obName === normalized || obName.includes(normalized) || normalized.includes(obName))) {
+    if (
+      obName &&
+      (obName === normalized ||
+        obName.includes(normalized) ||
+        normalized.includes(obName))
+    ) {
       return ob;
     }
     const qLabel = ob.questionnaireNumber
@@ -139,10 +181,9 @@ function resolveTaskTarget(
     return { target: { kind: exact.taskKind, sortOrder: exact.sortOrder }, options };
   }
 
-  // Fallback: strip disambiguation suffix / normalize whitespace, then look for
-  // a unique match. This covers the common case where the template pre-fills a
-  // name like «בחינה (70%)» but Excel copy/paste or a locale detail changed
-  // the string in a way that only affects rendering.
+  // Fallback 1: normalize whitespace / quotes / disambiguation suffix.
+  // Handles the common case where Excel or locale details changed the string
+  // in a way that only affects rendering.
   const normalized = normalizeTaskKey(trimmed);
   if (normalized) {
     const fuzzy = options.filter(
@@ -150,6 +191,19 @@ function resolveTaskTarget(
     );
     if (fuzzy.length === 1) {
       const only = fuzzy[0]!;
+      return { target: { kind: only.taskKind, sortOrder: only.sortOrder }, options };
+    }
+
+    // Fallback 2: substring match — if the received value is contained in
+    // exactly one option's normalized name (or vice versa), pick it.
+    // Covers the case where an admin renamed a sub-item after the template
+    // was downloaded, or where copy/paste added stray text.
+    const partial = options.filter((o) => {
+      const key = normalizeTaskKey(o.taskName);
+      return key && (key.includes(normalized) || normalized.includes(key));
+    });
+    if (partial.length === 1) {
+      const only = partial[0]!;
       return { target: { kind: only.taskKind, sortOrder: only.sortOrder }, options };
     }
   }
@@ -454,7 +508,26 @@ export async function POST(req: NextRequest) {
 
     const obligation = findObligationInSubject(subject, data.obligationName);
     if (!obligation) {
-      errors.push(`שורה ${rowNum}: מטלה לא נמצאה — ${data.obligationName}`);
+      // Provide the list of obligations that share the questionnaire number so
+      // the user can tell whether it's a rename or a duplicate that the parser
+      // refuses to guess between.
+      const qMatch = data.obligationName
+        .trim()
+        .toLowerCase()
+        .match(/שאלון\s*(\d+)/);
+      const qNum = qMatch?.[1];
+      const candidates = qNum
+        ? subject.obligations.filter((o) => o.questionnaireNumber === qNum)
+        : [];
+      const hint =
+        candidates.length > 1
+          ? ` — במקצוע «${subject.name}» יש כמה מטלות עם שאלון ${qNum}: ${candidates
+              .map((o) => `«${obligationDisplayLabel(o)}»`)
+              .join(", ")}. ודאי שהערך בעמודת «מטלה» תואם אחת מהן במדויק.`
+          : "";
+      errors.push(
+        `שורה ${rowNum}: מטלה לא נמצאה — ${data.obligationName}${hint}`
+      );
       skipped++;
       continue;
     }
