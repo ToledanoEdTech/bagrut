@@ -173,20 +173,71 @@ export default function GradesImportPage() {
     const formData = new FormData();
     formData.append("file", file);
 
+    // Guard against a hung request — Vercel serverless functions can be killed
+    // silently, and without this we'd never leave the loading state.
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 120_000);
+
     try {
-      const res = await fetch("/api/grades/import", { method: "POST", body: formData });
-      const data = await res.json();
+      const res = await fetch("/api/grades/import", {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      });
+
+      let data: { updated?: number; skipped?: number; errors?: string[]; error?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        if (!res.ok) {
+          setError(
+            res.status === 504 || res.status === 408
+              ? "הבקשה נעצרה — הקובץ גדול מדי לעיבוד בבת אחת. נסו לפצל אותו לקבצים קטנים יותר (למשל לפי כיתה)."
+              : `שגיאת שרת (${res.status}) — לא ניתן היה לפרש את התשובה מהשרת.`
+          );
+          toast.error("הייבוא נכשל");
+          return;
+        }
+        throw new Error("response-not-json");
+      }
+
       if (!res.ok) {
-        setError(data.error ?? "שגיאה בייבוא");
+        const msg = data.error ?? `שגיאה בייבוא (${res.status})`;
+        setError(msg);
+        toast.error(msg);
         return;
       }
-      setResult(data);
-      if (data.updated > 0) {
-        toast.success(`${data.updated} ציונים עודכנו בהצלחה`);
+
+      const normalized = {
+        updated: data.updated ?? 0,
+        skipped: data.skipped ?? 0,
+        errors: data.errors ?? [],
+      };
+      setResult(normalized);
+
+      if (normalized.updated > 0) {
+        toast.success(
+          `${normalized.updated} ציונים עודכנו בהצלחה${
+            normalized.skipped > 0 ? ` · ${normalized.skipped} דולגו` : ""
+          }`
+        );
+      } else if (normalized.errors.length > 0) {
+        toast.error(
+          `הייבוא הסתיים ללא עדכונים — נמצאו ${normalized.errors.length} שגיאות בקובץ`
+        );
+      } else {
+        toast.info("לא נמצאו שורות לעדכון בקובץ");
       }
-    } catch {
-      setError("שגיאת רשת בייבוא");
+    } catch (err) {
+      const aborted =
+        err instanceof DOMException && err.name === "AbortError";
+      const msg = aborted
+        ? "הבקשה נעצרה לאחר 2 דקות — הקובץ ככל הנראה גדול מדי. נסו לפצל אותו לפי כיתה."
+        : "שגיאת רשת בייבוא — בדקו את החיבור ונסו שוב";
+      setError(msg);
+      toast.error(msg);
     } finally {
+      window.clearTimeout(timeoutId);
       setLoading(false);
     }
   }
@@ -383,7 +434,11 @@ export default function GradesImportPage() {
 
           <div className="mt-6">
             <Button onClick={handleImport} disabled={!file || loading}>
-              <FileSpreadsheet className="h-4 w-4" />
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="h-4 w-4" />
+              )}
               {loading ? "מייבא..." : "ייבוא"}
             </Button>
           </div>
@@ -392,6 +447,32 @@ export default function GradesImportPage() {
             <Alert variant="error" className="mt-4" onClose={() => setError(null)}>
               {error}
             </Alert>
+          )}
+
+          {result && (
+            <div className="mt-4 space-y-3">
+              <Alert
+                variant={result.updated > 0 ? "success" : "warning"}
+                title="הייבוא הושלם"
+                onClose={() => setResult(null)}
+              >
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {result.updated} ציונים עודכנו, {result.skipped} דולגו
+                </span>
+              </Alert>
+              {result.errors.length > 0 && (
+                <Alert variant="error" title={`שגיאות בייבוא (${result.errors.length})`}>
+                  <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto text-xs leading-relaxed">
+                    {result.errors.map((e, i) => (
+                      <li key={i} className="border-b border-red-100 pb-2 last:border-b-0 last:pb-0">
+                        {e}
+                      </li>
+                    ))}
+                  </ul>
+                </Alert>
+              )}
+            </div>
           )}
         </Card>
 
@@ -594,26 +675,6 @@ export default function GradesImportPage() {
                 שורות עם שגיאות ידווחו — שאר השורות ייובאו
               </li>
             </ul>
-
-            {result && (
-              <div className="mt-6 space-y-3">
-                <Alert variant="success" title="הייבוא הושלם">
-                  <span className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4" />
-                    {result.updated} ציונים עודכנו, {result.skipped} דולגו
-                  </span>
-                </Alert>
-                {result.errors.length > 0 && (
-                  <Alert variant="error" title="שגיאות בייבוא">
-                    <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs">
-                      {result.errors.map((e, i) => (
-                        <li key={i}>{e}</li>
-                      ))}
-                    </ul>
-                  </Alert>
-                )}
-              </div>
-            )}
           </Card>
         </div>
       </div>

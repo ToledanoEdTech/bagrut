@@ -18,6 +18,15 @@
     },
     "src/app/api/cron/class-promotion/route.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/grades/import/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/grades/import/filled-template/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/grades/import/full-template/route.ts": {
+      "maxDuration": 60
     }
   }
 }

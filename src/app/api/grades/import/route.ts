@@ -35,7 +35,13 @@ import {
 } from "@/lib/social-involvement";
 import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
 import { actorFromSession, recordActivity } from "@/lib/activity-log";
-import type { QualitativeLevel, SubmissionStatus, Subject, Obligation } from "@/lib/types";
+import type {
+  QualitativeLevel,
+  SubmissionStatus,
+  Subject,
+  Obligation,
+  Student,
+} from "@/lib/types";
 
 type ImportRow = {
   className: string;
@@ -91,21 +97,71 @@ type TaskTarget =
   | { kind: "ambiguous" }
   | null;
 
-function resolveTaskTarget(ob: Obligation, taskName: string): TaskTarget {
+/**
+ * מסלק רווחים כפולים, גרשיים שונים, ומגרשים מעל־שקלול «(70%)» / סיפא «— 2»
+ * כדי שהתאמת שם הרכיב תעבוד גם אם המשתמש נגע בעמודה בטעות או שהאקסל
+ * שינה את הפורמט של התא (ExcelJS מוסיף לפעמים רווח לא־שובר בטעות).
+ */
+function normalizeTaskKey(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/["׳']/g, '"')
+    .replace(/\s*—\s*\d+\s*$/u, "")
+    .replace(/\s*\([^()]*%\)\s*$/u, "");
+}
+
+function resolveTaskTarget(
+  ob: Obligation,
+  taskName: string
+): { target: TaskTarget; options: ReturnType<typeof expandObligationMatrixTasks> } {
   const options = expandObligationMatrixTasks(ob, 0);
-  const trimmed = taskName.trim().toLowerCase();
+  const trimmed = taskName.trim();
 
   if (!trimmed) {
     if (options.length === 1) {
       const only = options[0]!;
-      return { kind: only.taskKind, sortOrder: only.sortOrder };
+      return {
+        target: { kind: only.taskKind, sortOrder: only.sortOrder },
+        options,
+      };
     }
-    return { kind: "ambiguous" };
+    return { target: { kind: "ambiguous" }, options };
   }
 
-  const match = options.find((o) => o.taskName.trim().toLowerCase() === trimmed);
-  if (match) return { kind: match.taskKind, sortOrder: match.sortOrder };
-  return null;
+  const trimmedLc = trimmed.toLowerCase();
+  const exact = options.find(
+    (o) => o.taskName.trim().toLowerCase() === trimmedLc
+  );
+  if (exact) {
+    return { target: { kind: exact.taskKind, sortOrder: exact.sortOrder }, options };
+  }
+
+  // Fallback: strip disambiguation suffix / normalize whitespace, then look for
+  // a unique match. This covers the common case where the template pre-fills a
+  // name like «בחינה (70%)» but Excel copy/paste or a locale detail changed
+  // the string in a way that only affects rendering.
+  const normalized = normalizeTaskKey(trimmed);
+  if (normalized) {
+    const fuzzy = options.filter(
+      (o) => normalizeTaskKey(o.taskName) === normalized
+    );
+    if (fuzzy.length === 1) {
+      const only = fuzzy[0]!;
+      return { target: { kind: only.taskKind, sortOrder: only.sortOrder }, options };
+    }
+  }
+
+  return { target: null, options };
+}
+
+function describeTaskOptions(
+  options: ReturnType<typeof expandObligationMatrixTasks>
+): string {
+  if (options.length === 0) return "אין תתי־מטלה מוגדרות";
+  return options.map((o) => `«${o.taskName}»`).join(", ");
 }
 
 /**
@@ -161,11 +217,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const [classes, students, subjects, examPaths] = await Promise.all([
+  const [classes, students, subjects, examPaths, allGrades] = await Promise.all([
     listClassesSimple(),
     listStudents(),
     listSubjects(),
     listExamPaths(),
+    listAllGrades(),
   ]);
 
   const classByName = new Map(classes.map((c) => [c.name.trim(), c]));
@@ -180,6 +237,19 @@ export async function POST(req: NextRequest) {
     });
     subjectByName.set(subject.name.trim().toLowerCase(), subject);
     subjectByName.set(displayName.trim().toLowerCase(), subject);
+  }
+
+  // Pre-index students by class so per-row lookups are O(1) instead of O(N*rows).
+  // Full-scope grade-year files can hold hundreds of rows; a linear scan per row
+  // used to add up to seconds of extra CPU on Vercel.
+  const studentsByClass = new Map<string, Map<string, Student>>();
+  for (const s of students) {
+    let byName = studentsByClass.get(s.classId);
+    if (!byName) {
+      byName = new Map();
+      studentsByClass.set(s.classId, byName);
+    }
+    byName.set(s.name.trim(), s);
   }
 
   const parsedRows: Array<{ rowNum: number; data: ImportRow | null; error?: string }> = [];
@@ -294,10 +364,17 @@ export async function POST(req: NextRequest) {
   const errors: string[] = [];
   let skipped = 0;
 
-  const allGrades = await listAllGrades();
   const existingByKey = new Map(
     allGrades.map((g) => [`${g.studentId}:${g.obligationId}`, g])
   );
+
+  /**
+   * Caches for the row loop. Without these, importing a full grade-year
+   * template calls `getRelevantSubjects` and `requireGradeWrite` once per row —
+   * hundreds of async lookups that add up to a Vercel timeout in silence.
+   */
+  const relevantObligationsByStudent = new Map<string, Set<string>>();
+  const gradeWriteCache = new Map<string, NextResponse | null>();
 
   type Aggregate = {
     studentId: string;
@@ -327,7 +404,6 @@ export async function POST(req: NextRequest) {
   };
 
   const aggregates = new Map<string, Aggregate>();
-  const relevanceCache = new Map<string, boolean>();
 
   for (const { rowNum, data, error: parseError } of parsedRows) {
     if (parseError) {
@@ -344,10 +420,7 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const classStudents = students.filter((s) => s.classId === cls.id);
-    const student = classStudents.find(
-      (s) => s.name.trim() === data.studentName.trim()
-    );
+    const student = studentsByClass.get(cls.id)?.get(data.studentName.trim());
     if (!student) {
       errors.push(`שורה ${rowNum}: תלמיד לא נמצא — ${data.studentName}`);
       skipped++;
@@ -386,18 +459,37 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const target = resolveTaskTarget(obligation, data.taskName);
-    if (target === null) {
-      errors.push(
-        `שורה ${rowNum}: רכיב/תת-מטלה לא נמצא — ${data.taskName}`
-      );
-      skipped++;
-      continue;
-    }
+    const { target, options: taskOptions } = resolveTaskTarget(
+      obligation,
+      data.taskName
+    );
 
     /** ציון ריק + סטטוס «לא התחיל» = איפוס למצב שלא הוזן ציון */
     const clearToUnentered =
       !data.hasScoreCol && data.status === "NOT_STARTED";
+
+    if (target === null) {
+      // אם השורה לא ניסתה בכלל לעדכן משהו — לא נטריח את המשתמש בשגיאה מיותרת
+      // (למשל שורה שהמשתמש השאיר ריקה מהתבנית שהורדנו לו).
+      if (!data.hasScoreCol && !data.status) {
+        continue;
+      }
+      console.warn(
+        "[grades/import] task not found",
+        JSON.stringify({
+          received: data.taskName,
+          receivedCodes: [...data.taskName].map((c) => c.charCodeAt(0)),
+          options: taskOptions.map((o) => o.taskName),
+        })
+      );
+      errors.push(
+        `שורה ${rowNum}: רכיב/תת-מטלה לא נמצא — «${data.taskName}». האפשרויות במטלה «${obligationDisplayLabel(
+          obligation
+        )}»: ${describeTaskOptions(taskOptions)}`
+      );
+      skipped++;
+      continue;
+    }
 
     if (target.kind === "ambiguous") {
       if (data.hasScoreCol) {
@@ -410,35 +502,42 @@ export async function POST(req: NextRequest) {
       // בלי ציון ובלי איפוס מפורש — אפשר להמשיך רק לעדכון סטטוס כללי
     }
 
-    const relevanceKey = `${student.id}:${obligation.id}`;
-    let isRelevant = relevanceCache.get(relevanceKey);
-    if (isRelevant === undefined) {
+    let relevantObligationIds = relevantObligationsByStudent.get(student.id);
+    if (!relevantObligationIds) {
       const withRelations = await buildStudentWithRelations(student);
       const relevant = await getRelevantSubjects(withRelations);
-      isRelevant = relevant.some((s) =>
-        s.obligations.some((o) => o.id === obligation.id)
+      relevantObligationIds = new Set(
+        relevant.flatMap((s) => s.obligations.map((o) => o.id))
       );
-      relevanceCache.set(relevanceKey, isRelevant);
+      relevantObligationsByStudent.set(student.id, relevantObligationIds);
     }
-    if (!isRelevant) {
+    if (!relevantObligationIds.has(obligation.id)) {
       errors.push(`שורה ${rowNum}: המטלה לא רלוונטית לתלמיד ${data.studentName}`);
       skipped++;
       continue;
     }
 
-    const writeError = await requireGradeWrite(session, {
-      classId: cls.id,
-      subjectId: subject.id,
-      obligationId: obligation.id,
-    });
+    // A single (class, subject, obligation) tuple always has the same permission
+    // outcome for this session, so cache it instead of re-running the check
+    // (which touches Firestore) for every student row.
+    const writeCacheKey = `${cls.id}:${subject.id}:${obligation.id}`;
+    let writeError = gradeWriteCache.get(writeCacheKey);
+    if (writeError === undefined) {
+      writeError = await requireGradeWrite(session, {
+        classId: cls.id,
+        subjectId: subject.id,
+        obligationId: obligation.id,
+      });
+      gradeWriteCache.set(writeCacheKey, writeError);
+    }
     if (writeError) {
-      const errBody = await writeError.json();
+      const errBody = await writeError.clone().json();
       errors.push(`שורה ${rowNum}: ${errBody.error ?? "אין הרשאה"}`);
       skipped++;
       continue;
     }
 
-    const key = relevanceKey;
+    const key = `${student.id}:${obligation.id}`;
     let agg = aggregates.get(key);
     if (!agg) {
       const existing = existingByKey.get(key);
