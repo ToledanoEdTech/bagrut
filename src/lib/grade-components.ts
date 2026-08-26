@@ -886,6 +886,18 @@ function disambiguateTaskName(name: string, weightPercent: number, duplicate: bo
   return duplicate ? `${name} (${weightPercent}%)` : name;
 }
 
+/**
+ * אפשרויות למניית תלמידים שונה לכל תת-מטלה. משמש כאשר לתת-מטלה יש
+ * override של שכבה, כך שמספר התלמידים הרלוונטיים לתת-המטלה שונה
+ * מהמניה הכללית של המטלה.
+ */
+export type MatrixTaskExpandOptions = {
+  /** מיפוי לפי sortOrder של תת-מטלה למספר התלמידים הרלוונטיים לה */
+  subItemCounts?: ReadonlyMap<number, number>;
+  /** אם true — מטלות עם 0 תלמידים רלוונטיים מוסתרות מהרשימה */
+  hideEmptyTasks?: boolean;
+};
+
 function expandWeightedMatrixTasks(
   ob: {
     id: string;
@@ -895,7 +907,8 @@ function expandWeightedMatrixTasks(
   },
   items: WeightedItemLike[],
   taskKind: MatrixTaskKind,
-  relevantStudentCount: number
+  relevantStudentCount: number,
+  perItemCounts?: ReadonlyMap<number, number>
 ): MatrixTaskOption[] {
   const nameCounts = new Map<string, number>();
   for (const item of items) {
@@ -916,6 +929,10 @@ function expandWeightedMatrixTasks(
       taskName = `${taskName} — ${index + 1}`;
     }
     usedNames.add(taskName);
+    const count =
+      perItemCounts?.get(item.sortOrder) ??
+      perItemCounts?.get(Number(item.sortOrder)) ??
+      relevantStudentCount;
     return {
       id: ob.id,
       taskKind,
@@ -923,7 +940,7 @@ function expandWeightedMatrixTasks(
       taskName,
       questionnaireNumber: ob.questionnaireNumber,
       name: ob.name,
-      relevantStudentCount,
+      relevantStudentCount: count,
       label: matrixTaskLabel({
         name: ob.name,
         questionnaireNumber: ob.questionnaireNumber,
@@ -942,11 +959,21 @@ export function expandObligationMatrixTasks(
     components: Array<{ name: string; weightPercent: number; sortOrder?: number }>;
     subItems: Array<{ name: string; weightPercent: number; sortOrder?: number }>;
   },
-  relevantStudentCount: number
+  relevantStudentCount: number,
+  options?: MatrixTaskExpandOptions
 ): MatrixTaskOption[] {
   const subItems = normalizeSubItems(ob.subItems);
   if (subItems.length > 0) {
-    return expandWeightedMatrixTasks(ob, subItems, "subItem", relevantStudentCount);
+    const tasks = expandWeightedMatrixTasks(
+      ob,
+      subItems,
+      "subItem",
+      relevantStudentCount,
+      options?.subItemCounts
+    );
+    return options?.hideEmptyTasks
+      ? tasks.filter((t) => t.relevantStudentCount > 0)
+      : tasks;
   }
 
   const components =
@@ -956,6 +983,7 @@ export function expandObligationMatrixTasks(
 
   if (components.length === 1) {
     const only = components[0]!;
+    if (options?.hideEmptyTasks && relevantStudentCount <= 0) return [];
     return [
       {
         id: ob.id,
@@ -974,7 +1002,15 @@ export function expandObligationMatrixTasks(
     ];
   }
 
-  return expandWeightedMatrixTasks(ob, components, "component", relevantStudentCount);
+  const tasks = expandWeightedMatrixTasks(
+    ob,
+    components,
+    "component",
+    relevantStudentCount
+  );
+  return options?.hideEmptyTasks
+    ? tasks.filter((t) => t.relevantStudentCount > 0)
+    : tasks;
 }
 
 export function makeMatrixTaskKey(

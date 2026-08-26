@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/Toast";
 import { invalidateCache } from "@/lib/api-cache";
 import { downloadExcel, exportTimestamp } from "@/lib/excel-export";
 import { defaultGradeEntryDueDate, resolveGradeEntryDueDate } from "@/lib/grade-due-date";
-import { CANONICAL_GRADE_YEARS } from "@/lib/grade-year";
+import { CANONICAL_GRADE_YEARS, normalizeGradeYear } from "@/lib/grade-year";
 import {
   hasSeparateComponentGrades,
   hasSubItemGrades,
@@ -184,7 +184,14 @@ export default function ObligationsBoardPage() {
     const q = search.trim().toLowerCase();
     return rows.filter(({ subject, obligation }) => {
       if (subjectFilter && subject.id !== subjectFilter) return false;
-      if (gradeYearFilter && (obligation.gradeYear ?? "") !== gradeYearFilter) return false;
+      if (gradeYearFilter) {
+        const wanted = normalizeGradeYear(gradeYearFilter);
+        const parentYear = normalizeGradeYear(obligation.gradeYear);
+        const subItemMatch = (obligation.subItems ?? []).some(
+          (si) => normalizeGradeYear(si.gradeYear) === wanted
+        );
+        if (parentYear !== wanted && !subItemMatch) return false;
+      }
       if (!q) return true;
       return (
         subject.name.toLowerCase().includes(q) ||

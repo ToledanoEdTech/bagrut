@@ -4,11 +4,7 @@ import {
   isTargetIncomplete,
 } from "@/lib/grade-reminders";
 import { STATUS_LABELS } from "@/lib/grade-status";
-import {
-  gradeYearOrder,
-  isSubItemDueForStudent,
-  normalizeGradeYear,
-} from "@/lib/grade-year";
+import { normalizeGradeYear } from "@/lib/grade-year";
 import {
   buildObligationGradeYearOverrideLookup,
   isObligationDueForClass,
@@ -154,22 +150,19 @@ export function collectPendingTasks(
   });
 
   let students = input.students.filter((s) => classById.has(s.classId));
+  const filterGradeYear = filter.gradeYear ? normalizeGradeYear(filter.gradeYear) : null;
 
   if (filter.groupBy === "student" && filter.studentId) {
     students = students.filter((s) => s.id === filter.studentId);
   } else if (filter.groupBy === "class" && filter.classId) {
     students = students.filter((s) => s.classId === filter.classId);
-  } else if (filter.groupBy === "gradeYear" && filter.gradeYear) {
+  } else if (filter.groupBy === "gradeYear" && filterGradeYear) {
+    // כמו "לפי כיתה": כל תלמידי השכבה, כולל חוסרים משכבות קודמות שעדיין פתוחים.
     students = students.filter((s) => {
       const cls = classById.get(s.classId);
-      if (!cls?.gradeYear) return false;
-      const studentOrder = gradeYearOrder(cls.gradeYear);
-      const filterOrder = gradeYearOrder(filter.gradeYear);
-      return studentOrder != null && filterOrder != null && studentOrder >= filterOrder;
+      return normalizeGradeYear(cls?.gradeYear) === filterGradeYear;
     });
   }
-
-  const filterGradeYear = filter.gradeYear ? normalizeGradeYear(filter.gradeYear) : null;
 
   for (const student of students) {
     const cls = classById.get(student.classId);
@@ -222,20 +215,22 @@ export function collectPendingTasks(
           }
 
           const obligationGY =
-            target.gradeYear ??
-            (target.subItemSortOrder !== undefined
+            target.subItemSortOrder !== undefined
               ? resolveEffectiveSubItemGradeYear(
                   matchedSubItem?.gradeYear,
                   obligation,
                   target.subItemSortOrder,
                   gradeYearContext(cls.id)
                 )
-              : resolveEffectiveObligationGradeYear(obligation, gradeYearContext(cls.id)));
-          if (filter.groupBy === "gradeYear" && filterGradeYear) {
-            if (obligationGY !== filterGradeYear) continue;
-          }
+              : resolveEffectiveObligationGradeYear(obligation, gradeYearContext(cls.id));
 
-          if (!isTargetIncomplete(obligation, grade, target, cls.gradeYear)) continue;
+          // לא מעבירים שכבה ליעד תת-מטלה — isTargetIncomplete בודק חלות בלי חריגי כיתה,
+          // והחלות כבר אומתה למעלה עם isSubItemDueForClass.
+          const incomplete =
+            target.subItemSortOrder !== undefined
+              ? isTargetIncomplete(obligation, grade, target)
+              : isTargetIncomplete(obligation, grade, target, cls.gradeYear);
+          if (!incomplete) continue;
 
           entries.push({
             studentId: student.id,

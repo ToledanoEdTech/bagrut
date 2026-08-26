@@ -211,7 +211,14 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    if (!(await isObligationRelevantForStudent(student, obligationId))) {
+    if (
+      !(await isObligationRelevantForStudent(
+        student,
+        obligationId,
+        taskKind ?? null,
+        taskSortOrder ?? null
+      ))
+    ) {
       return NextResponse.json(
         { error: `המטלה לא רלוונטית לתלמיד ${student.name}` },
         { status: 400 }

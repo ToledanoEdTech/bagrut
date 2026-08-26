@@ -25,7 +25,7 @@ import {
 } from "@/lib/student-subjects";
 import {
   buildObligationGradeYearOverrideLookup,
-  isObligationDueForClass,
+  isObligationRelevantForClass,
   type ObligationGradeYearOverrideLookup,
 } from "@/lib/obligation-grade-year-overrides";
 import { normalizeGradeYear } from "@/lib/grade-year";
@@ -388,7 +388,7 @@ function summarizeSubjectForStudent(
   const effectiveStudentGradeYear = studentGradeYear ?? layerGradeYear;
 
   const dueObligations = obligations.filter((o) =>
-    isObligationDueForClass(o, effectiveStudentGradeYear, gradeYearContext)
+    isObligationRelevantForClass(o, effectiveStudentGradeYear, gradeYearContext)
   );
   let filled = 0;
   for (const obligation of dueObligations) {
@@ -665,7 +665,7 @@ export async function getOverviewGrid(opts: {
     for (const subject of variantSubjects) {
       for (const ob of subject.obligations) {
         const relevantForScope = matrixStudents.some((ms) =>
-          isObligationDueForClass(ob, ms.cls.gradeYear, {
+          isObligationRelevantForClass(ob, ms.cls.gradeYear, {
             classId: ms.cls.id,
             overrideLookup,
           })
@@ -708,7 +708,7 @@ export async function getOverviewGrid(opts: {
           if (!subject) return 0;
           return subject.obligations.filter((o) =>
             matrixStudents.some((ms) =>
-              isObligationDueForClass(o, ms.cls.gradeYear, {
+              isObligationRelevantForClass(o, ms.cls.gradeYear, {
                 classId: ms.cls.id,
                 overrideLookup,
               })
@@ -791,7 +791,7 @@ export async function getOverviewGrid(opts: {
           const obligation = subject.obligations.find(
             (o) =>
               o.sortOrder === col.sortOrder &&
-              isObligationDueForClass(o, ms.cls.gradeYear, {
+              isObligationRelevantForClass(o, ms.cls.gradeYear, {
                 classId: ms.cls.id,
                 overrideLookup,
               })

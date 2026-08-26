@@ -116,6 +116,43 @@ export function isSubItemDueForClass(
   );
 }
 
+function asSortOrder(value: number | string | null | undefined, fallback: number): number {
+  const n = Number(value);
+  return Number.isInteger(n) ? n : fallback;
+}
+
+/**
+ * האם משבצת הזנה (תת-מטלה / רכיב / מטלה שלמה) פתוחה לשכבה נתונה.
+ * תת-מטלה נבדקת לפי השכבה שלה עצמה (כולל חריג לפי כיתה) — גם אם המטלה
+ * האב מוגדרת לשכבה מאוחרת יותר (למשל מטלת יב עם תת-מטלה לשכבת י).
+ */
+export function isMatrixTaskDueForClass(
+  obligation: {
+    id: string;
+    gradeYear?: string | null;
+    subItems?: ReadonlyArray<{ gradeYear?: string | null; sortOrder?: number }>;
+  },
+  taskKind: "subItem" | "component" | "single" | null | undefined,
+  taskSortOrder: number | null | undefined,
+  classGradeYear: string | null | undefined,
+  context?: ObligationGradeYearContext | null
+): boolean {
+  if (taskKind === "subItem" && taskSortOrder != null) {
+    const sortOrder = asSortOrder(taskSortOrder, taskSortOrder);
+    const subItems = obligation.subItems ?? [];
+    const si = subItems.find((s, i) => asSortOrder(s.sortOrder, i) === sortOrder);
+    return isSubItemDueForClass(
+      si?.gradeYear ?? null,
+      obligation,
+      sortOrder,
+      classGradeYear,
+      context
+    );
+  }
+
+  return isObligationRelevantForClass(obligation, classGradeYear, context);
+}
+
 export function isObligationRelevantForClass(
   obligation: {
     id: string;
@@ -135,7 +172,7 @@ export function isObligationRelevantForClass(
     isSubItemDueForClass(
       si.gradeYear,
       obligation,
-      si.sortOrder ?? index,
+      Number(si.sortOrder ?? index),
       studentGradeYear,
       context
     )

@@ -527,10 +527,27 @@ export function SubjectCard({
                     ? getNegativeGradeScore(o, grade)
                     : null;
                   const isNegative = negativeScore != null;
-                  const timing: ObligationTiming =
+                  const parentTiming: ObligationTiming =
                     studentGradeYear !== undefined
                       ? getEffectiveObligationTiming(o, studentGradeYear, gradeYearContext)
                       : "unknown";
+                  const subTimings =
+                    studentGradeYear !== undefined
+                      ? (o.subItems ?? []).map((si, i) =>
+                          getEffectiveSubItemTiming(
+                            si.gradeYear,
+                            o,
+                            si.sortOrder ?? i,
+                            studentGradeYear,
+                            gradeYearContext
+                          )
+                        )
+                      : [];
+                  const timing: ObligationTiming = subTimings.includes("current")
+                    ? "current"
+                    : subTimings.includes("past")
+                      ? "past"
+                      : parentTiming;
                   const isFuture =
                     studentGradeYear !== undefined &&
                     !isObligationRelevantForClass(o, studentGradeYear, gradeYearContext);

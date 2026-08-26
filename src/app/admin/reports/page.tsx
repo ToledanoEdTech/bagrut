@@ -68,7 +68,7 @@ const GROUP_OPTIONS: Array<{
   {
     id: "gradeYear",
     label: "לפי שכבה",
-    description: "חוסרים לפי שכבת המטלה — מי עדיין חייב מה בשכבה",
+    description: "כל החוסרים של תלמידי השכבה — כולל מטלות משנים קודמות שעדיין פתוחות",
     icon: Layers,
   },
   {

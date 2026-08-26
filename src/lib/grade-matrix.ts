@@ -38,7 +38,9 @@ import {
 import type { Class, ExamPath, Student } from "@/lib/types";
 import {
   buildObligationGradeYearOverrideLookup,
+  isMatrixTaskDueForClass,
   isObligationDueForClass,
+  isSubItemDueForClass,
   type ObligationGradeYearOverrideLookup,
 } from "@/lib/obligation-grade-year-overrides";
 import { normalizeGradeYear } from "@/lib/grade-year";
@@ -57,6 +59,20 @@ type MatrixStudent = {
   examPath: ExamPath | null;
 };
 
+/**
+ * מונה תלמידים רלוונטיים לכל מטלה, כולל פירוק לתת-מטלות. כשלתת-מטלה יש
+ * override של שכבה (למשל תת-מטלה שהוגדרה לכיתה י בתוך מטלה של כיתה יב),
+ * ייתכן שהמניה עבור התת-מטלה שונה מהמניה של המטלה הכוללת עצמה, ולכן
+ * שומרים את שתיהן בנפרד.
+ */
+type ObligationCounter = {
+  obligation: SubjectContext["allSubjects"][0]["obligations"][0];
+  /** מספר התלמידים בהיקף הסינון שהמטלה כולה רלוונטית להם */
+  obligationRelevantCount: number;
+  /** מיפוי לפי sortOrder של תת-מטלה למספר התלמידים שהתת-מטלה הזו רלוונטית להם */
+  subItemRelevantCount: Map<number, number>;
+};
+
 type SubjectsMap = Map<
   string,
   {
@@ -65,13 +81,7 @@ type SubjectsMap = Map<
     units: number | null;
     category: SubjectContext["allSubjects"][0]["category"];
     trackId: string | null;
-    obligations: Map<
-      string,
-      {
-        obligation: SubjectContext["allSubjects"][0]["obligations"][0];
-        relevantStudentCount: number;
-      }
-    >;
+    obligations: Map<string, ObligationCounter>;
   }
 >;
 
@@ -129,15 +139,45 @@ function accumulateSubjectsForStudent(
     }
     const entry = subjectsMap.get(subject.id)!;
     for (const ob of subject.obligations) {
-      if (!isObligationDueForClass(ob, layerGradeYear, {
+      const gyCtx = {
         classId: student.cls.id,
         overrideLookup,
-      })) continue;
-      const existing = entry.obligations.get(ob.id);
-      if (existing) {
-        existing.relevantStudentCount++;
-      } else {
-        entry.obligations.set(ob.id, { obligation: ob, relevantStudentCount: 1 });
+      };
+      const studentYear = student.cls.gradeYear ?? layerGradeYear;
+      const parentDue = isObligationDueForClass(ob, studentYear, gyCtx);
+      const subItems = ob.subItems ?? [];
+
+      /**
+       * גם אם המטלה כולה לא רלוונטית (למשל מטלה של יב), ייתכן שתת-מטלה
+       * כלשהי הוגדרה במפורש לשכבה נמוכה יותר. נמנה כל תת-מטלה בנפרד כך
+       * שתוצג ברשימת המטלות לשכבה הרלוונטית לה בלבד.
+       */
+      const dueSubItemSortOrders: number[] = [];
+      for (let i = 0; i < subItems.length; i++) {
+        const si = subItems[i]!;
+        const sortOrder = Number(si.sortOrder ?? i);
+        if (isSubItemDueForClass(si.gradeYear, ob, sortOrder, studentYear, gyCtx)) {
+          dueSubItemSortOrders.push(sortOrder);
+        }
+      }
+
+      if (!parentDue && dueSubItemSortOrders.length === 0) continue;
+
+      let counter = entry.obligations.get(ob.id);
+      if (!counter) {
+        counter = {
+          obligation: ob,
+          obligationRelevantCount: 0,
+          subItemRelevantCount: new Map(),
+        };
+        entry.obligations.set(ob.id, counter);
+      }
+      if (parentDue) counter.obligationRelevantCount++;
+      for (const sortOrder of dueSubItemSortOrders) {
+        counter.subItemRelevantCount.set(
+          sortOrder,
+          (counter.subItemRelevantCount.get(sortOrder) ?? 0) + 1
+        );
       }
     }
   }
@@ -164,11 +204,20 @@ async function buildOptionsFromStudents(
         units: s.units,
         category: s.category,
         trackId: s.trackId,
-        tasks: Array.from(s.obligations.values()).flatMap(
-          ({ obligation, relevantStudentCount }) =>
-            expandObligationMatrixTasks(obligation, relevantStudentCount)
+        tasks: Array.from(s.obligations.values()).flatMap((counter) =>
+          expandObligationMatrixTasks(
+            counter.obligation,
+            counter.obligationRelevantCount,
+            {
+              subItemCounts: counter.subItemRelevantCount,
+              // מסתירים תת-מטלות שלא רלוונטיות לאף תלמיד בהיקף הנבחר,
+              // כדי שלא יופיעו ברשימת המטלות למשתמש.
+              hideEmptyTasks: true,
+            }
+          )
         ),
-      })),
+      }))
+      .filter((s) => s.tasks.length > 0),
       pathLabelsBySubjectId
     ),
   };
@@ -473,6 +522,32 @@ async function loadOverrideLookup() {
   return buildObligationGradeYearOverrideLookup(await listObligationGradeYearOverrides());
 }
 
+/**
+ * בודק אם המטלה הספציפית (או תת-מטלה) פתוחה עבור שכבה מסוימת בהקשר של
+ * כיתה. עבור תת-מטלה — בודקים את שנת הלימוד האפקטיבית של אותה תת-מטלה
+ * (כולל override לפי כיתה). עבור מטלה שלמה — בודקים את המטלה כולה,
+ * כולל מקרה שבו רק תת-מטלה מוקדמת רלוונטית לשכבה.
+ */
+function isTaskDueForClass(
+  obligation: {
+    id: string;
+    gradeYear?: string | null;
+    subItems?: ReadonlyArray<{ gradeYear?: string | null; sortOrder?: number }>;
+  },
+  taskKind: MatrixTaskKind | undefined,
+  taskSortOrder: number | undefined,
+  classGradeYear: string | null,
+  ctx: { classId: string; overrideLookup: ObligationGradeYearOverrideLookup }
+): boolean {
+  return isMatrixTaskDueForClass(
+    obligation,
+    taskKind,
+    taskSortOrder,
+    classGradeYear,
+    ctx
+  );
+}
+
 export async function getMatrixOptions(classId: string) {
   const loaded = await loadClassMatrixStudents(classId);
   if (!loaded) throw new Error("כיתה לא נמצאה");
@@ -510,12 +585,8 @@ export async function getMatrixData(
 
   const { cls, matrixStudents } = loaded;
   const overrideLookup = await loadOverrideLookup();
-  if (
-    !isObligationDueForClass(found.obligation, cls.gradeYear, {
-      classId: cls.id,
-      overrideLookup,
-    })
-  ) {
+  const gyCtx = { classId: cls.id, overrideLookup };
+  if (!isTaskDueForClass(found.obligation, taskKind, taskSortOrder, cls.gradeYear, gyCtx)) {
     throw new Error("מטלה זו אינה רלוונטית לשכבת הכיתה");
   }
 
@@ -525,7 +596,14 @@ export async function getMatrixData(
 
   for (const ms of matrixStudents) {
     const withRelations = withClass(ms.student, ms.cls);
-    if (studentHasObligation(withRelations, obligationId, ms.examPath, ctx)) {
+    const enrolled = studentHasObligation(withRelations, obligationId, ms.examPath, ctx);
+    const dueForStudent =
+      enrolled &&
+      isTaskDueForClass(found.obligation, taskKind, taskSortOrder, ms.cls.gradeYear, {
+        classId: ms.cls.id,
+        overrideLookup,
+      });
+    if (dueForStudent) {
       relevant.push(ms);
     } else {
       notRelevantCount++;
@@ -559,7 +637,7 @@ export async function getMatrixDataByGradeYear(
 
   const overrideLookup = await loadOverrideLookup();
   const anyRelevant = loaded.matrixStudents.some((ms) =>
-    isObligationDueForClass(found.obligation, ms.cls.gradeYear, {
+    isTaskDueForClass(found.obligation, taskKind, taskSortOrder, ms.cls.gradeYear, {
       classId: ms.cls.id,
       overrideLookup,
     })
@@ -574,7 +652,14 @@ export async function getMatrixDataByGradeYear(
 
   for (const ms of loaded.matrixStudents) {
     const withRelations = withClass(ms.student, ms.cls);
-    if (studentHasObligation(withRelations, obligationId, ms.examPath, ctx)) {
+    const enrolled = studentHasObligation(withRelations, obligationId, ms.examPath, ctx);
+    const dueForStudent =
+      enrolled &&
+      isTaskDueForClass(found.obligation, taskKind, taskSortOrder, ms.cls.gradeYear, {
+        classId: ms.cls.id,
+        overrideLookup,
+      });
+    if (dueForStudent) {
       relevant.push(ms);
     } else {
       notRelevantCount++;
@@ -601,7 +686,9 @@ export type { MatrixTaskOption };
 
 export async function isObligationRelevantForStudent(
   student: Student,
-  obligationId: string
+  obligationId: string,
+  taskKind?: MatrixTaskKind | null,
+  taskSortOrder?: number | null
 ): Promise<boolean> {
   const withRelations = await buildStudentWithRelations(student);
   const [examPath, ctx, overrideLookup, found] = await Promise.all([
@@ -612,8 +699,11 @@ export async function isObligationRelevantForStudent(
   ]);
   if (!found) return false;
   if (!studentHasObligation(withRelations, obligationId, examPath, ctx)) return false;
-  return isObligationDueForClass(found.obligation, withRelations.class.gradeYear, {
-    classId: student.classId,
-    overrideLookup,
-  });
+  return isTaskDueForClass(
+    found.obligation,
+    taskKind ?? undefined,
+    taskSortOrder ?? undefined,
+    withRelations.class.gradeYear,
+    { classId: student.classId, overrideLookup }
+  );
 }

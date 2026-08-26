@@ -187,7 +187,8 @@ function GradesMatrixPageContent() {
       ? `/api/grades/matrix/options?classId=${encodeURIComponent(classId)}`
       : `/api/grades/matrix/options?gradeYear=${encodeURIComponent(gradeYear)}`
     : null;
-  const { data: options, loading: optionsLoading } = useApi<MatrixOptions>(optionsKey);
+  const { data: options, loading: optionsLoading, error: optionsError } =
+    useApi<MatrixOptions>(optionsKey);
 
   const matrixKey =
     scopeReady && parsedTask
@@ -195,8 +196,12 @@ function GradesMatrixPageContent() {
         ? `/api/grades/matrix?classId=${encodeURIComponent(classId)}&obligationId=${parsedTask.obligationId}&taskKind=${parsedTask.taskKind}&taskSortOrder=${parsedTask.sortOrder}`
         : `/api/grades/matrix?gradeYear=${encodeURIComponent(gradeYear)}&obligationId=${parsedTask.obligationId}&taskKind=${parsedTask.taskKind}&taskSortOrder=${parsedTask.sortOrder}`
       : null;
-  const { data: matrixData, loading: matrixLoading, mutate: refreshMatrix } =
-    useApi<MatrixData>(matrixKey);
+  const {
+    data: matrixData,
+    loading: matrixLoading,
+    mutate: refreshMatrix,
+    error: matrixError,
+  } = useApi<MatrixData>(matrixKey);
 
   const components = matrixData?.obligation.components ?? [];
   const isSocial = matrixData
@@ -611,6 +616,20 @@ function GradesMatrixPageContent() {
           </Select>
         </div>
       </Card>
+
+      {(optionsError || matrixError) && (
+        <Alert variant="error" className="mt-4">
+          {matrixError ?? optionsError}
+        </Alert>
+      )}
+
+      {scopeReady && subjectId && !optionsLoading && tasks.length === 0 && (
+        <Alert variant="warning" className="mt-4">
+          אין מטלות להזנה בשכבה/כיתה שנבחרו למקצוע זה. אם תת-המטלה מוגדרת לשכבה
+          הזו בתוך מטלה של שכבה מאוחרת יותר — ודאו ששדה השכבה של תת-המטלה עצמה
+          (לא רק של המטלה הגדולה) מוגדר לשכבה הנכונה.
+        </Alert>
+      )}
 
       {matrixLoading && taskKey && (
         <div className="mt-8">
