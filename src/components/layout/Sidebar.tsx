@@ -22,6 +22,7 @@ import {
   Cpu,
   CalendarDays,
   FileSpreadsheet,
+  CalendarRange,
   AlertTriangle,
   BarChart3,
   ChevronDown,
@@ -57,6 +58,7 @@ const bagrutProgramLinks: NavLink[] = [
 const reportsLinks: NavLink[] = [
   { href: "/admin/grades-matrix", label: "מטריצת ציונים", icon: Grid3X3 },
   { href: "/admin/analytics", label: "סטטיסטיקות", icon: BarChart3 },
+  { href: "/admin/shortage-year", label: "דוח חוסרים לפי שנה", icon: CalendarRange },
   { href: "/admin/missing-entries", label: "מורים ומטלות שלא הוזנו", icon: AlertTriangle },
 ];
 
@@ -260,6 +262,7 @@ export function Sidebar({
       ? []
       : reportsLinks.filter((l) => {
           if (l.href === "/admin/missing-entries" && role !== "ADMIN") return false;
+          if (l.href === "/admin/shortage-year" && session && !hasAnyGradeWrite(session)) return false;
           if (
             (l.href === "/admin/analytics" || l.href === "/admin/grades-matrix") &&
             session &&
