@@ -11,6 +11,7 @@ const PROJECT_ID = "bagrut-66469";
 function getFirebaseCliTokens() {
   const paths = [
     join(homedir(), ".config", "configstore", "firebase-tools.json"),
+    join(process.env.APPDATA || "", "configstore", "firebase-tools.json"),
     join(process.env.APPDATA || "", "firebase", "tools.json"),
   ];
   for (const p of paths) {
@@ -47,6 +48,40 @@ async function listServiceAccounts(accessToken) {
   return data.accounts || [];
 }
 
+function upsertEnv(env, updates) {
+  let next = env;
+  for (const [key, value] of Object.entries(updates)) {
+    const regex = new RegExp(`^${key}=.*$`, "m");
+    const line = `${key}=${value}`;
+    next = regex.test(next) ? next.replace(regex, line) : `${next.trimEnd()}\n${line}\n`;
+  }
+  return next.endsWith("\n") ? next : `${next}\n`;
+}
+
+async function getWebConfig(accessToken) {
+  const appsRes = await fetch(
+    `https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}/webApps`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const apps = await appsRes.json();
+  if (!appsRes.ok) {
+    throw new Error(apps.error?.message || "Failed to list Firebase web apps");
+  }
+  const webApp = (apps.apps || [])[0];
+  if (!webApp?.appId) {
+    throw new Error("No Firebase web app found");
+  }
+  const configRes = await fetch(
+    `https://firebase.googleapis.com/v1beta1/projects/${PROJECT_ID}/webApps/${webApp.appId}/config`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const webConfig = await configRes.json();
+  if (!configRes.ok || !webConfig.apiKey) {
+    throw new Error(webConfig.error?.message || "Failed to fetch Firebase web config");
+  }
+  return webConfig;
+}
+
 async function createServiceAccountKey(accessToken, serviceAccountEmail) {
   const res = await fetch(
     `https://iam.googleapis.com/v1/projects/${PROJECT_ID}/serviceAccounts/${serviceAccountEmail}/keys`,
@@ -74,6 +109,9 @@ async function main() {
   const tokens = getFirebaseCliTokens();
   const accessToken = await getAccessToken(tokens.refresh_token);
 
+  console.log("Fetching web app config...");
+  const webConfig = await getWebConfig(accessToken);
+
   console.log("Listing service accounts...");
   const accounts = await listServiceAccounts(accessToken);
   const adminSa = accounts.find((a) => a.email?.includes("firebase-adminsdk"));
@@ -86,25 +124,26 @@ async function main() {
   const keyJson = await createServiceAccountKey(accessToken, adminSa.email);
 
   const envPath = join(process.cwd(), ".env.local");
-  let env = existsSync(envPath) ? readFileSync(envPath, "utf-8") : "";
-
+  const env = existsSync(envPath) ? readFileSync(envPath, "utf-8") : "";
   const privateKeyEscaped = keyJson.private_key.replace(/\n/g, "\\n");
 
-  const updates = {
-    FIREBASE_PROJECT_ID: PROJECT_ID,
-    FIREBASE_CLIENT_EMAIL: keyJson.client_email,
-    FIREBASE_PRIVATE_KEY: `"${privateKeyEscaped}"`,
-  };
-
-  for (const [key, value] of Object.entries(updates)) {
-    const regex = new RegExp(`^${key}=.*$`, "m");
-    const line = `${key}=${value}`;
-    env = regex.test(env) ? env.replace(regex, line) : env + `\n${line}`;
-  }
-
-  writeFileSync(envPath, env.trim() + "\n");
-  console.log("Updated .env.local with Firebase Admin credentials");
-  console.log("Done! Run: npm run db:seed");
+  writeFileSync(
+    envPath,
+    upsertEnv(env, {
+      NEXT_PUBLIC_FIREBASE_API_KEY: webConfig.apiKey,
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: webConfig.authDomain,
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: webConfig.projectId,
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: webConfig.storageBucket,
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: webConfig.messagingSenderId,
+      NEXT_PUBLIC_FIREBASE_APP_ID: webConfig.appId,
+      FIREBASE_PROJECT_ID: PROJECT_ID,
+      FIREBASE_CLIENT_EMAIL: keyJson.client_email,
+      FIREBASE_PRIVATE_KEY: `"${privateKeyEscaped}"`,
+      APP_URL: "http://localhost:3000",
+    })
+  );
+  console.log("Updated .env.local with Firebase web + admin config");
+  console.log("Done. Restart the local server and sign in.");
 }
 
 main().catch((e) => {

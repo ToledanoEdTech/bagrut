@@ -52,7 +52,20 @@ function formatAuthError(message: string): string {
   if (lower.includes("network") || lower.includes("fetch")) {
     return "בעיית תקשורת. בדוק את החיבור לאינטרנט ונסה שוב.";
   }
-  if (lower.includes("unauthorized") || lower.includes("permission")) {
+  if (
+    lower.includes("api-key") ||
+    lower.includes("invalid-api-key") ||
+    lower.includes("configuration-not-found") ||
+    lower.includes(".env.local") ||
+    (lower.includes("firebase") && lower.includes("דוגמה"))
+  ) {
+    return "הגדרת Firebase המקומית לא תקינה. מלא את .env.local במפתחות האמיתיים והפעל מחדש את האתר.";
+  }
+  if (
+    lower.includes("unauthorized") ||
+    lower.includes("permission") ||
+    lower.includes("הרשאה")
+  ) {
     return "אין לך הרשאה להתחבר למערכת. פנה למנהל המערכת.";
   }
   return "לא הצלחנו להתחבר. ודא שאתה משתמש בחשבון Google המאושר.";

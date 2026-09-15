@@ -4,10 +4,21 @@ import { getAuth, GoogleAuthProvider, type Auth } from "firebase/auth";
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 
+const PLACEHOLDER_VALUE = /your_|xxxxx|your_project|your_api_key/i;
+
+export const FIREBASE_CONFIG_ERROR =
+  process.env.NODE_ENV === "production"
+    ? "חסרה הגדרת Firebase בשרת. ודא שמשתני NEXT_PUBLIC_FIREBASE_* מוגדרים ב-Vercel."
+    : "חסרה הגדרת Firebase המקומית. בקובץ .env.local עדיין יש ערכי דוגמה — יש למלא את מפתחות Firebase האמיתיים ואז להפעיל מחדש את האתר.";
+
+function isConfiguredValue(value?: string): boolean {
+  return Boolean(value && !PLACEHOLDER_VALUE.test(value));
+}
+
 export function isFirebaseClientConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
-      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+  return (
+    isConfiguredValue(process.env.NEXT_PUBLIC_FIREBASE_API_KEY) &&
+    isConfiguredValue(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID)
   );
 }
 
@@ -23,10 +34,8 @@ function getFirebaseApp(): FirebaseApp {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
   };
 
-  if (!config.apiKey || !config.projectId) {
-    throw new Error(
-      "חסרה הגדרת Firebase בשרת. ודא שמשתני NEXT_PUBLIC_FIREBASE_* מוגדרים ב-Vercel."
-    );
+  if (!isConfiguredValue(config.apiKey) || !isConfiguredValue(config.projectId)) {
+    throw new Error(FIREBASE_CONFIG_ERROR);
   }
 
   app = getApps().length ? getApp() : initializeApp(config);
@@ -39,3 +48,4 @@ export function getFirebaseAuth(): Auth {
 }
 
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });

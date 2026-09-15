@@ -3,8 +3,9 @@
 import clsx from "clsx";
 import type { OverviewCell, OverviewColumn, OverviewRow } from "@/lib/grade-overview-grid";
 
-function cellTone(cell: OverviewCell): string {
+function cellTone(cell: OverviewCell, kind?: OverviewColumn["kind"]): string {
   if (!cell.relevant) return "bg-slate-50 text-slate-300";
+  if (kind === "final" && !cell.filled) return "bg-slate-50 text-slate-400";
   if (!cell.filled) return "bg-amber-50/80 text-amber-800";
   if (cell.status === "EXEMPT") return "bg-slate-100 text-slate-600";
   if (cell.status === "MISSING") return "bg-red-50 text-red-700";
@@ -102,12 +103,23 @@ export function GradeOverviewGrid({
                   title={
                     col.kind === "obligation"
                       ? `${col.subjectName} — ${col.label}`
-                      : `${col.subjectName} (וריאנט לפי מסלול/יחידות של כל תלמיד)`
+                      : col.kind === "final"
+                        ? `${col.subjectName} — ציון סופי`
+                        : `${col.subjectName} (וריאנט לפי מסלול/יחידות של כל תלמיד)`
                   }
-                  className="sticky top-0 z-30 min-w-[3.25rem] max-w-[5.5rem] border-b border-slate-200 bg-slate-50 px-1 py-2.5 text-center text-[10px] font-semibold leading-tight text-slate-600 shadow-[0_1px_0_0_rgb(226_232_240)] sm:min-w-[4.5rem] sm:max-w-[7rem] sm:px-2 sm:py-3 sm:text-xs"
+                  className={clsx(
+                    "sticky top-0 z-30 border-b border-slate-200 px-1 py-2.5 text-center text-[10px] font-semibold leading-tight shadow-[0_1px_0_0_rgb(226_232_240)] sm:px-2 sm:py-3 sm:text-xs",
+                    col.kind === "final"
+                      ? "min-w-[4.5rem] max-w-[6.5rem] bg-primary-50 text-primary-800 sm:min-w-[5.75rem] sm:max-w-[8rem]"
+                      : "min-w-[3.25rem] max-w-[5.5rem] bg-slate-50 text-slate-600 sm:min-w-[4.5rem] sm:max-w-[7rem]"
+                  )}
                 >
                   <span className="line-clamp-2">
-                    {col.kind === "obligation" ? col.shortLabel : col.subjectName}
+                    {col.kind === "obligation"
+                      ? col.shortLabel
+                      : col.kind === "final"
+                        ? "ציון סופי"
+                        : col.subjectName}
                   </span>
                   {col.kind === "subject" && (
                     <span className="mt-0.5 hidden text-[10px] font-normal text-slate-400 sm:block">
@@ -164,7 +176,8 @@ export function GradeOverviewGrid({
                   )}
                   {columns.map((col) => {
                     const cell = row.cells[col.key] ?? emptyCell();
-                    const clickable = cell.relevant && !!onCellClick;
+                    const clickable =
+                      cell.relevant && !!onCellClick && col.kind !== "final";
                     return (
                       <td
                         key={col.key}
@@ -176,11 +189,11 @@ export function GradeOverviewGrid({
                             onClick={() => onCellClick(row, col)}
                             className={clsx(
                               "mx-auto flex h-8 min-w-[2.75rem] items-center justify-center rounded-md px-1 text-[11px] font-semibold tabular-nums transition hover:ring-2 hover:ring-primary-300 active:scale-95 sm:h-9 sm:min-w-[3.25rem] sm:rounded-lg sm:px-1.5 sm:text-xs",
-                              cellTone(cell)
+                              cellTone(cell, col.kind)
                             )}
                             title={
-                              col.kind === "obligation"
-                                ? `${row.studentName} — ${col.label}`
+                              col.kind === "final"
+                                ? `${row.studentName} — ציון סופי`
                                 : `${row.studentName} — ${col.label}`
                             }
                           >
@@ -190,7 +203,7 @@ export function GradeOverviewGrid({
                           <span
                             className={clsx(
                               "mx-auto flex h-8 min-w-[2.75rem] items-center justify-center rounded-md px-1 text-[11px] font-semibold tabular-nums sm:h-9 sm:min-w-[3.25rem] sm:rounded-lg sm:px-1.5 sm:text-xs",
-                              cellTone(cell)
+                              cellTone(cell, col.kind)
                             )}
                           >
                             {cell.relevant ? cell.display ?? "—" : "·"}

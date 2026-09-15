@@ -10,6 +10,7 @@ import {
 } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut as fbSignOut } from "firebase/auth";
 import {
+  FIREBASE_CONFIG_ERROR,
   getFirebaseAuth,
   googleProvider,
   isFirebaseClientConfigured,
@@ -70,9 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isFirebaseClientConfigured()) {
-      setConfigError(
-        "חסרה הגדרת Firebase בשרת. ודא שמשתני NEXT_PUBLIC_FIREBASE_* מוגדרים ב-Vercel."
-      );
+      setConfigError(FIREBASE_CONFIG_ERROR);
       setLoading(false);
       return;
     }

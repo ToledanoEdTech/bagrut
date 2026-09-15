@@ -1,11 +1,13 @@
 import ExcelJS from "exceljs";
 import { obligationDisplayLabel } from "@/lib/grade-components";
 import { STATUS_LABELS, SUBMISSION_STATUSES } from "@/lib/grade-status";
+import { calcSubjectProgressForObligations } from "@/lib/progress";
+import { formatQualitativeLevel } from "@/lib/social-involvement";
 import {
   formatSubjectDisplayName,
   formatSubjectWithPathLinks,
 } from "@/lib/subject-display";
-import type { SubmissionStatus } from "@/lib/types";
+import type { QualitativeLevel, SubmissionStatus } from "@/lib/types";
 
 type DataValidationRule = {
   type: string;
@@ -364,6 +366,13 @@ type GradeSubjectExport = {
     questionnaireNumber: string | null;
     examType: string;
     weightPercent: number;
+    components?: Array<{ weightPercent: number; sortOrder?: number; name?: string }>;
+    subItems?: Array<{
+      weightPercent: number;
+      sortOrder?: number;
+      name?: string;
+      gradeYear?: string | null;
+    }>;
   }>;
 };
 
@@ -371,7 +380,32 @@ type GradeExportRow = {
   obligationId: string;
   score: number | null;
   status: string;
+  qualitativeLevel?: QualitativeLevel | null;
+  componentScores?: Record<number, number | null> | null;
+  subItemScores?: Record<number, number | null> | null;
+  componentWeightOverrides?: Record<number, number> | null;
+  subItemWeightOverrides?: Record<number, number> | null;
 };
+
+function subjectFinalGradeLabel(
+  subject: GradeSubjectExport,
+  grades: GradeExportRow[]
+): string {
+  const progress = calcSubjectProgressForObligations(
+    subject.obligations.map((o) => ({
+      id: o.id,
+      weightPercent: o.weightPercent,
+      components: o.components ?? [],
+      subItems: o.subItems ?? [],
+    })),
+    grades,
+    undefined,
+    { name: subject.name, category: subject.category }
+  );
+  if (!progress.isFinal) return "—";
+  if (progress.estimatedGrade != null) return String(progress.estimatedGrade);
+  return formatQualitativeLevel(progress.qualitativeLevel) ?? "—";
+}
 
 export function buildStudentGradesSheet(
   studentName: string,
@@ -381,8 +415,9 @@ export function buildStudentGradesSheet(
 ): ExportSheet {
   const gradeMap = new Map(grades.map((g) => [g.obligationId, g]));
 
-  const rows = subjects.flatMap((subject) =>
-    subject.obligations.map((o) => {
+  const rows = subjects.flatMap((subject) => {
+    const finalGrade = subjectFinalGradeLabel(subject, grades);
+    return subject.obligations.map((o) => {
       const grade = gradeMap.get(o.id);
       return {
         subject:
@@ -399,9 +434,10 @@ export function buildStudentGradesSheet(
         weight: `${o.weightPercent}%`,
         score: grade?.score ?? "—",
         status: grade ? statusLabel(grade.status) : statusLabel("NOT_STARTED"),
+        finalGrade,
       };
-    })
-  );
+    });
+  });
 
   return {
     name: "ציונים",
@@ -415,6 +451,7 @@ export function buildStudentGradesSheet(
       { header: "משקל", key: "weight" },
       { header: "ציון", key: "score" },
       { header: "סטטוס", key: "status" },
+      { header: "ציון סופי", key: "finalGrade" },
     ],
     rows,
   };
@@ -476,7 +513,10 @@ export function buildOverviewGridSheet(input: {
       ...input.columns.map((c) => ({
         header: c.header,
         key: c.key,
-        width: Math.min(Math.max(c.header.length + 2, 10), 18),
+        width:
+          c.header === "ציון סופי"
+            ? 14
+            : Math.min(Math.max(c.header.length + 2, 10), 18),
       })),
     ],
     rows: input.rows.map((r) => {

@@ -91,7 +91,11 @@ function GradesMatrixReportContent() {
   const effectiveClassId =
     scopeMode === "class" ? classId : filterClassId || null;
 
-  // Always load summary grid (all subjects); filter columns client-side
+  const drillSubjectGroup =
+    selectedSubjects.length === 1 ? selectedSubjects[0]! : null;
+
+  // Summary grid for all/multiple subjects; drill into one subject for
+  // assignment columns + a dedicated final-grade column.
   const gridQuery = useMemo(() => {
     const params = new URLSearchParams();
     if (scopeMode === "class") {
@@ -103,10 +107,14 @@ function GradesMatrixReportContent() {
       if (filterClassId) params.set("classId", filterClassId);
     }
     if (trackId) params.set("trackId", trackId);
+    if (drillSubjectGroup) params.set("subjectGroup", drillSubjectGroup);
     return `/api/grades/matrix/grid?${params.toString()}`;
-  }, [scopeMode, classId, gradeYear, filterClassId, trackId]);
+  }, [scopeMode, classId, gradeYear, filterClassId, trackId, drillSubjectGroup]);
 
-  const { data, loading, error } = useApi<OverviewGridResponse>(gridQuery);
+  const { data, error } = useApi<OverviewGridResponse>(gridQuery);
+
+  const dataIsCurrent =
+    !!data && (data.filters.subjectGroup ?? null) === (drillSubjectGroup ?? null);
 
   // Drop selections that are no longer in the loaded subject list
   useEffect(() => {
@@ -117,11 +125,11 @@ function GradesMatrixReportContent() {
   }, [data?.subjects, selectedSubjects]);
 
   const visibleColumns = useMemo(() => {
-    if (!data) return [] as OverviewColumn[];
-    if (selectedSubjects.length === 0) return data.columns;
+    if (!data || !dataIsCurrent) return [] as OverviewColumn[];
+    if (selectedSubjects.length === 0 || drillSubjectGroup) return data.columns;
     const allowed = new Set(selectedSubjects);
     return data.columns.filter((c) => allowed.has(c.subjectGroup));
-  }, [data, selectedSubjects]);
+  }, [data, dataIsCurrent, selectedSubjects, drillSubjectGroup]);
 
   const showClassColumn =
     scopeMode === "gradeYear" &&
@@ -163,8 +171,16 @@ function GradesMatrixReportContent() {
     return gradeYear || "מטריצת ציונים";
   }
 
+  function columnExportHeader(col: OverviewColumn): string {
+    if (col.kind === "final") return "ציון סופי";
+    if (col.kind === "obligation") {
+      return drillSubjectGroup ? col.label : `${col.subjectName} · ${col.shortLabel}`;
+    }
+    return col.subjectName;
+  }
+
   async function handleExport() {
-    if (!data || visibleColumns.length === 0) return;
+    if (!data || !dataIsCurrent || visibleColumns.length === 0) return;
 
     const subjectLabel =
       selectedSubjects.length === 0
@@ -182,10 +198,7 @@ function GradesMatrixReportContent() {
       showClass: showClassColumn,
       columns: visibleColumns.map((c) => ({
         key: c.key,
-        header:
-          c.kind === "obligation"
-            ? `${c.subjectName} · ${c.shortLabel}`
-            : c.subjectName,
+        header: columnExportHeader(c),
       })),
       rows: data.rows.map((r) => {
         const cells: Record<string, string | number | null> = {};
@@ -193,6 +206,8 @@ function GradesMatrixReportContent() {
           const cell = r.cells[col.key];
           if (!cell?.relevant) {
             cells[col.key] = "·";
+          } else if (col.kind === "final") {
+            cells[col.key] = cell.isFinal ? cell.display ?? "—" : "—";
           } else {
             cells[col.key] = cell.display ?? "—";
           }
@@ -206,18 +221,23 @@ function GradesMatrixReportContent() {
       }),
     });
 
-    await downloadExcel(`matritzat-ziyunim-${exportTimestamp()}.xlsx`, [sheet]);
+    const safeScope = scopeTitle().replace(/[/\\?*[\]]/g, "-");
+    const safeSubject = subjectLabel.replace(/[/\\?*[\]]/g, "-");
+    await downloadExcel(
+      `ציונים_${safeSubject}_${safeScope}_${exportTimestamp()}.xlsx`,
+      [sheet]
+    );
   }
 
   return (
     <>
       <PageHeader
         title="מטריצת ציונים"
-        subtitle="סקירת ציונים לפי שכבה, כיתה, מגמה ומקצוע"
+        subtitle="סקירת ציונים לפי שכבה, כיתה, מגמה ומקצוע. מקצוע אחד מציג מטלות וציון סופי."
       >
         <ExportButton
           onExport={handleExport}
-          disabled={!data || visibleColumns.length === 0 || data.rows.length === 0}
+          disabled={!dataIsCurrent || visibleColumns.length === 0 || !data?.rows.length}
           label="ייצוא לאקסל"
         />
       </PageHeader>
@@ -226,7 +246,8 @@ function GradesMatrixReportContent() {
         <Card className="p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <p className="text-sm text-slate-500">
-              בחרו מקצועות להצגה (ניתן לבחור כמה). ייצוא האקסל משקף את הסינון
+              בחרו מקצוע אחד כדי לראות את ציוני המטלות ועמודת ציון סופי
+              (מתמלאת רק כשכל המטלות הושלמו). ייצוא האקסל משקף את הסינון
               הנוכחי. לחיצה על תלמיד פותחת כרטיס; לחיצה על תא מובילה להזנה.
             </p>
             <Link
@@ -374,25 +395,30 @@ function GradesMatrixReportContent() {
           <EmptyState
             icon={Grid3X3}
             title="בחרו שכבה או כיתה"
-            description="לאחר הבחירה תוצג מטריצת ציונים. ניתן לבחור מקצועות ספציפיים ולייצא לאקסל."
+            description="לאחר הבחירה תוצג מטריצת ציונים. בחרו מקצוע אחד כדי לייצא מטלות וציון סופי."
           />
         )}
 
-        {gridQuery && loading && !data && <PageLoader variant="table" />}
+        {gridQuery && !dataIsCurrent && <PageLoader variant="table" />}
 
         {error && <Alert variant="error">{error}</Alert>}
 
-        {data && (
+        {data && dataIsCurrent && (
           <>
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
               <p>
                 {data.stats.studentCount} תלמידים · {visibleColumns.length} עמודות
-                {selectedSubjects.length > 0 && (
+                {drillSubjectGroup ? (
+                  <span className="text-primary-600">
+                    {" "}
+                    (מטלות המקצוע + ציון סופי)
+                  </span>
+                ) : selectedSubjects.length > 0 ? (
                   <span className="text-primary-600">
                     {" "}
                     (מסונן: {selectedSubjects.length} מקצועות)
                   </span>
-                )}
+                ) : null}
               </p>
               <ExportButton
                 onExport={handleExport}

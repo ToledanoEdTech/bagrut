@@ -14,7 +14,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "חסר טוקן" }, { status: 400 });
   }
 
-  const decoded = await adminAuth.verifyIdToken(idToken);
+  let decoded;
+  try {
+    decoded = await adminAuth.verifyIdToken(idToken);
+  } catch (error) {
+    const localHint =
+      process.env.NODE_ENV !== "production"
+        ? " ודא ש-FIREBASE_PRIVATE_KEY ב-.env.local הוא המפתח האמיתי ולא ערך דוגמה."
+        : "";
+    return NextResponse.json(
+      {
+        error: `אימות Firebase נכשל.${localHint}`.trim(),
+      },
+      { status: 401 }
+    );
+  }
+
   const email = (decoded.email ?? "").toLowerCase();
   const resolved = await resolveUserRole(email);
 

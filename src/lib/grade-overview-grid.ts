@@ -70,6 +70,15 @@ export type OverviewColumn =
       subjectDisplayName: string;
       label: string;
       obligationCount: number;
+    }
+  | {
+      kind: "final";
+      key: string;
+      subjectGroup: string;
+      subjectId: string;
+      subjectName: string;
+      subjectDisplayName: string;
+      label: string;
     };
 
 export type OverviewCell = {
@@ -81,6 +90,10 @@ export type OverviewCell = {
   /** Actual subject variant for this student (path/units-specific) */
   subjectId?: string | null;
   obligationId?: string | null;
+  /** True when every subject obligation is complete and a final grade exists */
+  isFinal?: boolean;
+  /** Value for the dedicated final-grade column; null unless isFinal */
+  finalDisplay?: string | null;
 };
 
 export type OverviewRow = {
@@ -401,18 +414,6 @@ function summarizeSubjectForStudent(
     if (resolved.filled) filled++;
   }
 
-  const isSocial = isSocialInvolvementSubject(subject);
-  if (isSocial) {
-    return {
-      display: `${filled}/${dueObligations.length || obligations.length}`,
-      score: null,
-      status: null,
-      relevant: true,
-      filled: filled > 0,
-      subjectId: subject.id,
-    };
-  }
-
   /** שקלול לפי אחוזי המטלות + עיגול שלם — כמו בכרטיס התלמיד */
   const progress = calcSubjectProgressForObligations(
     obligations,
@@ -421,6 +422,28 @@ function summarizeSubjectForStudent(
     subject
   );
   const estimatedGrade = progress.estimatedGrade;
+  const qualitativeLabel = formatQualitativeLevel(progress.qualitativeLevel);
+  const isSocial = isSocialInvolvementSubject(subject);
+  const finalDisplay = progress.isFinal
+    ? isSocial
+      ? qualitativeLabel
+      : estimatedGrade != null
+        ? String(estimatedGrade)
+        : null
+    : null;
+
+  if (isSocial) {
+    return {
+      display: `${filled}/${dueObligations.length || obligations.length}`,
+      score: null,
+      status: null,
+      relevant: true,
+      filled: filled > 0,
+      subjectId: subject.id,
+      isFinal: progress.isFinal,
+      finalDisplay,
+    };
+  }
 
   return {
     display:
@@ -432,6 +455,18 @@ function summarizeSubjectForStudent(
     relevant: true,
     filled: filled > 0 || estimatedGrade != null,
     subjectId: subject.id,
+    isFinal: progress.isFinal,
+    finalDisplay,
+  };
+}
+
+function toFinalGradeCell(summary: OverviewCell): OverviewCell {
+  const hasFinal = summary.isFinal === true && summary.finalDisplay != null;
+  return {
+    ...summary,
+    display: hasFinal ? summary.finalDisplay ?? null : null,
+    score: hasFinal ? summary.score : null,
+    filled: hasFinal,
   };
 }
 
@@ -699,6 +734,15 @@ export async function getOverviewGrid(opts: {
         shortLabel: slot.shortLabel,
       });
     }
+    columns.push({
+      kind: "final",
+      key: `final:${activeGroup}`,
+      subjectGroup: activeGroup,
+      subjectId: group?.subjectIds[0] ?? slots[0]?.sampleSubjectId ?? "",
+      subjectName: groupName,
+      subjectDisplayName: groupName,
+      label: "ציון סופי",
+    });
   } else {
     for (const group of groupsSorted) {
       const maxObligations = Math.max(
@@ -754,7 +798,7 @@ export async function getOverviewGrid(opts: {
           tracksById
         );
 
-        if (col.kind === "subject") {
+        if (col.kind === "subject" || col.kind === "final") {
           if (!subject) {
             cells[col.key] = {
               display: null,
@@ -775,8 +819,9 @@ export async function getOverviewGrid(opts: {
             ms.cls.id,
             overrideLookup
           );
-          if (cell.filled) filledCells++;
-          cells[col.key] = cell;
+          const resolvedCell = col.kind === "final" ? toFinalGradeCell(cell) : cell;
+          if (resolvedCell.filled) filledCells++;
+          cells[col.key] = resolvedCell;
         } else {
           if (!subject) {
             cells[col.key] = {

@@ -42,7 +42,14 @@ function createAdminApp(): App {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
 
-  if (projectId && clientEmail && privateKey) {
+  const looksPlaceholder =
+    !projectId ||
+    !clientEmail ||
+    !privateKey ||
+    /your_|xxxxx|your_project/.test(`${projectId}${clientEmail}`) ||
+    privateKey.length < 200;
+
+  if (!looksPlaceholder) {
     return initializeApp({
       credential: cert({ projectId, clientEmail, privateKey }),
     });
@@ -54,7 +61,9 @@ function createAdminApp(): App {
     );
   }
 
-  return initializeApp({ projectId: projectId ?? "demo-bagrut" });
+  throw new Error(
+    "חסרה הגדרת Firebase Admin המקומית. מלא את FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL ו-FIREBASE_PRIVATE_KEY ב-.env.local."
+  );
 }
 
 let adminApp: App | null = null;
