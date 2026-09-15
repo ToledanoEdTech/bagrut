@@ -191,11 +191,7 @@ export function GradeOverviewGrid({
                               "mx-auto flex h-8 min-w-[2.75rem] items-center justify-center rounded-md px-1 text-[11px] font-semibold tabular-nums transition hover:ring-2 hover:ring-primary-300 active:scale-95 sm:h-9 sm:min-w-[3.25rem] sm:rounded-lg sm:px-1.5 sm:text-xs",
                               cellTone(cell, col.kind)
                             )}
-                            title={
-                              col.kind === "final"
-                                ? `${row.studentName} — ציון סופי`
-                                : `${row.studentName} — ${col.label}`
-                            }
+                            title={`${row.studentName} — ${col.label}`}
                           >
                             {cell.display ?? "—"}
                           </button>
@@ -205,6 +201,11 @@ export function GradeOverviewGrid({
                               "mx-auto flex h-8 min-w-[2.75rem] items-center justify-center rounded-md px-1 text-[11px] font-semibold tabular-nums sm:h-9 sm:min-w-[3.25rem] sm:rounded-lg sm:px-1.5 sm:text-xs",
                               cellTone(cell, col.kind)
                             )}
+                            title={
+                              col.kind === "final"
+                                ? `${row.studentName} — ציון סופי`
+                                : `${row.studentName} — ${col.label}`
+                            }
                           >
                             {cell.relevant ? cell.display ?? "—" : "·"}
                           </span>
