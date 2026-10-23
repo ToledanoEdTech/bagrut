@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import {
   Bell,
+  Download,
   Mail,
   Play,
   RefreshCw,
@@ -10,6 +11,7 @@ import {
   ArrowUpCircle,
   GraduationCap,
 } from "lucide-react";
+import { useAuth } from "@/components/AuthProvider";
 import { useApi } from "@/hooks/useApi";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageLoader } from "@/components/ui/PageLoader";
@@ -19,6 +21,7 @@ import { Input } from "@/components/ui/Input";
 import { Alert } from "@/components/ui/Alert";
 import { useToast } from "@/components/ui/Toast";
 import { invalidateCache } from "@/lib/api-cache";
+import { downloadFromApi } from "@/lib/download-file";
 import type { GradeReminderSettings } from "@/lib/grade-reminders";
 import type { ResolvedBagrutEligibilitySettings } from "@/lib/bagrut-eligibility";
 
@@ -81,6 +84,7 @@ function formatDateTime(iso?: string): string {
 }
 
 export default function SettingsPage() {
+  const { session } = useAuth();
   const { data, loading, mutate } = useApi<SettingsResponse>("/api/settings/grade-reminders");
   const toast = useToast();
   const [saving, setSaving] = useState(false);
@@ -96,6 +100,7 @@ export default function SettingsPage() {
   const [eligibilityDraft, setEligibilityDraft] =
     useState<ResolvedBagrutEligibilitySettings | null>(null);
   const [savingEligibility, setSavingEligibility] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const eligibilitySettings =
     eligibilityDraft ?? eligibilityData?.settings ?? null;
@@ -260,14 +265,45 @@ export default function SettingsPage() {
     }
   }, [eligibilitySettings, mutateEligibility, toast]);
 
+  const downloadFullExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      await downloadFromApi("/api/admin/full-export");
+      toast.success("קובץ הנתונים ירד");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "הייצוא נכשל");
+    } finally {
+      setExporting(false);
+    }
+  }, [toast]);
+
   if (loading && !data) return <PageLoader />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="הגדרות מערכת"
-        subtitle="תזכורות ציונים, זכאות לבגרות ועליית כיתות"
+        subtitle="תזכורות ציונים, זכאות לבגרות, עליית כיתות וייצוא נתונים"
       />
+
+      {session?.role === "ADMIN" && (
+        <Card className="flex flex-wrap items-center justify-between gap-4 p-6">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-slate-800">
+              <Download className="h-5 w-5 text-primary-600" />
+              <h2 className="text-lg font-bold">ייצוא כל הנתונים</h2>
+            </div>
+            <p className="max-w-2xl text-sm text-slate-500">
+              קובץ אקסל אחד עם תלמידים, כיתות, מגמות, מסלולים, מקצועות, מטלות
+              ושאלונים, ציונים, צוות, הגדרות ויומן פעילות.
+            </p>
+          </div>
+          <Button variant="primary" disabled={exporting} onClick={downloadFullExport}>
+            <Download className="h-4 w-4" />
+            {exporting ? "מכין את הקובץ..." : "הורדת קובץ אקסל"}
+          </Button>
+        </Card>
+      )}
 
       {data && !data.smtpConfigured && (
         <Alert variant="warning">
