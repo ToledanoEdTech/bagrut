@@ -8,7 +8,9 @@
  * מקבל ממוצע (5×100 + 2×80) / (5+2) = 660/7 ≈ 94.3
  *
  * מקצועות ללא ציון (estimatedGrade == null) אינם נכללים במונה ובמכנה.
- * מעורבות חברתית (קטגוריה SOCIAL) אינה נכללת בממוצע.
+ * מעורבות חברתית (קטגוריה SOCIAL) ומקצועות עם 0 יח"ל
+ * (השכלה כללית, מבוא למדעים, חינוך גופני) אינם נכללים בממוצע.
+ * כישלון בהם עדיין שולל זכאות — זה נבדק בנפרד בזכאות לבגרות.
  */
 
 import { isSocialCategory } from "@/lib/social-involvement";
@@ -25,12 +27,17 @@ export type WeightedBagrutAverage = {
   gradedSubjectsCount: number;
 };
 
-/** מספר יחידות אפקטיבי למקצוע לצורך שקלול (ברירת מחדל 1 אם לא הוגדר) */
+/**
+ * מספר יחידות אפקטיבי למקצוע לצורך שקלול.
+ * 0 יח"ל (או מעורבות חברתית) = לא נכנס לממוצע.
+ * יחידות שלא הוגדרו (null) נספרות כ-1.
+ */
 export function resolveSubjectUnits(subject: {
   units: number | null;
   category?: string | null;
 }): number {
   if (isSocialCategory(subject.category)) return 0;
+  if (subject.units === 0) return 0;
   if (subject.units != null && subject.units > 0) return subject.units;
   return 1;
 }

@@ -210,7 +210,10 @@ function buildDossierFromDashboard(
     }))
   );
   const weightedSubjects = dashboard.subjects
-    .filter((subject) => !isSocialInvolvementSubject(subject) && subject.progress.estimatedGrade != null)
+    .filter(
+      (subject) =>
+        subject.progress.estimatedGrade != null && resolveSubjectUnits(subject) > 0
+    )
     .map((subject) => ({
       label: subject.displayName,
       units: resolveSubjectUnits(subject),
