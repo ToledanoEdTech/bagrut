@@ -17,7 +17,7 @@ import type {
   UserProfile,
 } from "@/lib/types";
 import { isAdminEmail } from "@/lib/roles";
-import { LEGACY_TEACHER_PERMISSIONS } from "@/lib/permissions";
+import { LEGACY_TEACHER_PERMISSIONS, withoutClassYearGradeWrite } from "@/lib/permissions";
 import { shouldDeleteEmptyGrade } from "@/lib/grade-status";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -132,7 +132,7 @@ export function resolveStaffPermissions(staff: StaffRecord | null): StaffPermiss
   if (staff.permissions === undefined) {
     return LEGACY_TEACHER_PERMISSIONS;
   }
-  return staff.permissions;
+  return withoutClassYearGradeWrite(staff.permissions);
 }
 
 export async function resolveUserRole(email: string): Promise<{

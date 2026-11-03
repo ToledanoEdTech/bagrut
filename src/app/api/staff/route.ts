@@ -6,11 +6,12 @@ import { listStaff } from "@/lib/firestore";
 import { isAdminEmail } from "@/lib/roles";
 import { invalidateServerCache } from "@/lib/server-cache";
 import { actorFromSession, recordActivity } from "@/lib/activity-log";
+import { withoutClassYearGradeWrite } from "@/lib/permissions";
 import type { StaffPermission, StaffRole } from "@/lib/types";
 
 function normalizePermissions(permissions: unknown): StaffPermission[] | undefined {
   if (!Array.isArray(permissions)) return undefined;
-  return permissions as StaffPermission[];
+  return withoutClassYearGradeWrite(permissions as StaffPermission[]);
 }
 
 async function countStaffAdmins(): Promise<number> {
@@ -22,7 +23,14 @@ export async function GET() {
   const { error } = await requireAdmin();
   if (error) return error;
 
-  return NextResponse.json(await listStaff());
+  const staff = await listStaff();
+  return NextResponse.json(
+    staff.map((member) =>
+      member.permissions
+        ? { ...member, permissions: withoutClassYearGradeWrite(member.permissions) }
+        : member
+    )
+  );
 }
 
 export async function POST(req: NextRequest) {

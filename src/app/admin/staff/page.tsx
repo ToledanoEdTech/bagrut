@@ -61,10 +61,10 @@ const emptyPermissionForm = (): PermissionForm => ({
 });
 
 const SCOPE_OPTIONS: { value: PermissionScopeKind; label: string; hint: string }[] = [
-  { value: "all", label: "כל המערכת", hint: "גישה מלאה (בלעדי)" },
-  { value: "gradeYear", label: "רכז שכבה", hint: "לפי שכבה" },
-  { value: "class", label: "מחנך כיתה", hint: "לפי כיתה" },
-  { value: "subject", label: "מורה מקצועי", hint: "לפי מקצוע" },
+  { value: "all", label: "כל המערכת", hint: "כולל הזנת ציונים (בלעדי)" },
+  { value: "gradeYear", label: "רכז שכבה", hint: "צפייה בשכבה, בלי הזנת ציונים" },
+  { value: "class", label: "מחנך כיתה", hint: "צפייה בכיתה, בלי הזנת ציונים" },
+  { value: "subject", label: "מורה מקצועי", hint: "הזנת ציונים לפי מקצוע" },
 ];
 
 function PermissionFields({
@@ -224,6 +224,9 @@ function PermissionFields({
             />
             הרשאה לעריכת נתוני תלמידים (בהיקף שכבה/כיתה)
           </label>
+          <p className="text-sm text-slate-600">
+            צפייה בכיתה או בשכבה לא כוללת הזנת ציונים. הזנת ציונים נשמרת למורה מקצועי, או למי שיש לו גישה לכל המערכת.
+          </p>
         </div>
       )}
     </div>
@@ -239,38 +242,43 @@ function formatPermissionSummary(
   if (!member.permissions?.length) return "ללא הרשאות";
 
   const parts: string[] = [];
-  const grades = member.permissions.filter((p) => p.action === "grades:write");
+  const grades = member.permissions.filter(
+    (p) => p.action === "grades:write" && (p.scope === "all" || p.scope === "subject")
+  );
+  const views = member.permissions.filter(
+    (p) => p.action === "students:view" && p.scope !== "subject"
+  );
 
   if (grades.some((p) => p.scope === "all")) {
     parts.push("ציונים: כל המערכת");
   } else {
-    const roleParts: string[] = [];
-    const years = [
-      ...new Set(
-        grades
-          .filter((p) => p.scope === "gradeYear")
-          .map((p) => (p as { gradeYear: string }).gradeYear)
-      ),
-    ];
-    if (years.length) roleParts.push(`רכז ${years.join(", ")}`);
-
-    const classNames = grades
-      .filter((p) => p.scope === "class")
-      .map((p) => classes.find((c) => c.id === p.classId)?.name ?? "כיתה");
-    if (classNames.length) roleParts.push(`מחנך ${[...new Set(classNames)].join(", ")}`);
-
     const subjectNames = grades
       .filter((p) => p.scope === "subject")
       .map((p) => subjects.find((s) => s.id === p.subjectId)?.name ?? "מקצוע");
     if (subjectNames.length) {
-      roleParts.push(`מקצועי: ${[...new Set(subjectNames)].join(", ")}`);
+      parts.push(`מקצועי: ${[...new Set(subjectNames)].join(", ")}`);
     }
-
-    if (roleParts.length) parts.push(roleParts.join(" · "));
   }
 
-  if (member.permissions.some((p) => p.action === "students:view" && p.scope !== "subject")) {
-    parts.push("צפייה בתלמידים");
+  if (views.some((p) => p.scope === "all")) {
+    parts.push("צפייה בכל התלמידים");
+  } else if (views.length > 0) {
+    const viewParts: string[] = [];
+    const years = [
+      ...new Set(
+        views
+          .filter((p) => p.scope === "gradeYear")
+          .map((p) => (p as { gradeYear: string }).gradeYear)
+      ),
+    ];
+    if (years.length) viewParts.push(`שכבה ${years.join(", ")}`);
+
+    const classNames = views
+      .filter((p) => p.scope === "class")
+      .map((p) => classes.find((c) => c.id === (p as { classId: string }).classId)?.name ?? "כיתה");
+    if (classNames.length) viewParts.push([...new Set(classNames)].join(", "));
+
+    if (viewParts.length) parts.push(`צפייה: ${viewParts.join(" · ")}`);
   }
   if (member.permissions.some((p) => p.action === "students:edit")) {
     parts.push("עריכת תלמידים");
@@ -289,6 +297,14 @@ function validatePermissionForm(form: PermissionForm): string | null {
   }
   if (form.scopes.includes("class") && form.classIds.length === 0) {
     return "יש לבחור לפחות כיתה אחת";
+  }
+  if (
+    (form.scopes.includes("gradeYear") || form.scopes.includes("class")) &&
+    !form.includeStudentView &&
+    !form.includeStudentEdit &&
+    !form.scopes.includes("subject")
+  ) {
+    return "לכיתה או לשכבה יש לסמן צפייה או עריכת תלמידים. הזנת ציונים אינה כלולה בהיקף הזה";
   }
   if (form.scopes.includes("subject") && form.subjectIds.length === 0) {
     return "יש לבחור לפחות מקצוע אחד";

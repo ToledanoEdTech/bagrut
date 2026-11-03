@@ -25,11 +25,41 @@ export function isFullAdmin(session: Pick<AuthSession, "email" | "role">): boole
   return isAdminEmail(session.email) || session.role === "ADMIN";
 }
 
+/**
+ * צפייה בכיתה או בשכבה אינה כוללת הזנת ציונים.
+ * הרשאות ישנות של grades:write בהיקף כיתה/שכבה נשארות צפייה בלבד.
+ */
+export function withoutClassYearGradeWrite(perms: StaffPermission[]): StaffPermission[] {
+  const next: StaffPermission[] = [];
+  const seen = new Set<string>();
+
+  const push = (perm: StaffPermission) => {
+    const key = JSON.stringify(perm);
+    if (seen.has(key)) return;
+    seen.add(key);
+    next.push(perm);
+  };
+
+  for (const perm of perms) {
+    if (perm.action === "grades:write" && perm.scope === "class") {
+      push({ action: "students:view", scope: "class", classId: perm.classId });
+      continue;
+    }
+    if (perm.action === "grades:write" && perm.scope === "gradeYear") {
+      push({ action: "students:view", scope: "gradeYear", gradeYear: perm.gradeYear });
+      continue;
+    }
+    push(perm);
+  }
+
+  return next;
+}
+
 export function getEffectivePermissions(session: AuthSession): StaffPermission[] {
   if (isFullAdmin(session)) return LEGACY_TEACHER_PERMISSIONS;
   if (session.role !== "TEACHER") return [];
   if (session.permissions === undefined) return LEGACY_TEACHER_PERMISSIONS;
-  return session.permissions;
+  return withoutClassYearGradeWrite(session.permissions);
 }
 
 function matchesScope(
@@ -230,8 +260,8 @@ export function getAllowedClassIdsForListing(
 
 /**
  * מקצועות מורשים להזנת ציונים.
- * null = כל המקצועות (מנהל / כל המערכת / מחנך / רכז — כולל בשילוב עם מקצוע).
- * מערך = מורה מקצועי בלבד.
+ * null = כל המקצועות (מנהל / כל המערכת).
+ * מערך = מורה מקצועי בלבד. צפייה בכיתה או בשכבה אינה מרחיבה את זה.
  */
 export function getAllowedSubjectIds(session: AuthSession): string[] | null {
   if (isFullAdmin(session)) return null;
@@ -239,7 +269,7 @@ export function getAllowedSubjectIds(session: AuthSession): string[] | null {
   const perms = getEffectivePermissions(session).filter(
     (p) => p.action === "grades:write"
   );
-  if (perms.some((p) => p.scope === "all" || p.scope === "gradeYear" || p.scope === "class")) {
+  if (perms.some((p) => p.scope === "all")) {
     return null;
   }
 
@@ -247,7 +277,7 @@ export function getAllowedSubjectIds(session: AuthSession): string[] | null {
     .filter((p) => p.action === "grades:write" && p.scope === "subject")
     .map((p) => (p as { subjectId: string }).subjectId);
 
-  return subjectIds.length > 0 ? [...new Set(subjectIds)] : null;
+  return subjectIds.length > 0 ? [...new Set(subjectIds)] : [];
 }
 
 /**
@@ -302,19 +332,12 @@ export function summarizePermissions(
   const views = permissions.filter((p) => p.action === "students:view");
   const edits = permissions.filter((p) => p.action === "students:edit");
 
-  if (grades.some((p) => p.scope === "all")) {
+  const gradeEntry = grades.filter((p) => p.scope === "all" || p.scope === "subject");
+  if (gradeEntry.some((p) => p.scope === "all")) {
     parts.push("ציונים: כל המערכת");
   } else {
-    const gradeParts: string[] = [];
-    const years = grades
-      .filter((p) => p.scope === "gradeYear")
-      .map((p) => (p as { gradeYear: string }).gradeYear);
-    if (years.length) gradeParts.push(`שכבות ${[...new Set(years)].join(", ")}`);
-    const classCount = grades.filter((p) => p.scope === "class").length;
-    if (classCount) gradeParts.push(`${classCount} כיתות`);
-    const subjectCount = grades.filter((p) => p.scope === "subject").length;
-    if (subjectCount) gradeParts.push(`${subjectCount} מקצועות`);
-    if (gradeParts.length) parts.push(`ציונים: ${gradeParts.join(" + ")}`);
+    const subjectCount = gradeEntry.filter((p) => p.scope === "subject").length;
+    if (subjectCount) parts.push(`ציונים: ${subjectCount} מקצועות`);
   }
 
   if (views.some((p) => p.scope === "all")) {
@@ -355,7 +378,6 @@ export function buildPermissionsFromForm(input: PermissionFormInput): StaffPermi
 
   if (scopes.has("gradeYear")) {
     for (const gradeYear of input.gradeYears) {
-      perms.push({ action: "grades:write", scope: "gradeYear", gradeYear });
       if (input.includeStudentView) {
         perms.push({ action: "students:view", scope: "gradeYear", gradeYear });
       }
@@ -367,7 +389,6 @@ export function buildPermissionsFromForm(input: PermissionFormInput): StaffPermi
 
   if (scopes.has("class")) {
     for (const classId of input.classIds) {
-      perms.push({ action: "grades:write", scope: "class", classId });
       if (input.includeStudentView) {
         perms.push({ action: "students:view", scope: "class", classId });
       }
@@ -415,10 +436,11 @@ export function parsePermissionsToForm(permissions?: StaffPermission[]): Permiss
   }
 
   const scopes: PermissionScopeKind[] = [];
-  const gradeYears = grades
+  const scoped = [...grades, ...views, ...edits];
+  const gradeYears = scoped
     .filter((p) => p.scope === "gradeYear")
     .map((p) => (p as { gradeYear: string }).gradeYear);
-  const classIds = grades
+  const classIds = scoped
     .filter((p) => p.scope === "class")
     .map((p) => (p as { classId: string }).classId);
   const subjectIds = grades
@@ -431,13 +453,18 @@ export function parsePermissionsToForm(permissions?: StaffPermission[]): Permiss
 
   const hasNonSubject = scopes.includes("gradeYear") || scopes.includes("class");
   const nonSubjectViews = views.filter((p) => p.scope !== "subject");
+  const legacyClassGradeWrite = grades.some(
+    (p) => p.scope === "class" || p.scope === "gradeYear"
+  );
 
   return {
     scopes: scopes.length > 0 ? scopes : ["subject"],
     gradeYears: [...new Set(gradeYears)],
     classIds: [...new Set(classIds)],
     subjectIds: [...new Set(subjectIds)],
-    includeStudentView: hasNonSubject ? nonSubjectViews.length > 0 : views.length > 0,
+    includeStudentView: hasNonSubject
+      ? nonSubjectViews.length > 0 || legacyClassGradeWrite
+      : views.length > 0,
     includeStudentEdit: edits.length > 0,
   };
 }

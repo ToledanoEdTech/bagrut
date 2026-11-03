@@ -8,7 +8,7 @@ import {
 import { resolveGradeEntryDueDate } from "@/lib/grade-due-date";
 import { isSubItemDueForStudent, normalizeGradeYear } from "@/lib/grade-year";
 import { isMissingGradeStatus } from "@/lib/grade-status";
-import { LEGACY_TEACHER_PERMISSIONS } from "@/lib/permissions";
+import { LEGACY_TEACHER_PERMISSIONS, withoutClassYearGradeWrite } from "@/lib/permissions";
 import { ADMIN_EMAILS } from "@/lib/roles";
 import {
   isObligationDueForClass,
@@ -450,7 +450,7 @@ function withClass(student: Student, cls: Class): StudentWithRelations {
 function getStaffPermissions(staff: StaffRecord): StaffPermission[] {
   if (staff.role === "ADMIN") return LEGACY_TEACHER_PERMISSIONS;
   if (staff.permissions === undefined) return LEGACY_TEACHER_PERMISSIONS;
-  return staff.permissions;
+  return withoutClassYearGradeWrite(staff.permissions);
 }
 
 function buildClassMaps(classes: Class[]) {
