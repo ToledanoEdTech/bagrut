@@ -1,4 +1,4 @@
-export type ActivityCategory = "grades" | "subjects" | "staff" | "other";
+export type ActivityCategory = "grades" | "subjects" | "staff" | "exports" | "other";
 
 export type ActivityAction =
   | "grade.upsert"
@@ -15,13 +15,19 @@ export type ActivityAction =
   | "obligation.gradeYearOverride.delete"
   | "staff.create"
   | "staff.update"
-  | "staff.delete";
+  | "staff.delete"
+  | "export.student"
+  | "export.class"
+  | "export.school"
+  | "export.shortage"
+  | "export.gradeTemplate";
 
 export type ActivityEntityType =
   | "grade"
   | "subject"
   | "obligation"
   | "staff"
+  | "export"
   | "system";
 
 export type ActivityActor = {
@@ -58,6 +64,7 @@ export const ACTIVITY_CATEGORY_LABELS: Record<ActivityCategory, string> = {
   grades: "ציונים",
   subjects: "מקצועות ומטלות",
   staff: "צוות",
+  exports: "ייצוא",
   other: "אחר",
 };
 

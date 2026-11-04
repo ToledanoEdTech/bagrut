@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api-auth";
+import { recordExport } from "@/lib/activity-log";
 import {
   buildFullSchoolExportBuffer,
   fullSchoolExportFilename,
@@ -19,6 +20,13 @@ export async function GET() {
       email: session.email,
     });
     const filename = fullSchoolExportFilename();
+    await recordExport({
+      session,
+      action: "export.school",
+      entityId: "school",
+      summaryHe: "ייצוא מלא של נתוני בית הספר (אקסל)",
+      meta: { format: "xlsx" },
+    });
 
     return new NextResponse(new Uint8Array(buffer), {
       headers: {

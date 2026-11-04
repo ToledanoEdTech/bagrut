@@ -9,6 +9,7 @@ import {
 } from "@/lib/firestore";
 import { buildGradeImportTemplateRows } from "@/lib/grade-import-template";
 import { STATUS_LABELS, SUBMISSION_STATUSES } from "@/lib/grade-status";
+import { recordExport } from "@/lib/activity-log";
 import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
 import { getAllowedClassIdsForListing } from "@/lib/permissions";
 import { normalizeGradeYear } from "@/lib/grade-year";
@@ -166,6 +167,29 @@ export async function GET(req: NextRequest) {
     : classId
       ? targetClasses[0]!.name
       : gradeYear!;
+
+  const studentCount = new Set(rows.map((row) => row.studentName)).size;
+  try {
+    await recordExport({
+      session,
+      action: "export.gradeTemplate",
+      entityId: studentId || classId || gradeYear || "grades",
+      summaryHe: `הורדת תבנית ציונים עם נתונים: ${scopeName} — ${studentCount} תלמידים`,
+      meta: {
+        kind: "filled",
+        format: "xlsx",
+        scopeName,
+        studentId: studentId ?? null,
+        classId: classId ?? null,
+        gradeYear: gradeYear ?? null,
+        studentCount,
+        rowCount: rows.length,
+      },
+    });
+  } catch (err) {
+    console.error("filled grade template export log failed", err);
+    return NextResponse.json({ error: "הייצוא נכשל. נסו שוב." }, { status: 500 });
+  }
 
   return NextResponse.json({
     className: scopeName,

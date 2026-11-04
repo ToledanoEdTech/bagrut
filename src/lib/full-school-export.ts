@@ -98,6 +98,11 @@ const ACTION_LABELS: Record<ActivityAction, string> = {
   "staff.create": "הוספת איש צוות",
   "staff.update": "עדכון איש צוות",
   "staff.delete": "הסרת איש צוות",
+  "export.student": "ייצוא תיק תלמיד",
+  "export.class": "ייצוא תיקי כיתה",
+  "export.school": "ייצוא מלא של בית הספר",
+  "export.shortage": "ייצוא דוח חוסרים",
+  "export.gradeTemplate": "הורדת תבנית ציונים",
 };
 
 const ENTITY_LABELS: Record<ActivityEntityType, string> = {
@@ -105,6 +110,7 @@ const ENTITY_LABELS: Record<ActivityEntityType, string> = {
   subject: "מקצוע",
   obligation: "מטלה",
   staff: "איש צוות",
+  export: "ייצוא",
   system: "מערכת",
 };
 
@@ -1390,7 +1396,7 @@ function activityTable(ctx: ExportContext): TableSpec {
   return {
     name: "יומן פעילות",
     title: "יומן פעילות",
-    description: "מי שינה ציונים, מקצועות, מטלות או צוות, ומתי",
+    description: "מי שינה ציונים, מקצועות, מטלות או צוות, ומי ייצא נתוני תלמידים",
     tabColor: TAB.log,
     columns: [
       { header: "מועד", key: "at", width: 18 },

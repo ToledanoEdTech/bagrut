@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   BookOpen,
   ClipboardList,
+  Download,
   History,
   RefreshCw,
   UserCog,
@@ -36,6 +37,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "grades", label: ACTIVITY_CATEGORY_LABELS.grades },
   { key: "subjects", label: ACTIVITY_CATEGORY_LABELS.subjects },
   { key: "staff", label: ACTIVITY_CATEGORY_LABELS.staff },
+  { key: "exports", label: ACTIVITY_CATEGORY_LABELS.exports },
 ];
 
 function categoryIcon(category: ActivityCategory) {
@@ -46,6 +48,8 @@ function categoryIcon(category: ActivityCategory) {
       return BookOpen;
     case "staff":
       return UserCog;
+    case "exports":
+      return Download;
     default:
       return History;
   }
@@ -59,6 +63,8 @@ function categoryTone(category: ActivityCategory) {
       return "bg-sky-50 text-sky-700 ring-sky-100";
     case "staff":
       return "bg-violet-50 text-violet-700 ring-violet-100";
+    case "exports":
+      return "bg-amber-50 text-amber-800 ring-amber-100";
     default:
       return "bg-slate-50 text-slate-600 ring-slate-100";
   }
@@ -188,7 +194,7 @@ export default function ActivityPage() {
     <div className="space-y-6">
       <PageHeader
         title="שינויים אחרונים"
-        subtitle="הזנות ציונים, שינויי מקצועות ומטלות, ועדכוני צוות"
+        subtitle="הזנות ציונים, שינויי מקצועות ומטלות, עדכוני צוות וייצוא נתונים"
       >
         <Button
           type="button"
@@ -230,7 +236,7 @@ export default function ActivityPage() {
           description={
             data?.error
               ? data.error
-              : "כאן יופיעו הזנות ציונים, שינויי מקצועות ומטלות, ועדכוני צוות מרגע זה ואילך."
+              : "כאן יופיעו הזנות ציונים, שינויי מקצועות ומטלות, עדכוני צוות וייצוא נתונים מרגע זה ואילך."
           }
         />
       ) : (

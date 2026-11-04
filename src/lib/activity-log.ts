@@ -50,29 +50,65 @@ function serializeAt(value: unknown): string {
   return new Date().toISOString();
 }
 
+async function writeActivity(input: ActivityEventInput): Promise<void> {
+  const id = newId();
+  await adminDb
+    .collection("activityLog")
+    .doc(id)
+    .set({
+      id,
+      at: FieldValue.serverTimestamp(),
+      actorUid: input.actor.uid,
+      actorEmail: input.actor.email,
+      actorName: input.actor.name,
+      action: input.action,
+      category: input.category,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      summaryHe: input.summaryHe,
+      meta: input.meta ?? null,
+    });
+}
+
 /** כותב אירוע ליומן. כשל ביומן לא מפיל את הפעולה העסקית. */
 export async function recordActivity(input: ActivityEventInput): Promise<void> {
   try {
-    const id = newId();
-    await adminDb
-      .collection("activityLog")
-      .doc(id)
-      .set({
-        id,
-        at: FieldValue.serverTimestamp(),
-        actorUid: input.actor.uid,
-        actorEmail: input.actor.email,
-        actorName: input.actor.name,
-        action: input.action,
-        category: input.category,
-        entityType: input.entityType,
-        entityId: input.entityId,
-        summaryHe: input.summaryHe,
-        meta: input.meta ?? null,
-      });
+    await writeActivity(input);
   } catch (err) {
     console.error("[activity-log] failed to record", err);
   }
+}
+
+const EXPORT_FORMAT_LABELS: Record<string, string> = {
+  xlsx: "אקסל",
+  pdf: "PDF",
+  zip: "קובץ מכווץ",
+};
+
+export function exportFormatLabel(format: string): string {
+  return EXPORT_FORMAT_LABELS[format] ?? format;
+}
+
+/**
+ * רושם ייצוא של מידע על תלמידים. כישלון בכתיבה נזרק החוצה,
+ * כדי שהקובץ לא יישלח בלי רשומה ביומן.
+ */
+export async function recordExport(input: {
+  session: AuthSession;
+  action: Extract<ActivityAction, `export.${string}`>;
+  entityId: string;
+  summaryHe: string;
+  meta?: Record<string, unknown>;
+}): Promise<void> {
+  await writeActivity({
+    actor: actorFromSession(input.session),
+    action: input.action,
+    category: "exports",
+    entityType: "export",
+    entityId: input.entityId,
+    summaryHe: input.summaryHe,
+    meta: input.meta,
+  });
 }
 
 export async function listActivityEvents(options?: {

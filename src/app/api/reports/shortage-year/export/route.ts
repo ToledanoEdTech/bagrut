@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { exportFormatLabel, recordExport } from "@/lib/activity-log";
 import { checkPermission, requireStaff } from "@/lib/api-auth";
 import {
   buildShortageYearExcelBuffer,
@@ -42,6 +43,28 @@ export async function GET(req: NextRequest) {
         : await buildShortageYearPdfBuffer(report);
     const filename =
       format === "xlsx" ? shortageYearExcelFilename(report) : shortageYearPdfFilename(report);
+    await recordExport({
+      session,
+      action: "export.shortage",
+      entityId: [
+        parsed.filter.groupBy,
+        parsed.filter.yearScope,
+        parsed.filter.gradeYear ?? "",
+        parsed.filter.classId ?? "",
+        parsed.filter.studentId ?? "",
+      ].join(":"),
+      summaryHe: `ייצוא דוח חוסרים (${exportFormatLabel(format)}): ${report.filterLabel} — ${report.totals.studentCount} תלמידים`,
+      meta: {
+        format,
+        filterLabel: report.filterLabel,
+        yearScope: parsed.filter.yearScope,
+        groupBy: parsed.filter.groupBy,
+        gradeYear: parsed.filter.gradeYear ?? null,
+        classId: parsed.filter.classId ?? null,
+        studentId: parsed.filter.studentId ?? null,
+        studentCount: report.totals.studentCount,
+      },
+    });
     const asciiFallback = format === "xlsx" ? "shortage-report.xlsx" : "shortage-report.pdf";
     const contentType =
       format === "xlsx"

@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import { NextRequest, NextResponse } from "next/server";
 import { requireStaff, requireStudentView } from "@/lib/api-auth";
+import { exportFormatLabel, recordExport } from "@/lib/activity-log";
 
 export const runtime = "nodejs";
 import { buildClassDossiers } from "@/lib/student-dossier";
@@ -53,6 +54,19 @@ export async function GET(req: NextRequest) {
         format === "xlsx"
           ? classDossiersExcelFilename(result.className)
           : classDossiersPdfFilename(result.className);
+      await recordExport({
+        session,
+        action: "export.class",
+        entityId: classId,
+        summaryHe: `ייצוא תיקי כיתה (${exportFormatLabel(format)}): ${result.className} — ${result.dossiers.length} תלמידים`,
+        meta: {
+          format,
+          mode,
+          classId,
+          className: result.className,
+          studentCount: result.dossiers.length,
+        },
+      });
       const asciiFallback = format === "xlsx" ? "class-dossiers.xlsx" : "class-dossiers.pdf";
       return new NextResponse(new Uint8Array(buffer), {
         headers: {
@@ -79,6 +93,19 @@ export async function GET(req: NextRequest) {
 
     const archive = await zip.generateAsync({ type: "nodebuffer" });
     const zipName = `תיקי_תלמידים_${result.className}_${format}.zip`;
+    await recordExport({
+      session,
+      action: "export.class",
+      entityId: classId,
+      summaryHe: `ייצוא תיקי כיתה כקובץ מכווץ (${exportFormatLabel(format)}): ${result.className} — ${result.dossiers.length} תלמידים`,
+      meta: {
+        format,
+        mode,
+        classId,
+        className: result.className,
+        studentCount: result.dossiers.length,
+      },
+    });
     return new NextResponse(new Uint8Array(archive), {
       headers: {
         "Content-Type": "application/zip",

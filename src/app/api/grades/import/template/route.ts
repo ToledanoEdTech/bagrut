@@ -5,6 +5,7 @@ import {
   obligationDisplayLabel,
 } from "@/lib/grade-components";
 import { STATUS_LABELS, SUBMISSION_STATUSES } from "@/lib/grade-status";
+import { recordExport } from "@/lib/activity-log";
 import { checkPermission, requireGradeWrite, requireStaff } from "@/lib/api-auth";
 import { getAllowedClassIdsForListing, getAllowedSubjectIds } from "@/lib/permissions";
 import { normalizeGradeYear } from "@/lib/grade-year";
@@ -156,6 +157,34 @@ export async function GET(req: NextRequest) {
       .map((s) => s.name)
       .sort((a, b) => a.localeCompare(b, "he"));
     studentCount = classStudents.length;
+  }
+
+  if (studentCount > 0) {
+    const scopeName = studentId
+      ? (classStudents?.[0] ?? "תלמיד")
+      : classId
+        ? (classes.find((c) => c.id === classId)?.name ?? "כיתה")
+        : (gradeYear ?? "שכבה");
+    try {
+      await recordExport({
+        session,
+        action: "export.gradeTemplate",
+        entityId: studentId || classId || gradeYear || "grades",
+        summaryHe: `הורדת תבנית ציונים עם שמות תלמידים: ${scopeName} — ${studentCount} תלמידים`,
+        meta: {
+          kind: "empty",
+          format: "xlsx",
+          scopeName,
+          studentId: studentId ?? null,
+          classId: classId ?? null,
+          gradeYear: gradeYear ?? null,
+          studentCount,
+        },
+      });
+    } catch (err) {
+      console.error("grade template export log failed", err);
+      return NextResponse.json({ error: "הייצוא נכשל. נסו שוב." }, { status: 500 });
+    }
   }
 
   return NextResponse.json({

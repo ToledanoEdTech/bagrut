@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, requireStudentView } from "@/lib/api-auth";
+import { exportFormatLabel, recordExport } from "@/lib/activity-log";
 
 export const runtime = "nodejs";
 import { buildStudentDossier } from "@/lib/student-dossier";
@@ -55,6 +56,18 @@ export async function GET(req: NextRequest) {
         : await buildStudentDossierPdfBuffer(dossier);
     const filename =
       format === "xlsx" ? studentDossierExcelFilename(dossier) : studentDossierPdfFilename(dossier);
+    await recordExport({
+      session,
+      action: "export.student",
+      entityId: dossier.studentId,
+      summaryHe: `ייצוא תיק תלמיד (${exportFormatLabel(format)}): ${dossier.studentName}`,
+      meta: {
+        format,
+        studentId: dossier.studentId,
+        studentName: dossier.studentName,
+        audience,
+      },
+    });
     const asciiFallback = format === "xlsx" ? "student-dossier.xlsx" : "student-dossier.pdf";
     const contentType =
       format === "xlsx"

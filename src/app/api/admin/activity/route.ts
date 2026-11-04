@@ -9,6 +9,7 @@ const VALID_CATEGORIES = new Set<ActivityCategory>([
   "grades",
   "subjects",
   "staff",
+  "exports",
   "other",
 ]);
 
